@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: happypatient-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: happypatient
+      POSTGRES_PASSWORD: happypatient
+      POSTGRES_DB: happypatient
+    ports:
+      - "5432:5432"
+    volumes:
+      - happypatient-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U happypatient -d happypatient"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://happypatient:happypatient@postgres:5432/happypatient?schema=public
+      JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-secret}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      RESET_TOKEN_EXPIRES_MINUTES: ${RESET_TOKEN_EXPIRES_MINUTES:-30}
+      PORT: 4000
+      FRONTEND_URL: http://localhost:5173
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_URL: http://localhost:4000/api
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  happypatient-postgres-data:

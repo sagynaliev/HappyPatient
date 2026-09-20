@@ -1,0 +1,2 @@
+import {Navigate,Outlet,useLocation} from 'react-router-dom';import {useAuth} from '../context/AuthContext';import {Role} from '../lib/api';
+export function ProtectedRoute({roles}:{roles?:Role[]}){const {user,loading}=useAuth();const loc=useLocation();if(loading)return <div className="loading">Loading your account…</div>;if(!user)return <Navigate to="/login" state={{from:loc.pathname}} replace/>;if(roles&&!roles.includes(user.role))return <Navigate to="/dashboard" replace/>;return <Outlet/>}
