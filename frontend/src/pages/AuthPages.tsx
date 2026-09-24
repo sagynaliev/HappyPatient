@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ApiError, authApi } from "../lib/api";
 
@@ -248,33 +248,68 @@ export function Register() {
 
 export function Forgot() {
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [stage, setStage] = useState<"email" | "code" | "password" | "success">("email");
   const [message, setMessage] = useState("");
-  const [token, setToken] = useState("");
-  async function submit(event: FormEvent) {
+  const [busy, setBusy] = useState(false);
+  async function sendCode(event: FormEvent) {
     event.preventDefault();
+    setMessage("");
+    setBusy(true);
     try {
-      const result = await authApi.forgot(email);
-      setMessage(result.message);
-      if (result.devResetToken) setToken(result.devResetToken);
+      await authApi.forgot(email.trim());
+      setStage("code");
+      setMessage("If that email exists, a verification code has been sent.");
     } catch (err) {
       setMessage(errorsFromApi(err).form);
+    } finally {
+      setBusy(false);
     }
   }
-  return <AuthLayout eyebrow="Account access" title="Reset your password" subtitle="Enter your email and we’ll help you get back in."><form onSubmit={submit} noValidate>{message && <div className="alert success" role="status">{message}{token && <><br /><Link to={`/reset-password?token=${token}`}>Continue to reset password →</Link></>}</div>}<Field label="Email address" name="email" type="email" required value={email} onChange={setEmail} autoComplete="email" /><button className="button full">Send reset link</button></form><p className="auth-footer"><Link to="/login">← Back to sign in</Link></p></AuthLayout>;
+  async function verifyCode(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    setBusy(true);
+    try {
+      const result = await authApi.verifyResetCode(email.trim(), code);
+      setResetToken(result.resetToken);
+      setStage("password");
+    } catch (err) {
+      setMessage(errorsFromApi(err).form);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function resetPassword(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    if (password.length < 8) {
+      setMessage("Password must contain at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setMessage("Passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await authApi.reset({ token: resetToken, password });
+      setStage("success");
+    } catch (err) {
+      setMessage(errorsFromApi(err).form);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <AuthLayout eyebrow="Account access" title={stage === "success" ? "Password reset complete" : "Reset your password"} subtitle={stage === "email" ? "Enter your email and we’ll send you a verification code." : stage === "code" ? "Enter the 6-digit code sent to your email." : stage === "password" ? "Choose a new password for your account." : "Your password has been updated successfully."}>
+    {stage === "success" ? <div className="success-state" role="status"><div className="success-icon">✓</div><h3>Password reset successfully</h3><p>You can now sign in with your new password.</p><Link className="button full" to="/login">Sign in</Link></div> : stage === "email" ? <form onSubmit={sendCode} noValidate>{message && <div className="alert success" role="status">{message}</div>}<Field label="Email address" name="email" type="email" required value={email} onChange={setEmail} autoComplete="email" /><button className="button full" disabled={busy}>{busy ? "Sending code…" : "Send Code"}</button></form> : stage === "code" ? <form onSubmit={verifyCode} noValidate>{message && <div className="alert error" role="alert">{message}</div>}<Field label="Verification code" name="code" required value={code} onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" maxLength={6} autoComplete="one-time-code" /><button className="button full" disabled={busy}>{busy ? "Verifying…" : "Verify Code"}</button></form> : <form onSubmit={resetPassword} noValidate>{message && <div className="alert error" role="alert">{message}</div>}<PasswordField label="New password" name="new-password" value={password} onChange={setPassword} /><PasswordField label="Confirm password" name="confirm-password" value={confirmPassword} onChange={setConfirmPassword} /><button className="button full" disabled={busy}>{busy ? "Updating password…" : "Reset password"}</button></form>}
+    <p className="auth-footer"><Link to="/login">← Back to sign in</Link></p>
+  </AuthLayout>;
 }
 
 export function Reset() {
-  const [params] = useSearchParams();
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    try {
-      const result = await authApi.reset({ token: params.get("token") || "", password });
-      setMessage(result.message);
-    } catch (err) {
-      setMessage(errorsFromApi(err).form);
-    }
-  }
-  return <AuthLayout eyebrow="Account access" title="Choose a new password" subtitle="Make it strong and easy for you to remember."><form onSubmit={submit} noValidate>{message && <div className="alert success" role="status">{message} <Link to="/login">Sign in</Link></div>}<PasswordField label="New password" name="password" value={password} onChange={setPassword} /><button className="button full">Reset password</button></form></AuthLayout>;
+  return <Navigate to="/forgot-password" replace />;
 }

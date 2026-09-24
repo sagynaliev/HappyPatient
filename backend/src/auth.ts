@@ -10,4 +10,5 @@ export const comparePassword = (password: string, hash: string) => bcrypt.compar
 export const signToken = (user: AuthUser) => jwt.sign(user, config.JWT_SECRET, { expiresIn: config.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] });
 export const verifyToken = (token: string) => jwt.verify(token, config.JWT_SECRET) as AuthUser;
 export const randomToken = () => crypto.randomBytes(32).toString('hex');
+export const randomVerificationCode = () => crypto.randomInt(100000, 1000000).toString();
 export const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');

@@ -24,6 +24,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-secret}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
       RESET_TOKEN_EXPIRES_MINUTES: ${RESET_TOKEN_EXPIRES_MINUTES:-30}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
       PORT: 4000
       FRONTEND_URL: http://localhost:5173
     ports:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { registrationSchema } from './validation';
+import { registrationSchema, verificationCodeSchema } from './validation';
 
 describe('registration validation', () => {
   it('normalizes email', () => expect(registrationSchema.parse({ email: 'USER@Example.COM', password: 'password123', firstName: 'A', lastName: 'B', iin: '123456789012' }).email).toBe('user@example.com'));
@@ -9,5 +9,10 @@ describe('registration validation', () => {
     expect(registrationSchema.parse({ ...base, iin: '123456789012' }).iin).toBe('123456789012');
     expect(() => registrationSchema.parse({ ...base, iin: '12345678901' })).toThrow();
     expect(() => registrationSchema.parse({ ...base, iin: '12345678901a' })).toThrow();
+  });
+  it('accepts only six-digit recovery codes', () => {
+    expect(verificationCodeSchema.parse({ email: 'a@b.com', code: '482913' }).code).toBe('482913');
+    expect(() => verificationCodeSchema.parse({ email: 'a@b.com', code: '48291' })).toThrow();
+    expect(() => verificationCodeSchema.parse({ email: 'a@b.com', code: '48291a' })).toThrow();
   });
 });

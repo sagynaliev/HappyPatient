@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { Role } from '@prisma/client';
 import { prisma } from './prisma';
-import { comparePassword, hashPassword, hashToken, randomToken, signToken } from './auth';
+import { comparePassword, hashPassword, hashToken, randomToken, randomVerificationCode, signToken } from './auth';
 import { config } from './config';
 import { requireAuth, requireRole } from './middleware';
-import { registrationSchema, loginSchema, recoverySchema, resetSchema } from './validation';
+import { registrationSchema, loginSchema, recoverySchema, resetSchema, verificationCodeSchema } from './validation';
+import { Resend } from 'resend';
 
 const router = Router();
 const parsed = <T>(schema: { parse: (v: unknown) => T }, body: unknown) => schema.parse(body);
@@ -30,16 +31,42 @@ router.post('/auth/login', async (req, res) => {
 router.post('/auth/forgot-password', async (req, res) => {
   const { email } = parsed(recoverySchema, req.body);
   const user = await prisma.user.findUnique({ where: { email } });
-  const response: { message: string; devResetToken?: string; devMockEmail?: { to: string; resetToken: string } } = { message: 'If that email exists, a reset link has been sent' };
+  const response = { message: 'If that email exists, a verification code has been sent' };
   if (user) {
-    const token = randomToken();
-    await prisma.resetToken.create({ data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + config.RESET_TOKEN_EXPIRES_MINUTES * 60000) } });
-    if (process.env.NODE_ENV !== 'production') {
-      response.devResetToken = token;
-      response.devMockEmail = { to: user.email, resetToken: token };
+    const cooldownSince = new Date(Date.now() - 60_000);
+    const recentCode = await prisma.resetToken.findFirst({ where: { userId: user.id, createdAt: { gt: cooldownSince }, usedAt: null }, select: { id: true } });
+    if (!recentCode) {
+      if (!config.RESEND_API_KEY) return res.status(503).json({ error: 'Password recovery email is not configured.' });
+      const code = randomVerificationCode();
+      await prisma.$transaction([
+        prisma.resetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } }),
+        prisma.resetToken.create({ data: { userId: user.id, tokenHash: hashToken(code), expiresAt: new Date(Date.now() + 10 * 60_000) } }),
+      ]);
+      const resend = new Resend(config.RESEND_API_KEY);
+      const { error } = await resend.emails.send({
+        from: 'onboarding@resend.dev',
+        to: user.email,
+        subject: 'Your HappyPatient password reset code',
+        text: `Your HappyPatient password reset code is: ${code}\n\nThis code expires in 10 minutes and can only be used once.`,
+      });
+      if (error) return res.status(502).json({ error: 'We could not send the verification code. Please try again.' });
     }
   }
   res.json(response);
+});
+
+router.post('/auth/verify-reset-code', async (req, res) => {
+  const { email, code } = parsed(verificationCodeSchema, req.body);
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return res.status(400).json({ error: 'Invalid or expired verification code.' });
+  const record = await prisma.resetToken.findFirst({ where: { userId: user.id, tokenHash: hashToken(code), usedAt: null, expiresAt: { gt: new Date() } } });
+  if (!record) return res.status(400).json({ error: 'Invalid or expired verification code.' });
+  const resetToken = randomToken();
+  await prisma.$transaction([
+    prisma.resetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+    prisma.resetToken.create({ data: { userId: user.id, tokenHash: hashToken(resetToken), expiresAt: new Date(Date.now() + 10 * 60_000) } }),
+  ]);
+  res.json({ resetToken });
 });
 
 router.post('/auth/reset-password', async (req, res) => {

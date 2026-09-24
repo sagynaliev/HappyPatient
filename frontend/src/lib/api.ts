@@ -52,9 +52,14 @@ export const authApi = {
     api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   me: () => api<{ user: User }>('/me'),
   forgot: (email: string) =>
-    api<{ message: string; devResetToken?: string }>('/auth/forgot-password', {
+    api<{ message: string }>('/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email }),
+    }),
+  verifyResetCode: (email: string, code: string) =>
+    api<{ resetToken: string }>('/auth/verify-reset-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
     }),
   reset: (body: { token: string; password: string }) =>
     api<{ message: string }>('/auth/reset-password', {
