@@ -1,7 +1,11 @@
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+    public details?: Array<{ path: string[]; message: string }>,
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -16,7 +20,11 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new ApiError(response.status, data.error || 'Something went wrong. Please try again.');
+    throw new ApiError(
+      response.status,
+      data.error || 'Something went wrong. Please try again.',
+      data.details,
+    );
   }
   return data as T;
 }
@@ -32,8 +40,6 @@ export type User = {
 };
 export type Doctor = {
   id: string;
-  specialty: string;
-  bio?: string | null;
   category: { id: string; name: string };
   user: { firstName: string; lastName: string; email: string };
 };

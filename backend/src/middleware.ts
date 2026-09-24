@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { verifyToken } from './auth';
 import { ZodError } from 'zod';
 
@@ -15,7 +15,23 @@ export const requireAdmin = requireRole(Role.ADMIN);
 export const requireDoctor = requireRole(Role.DOCTOR);
 export const requirePatient = requireRole(Role.PATIENT);
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
-  if (err instanceof ZodError) return res.status(400).json({ error: 'Validation failed', details: err.issues });
+  if (err instanceof ZodError) {
+    return res.status(400).json({
+      error: 'Please check the highlighted fields.',
+      details: err.issues.map((issue) => ({
+        path: issue.path.map(String),
+        message: issue.message,
+      })),
+    });
+  }
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    const target = Array.isArray(err.meta?.target) ? err.meta.target.map(String) : [];
+    const field = target.includes('phone') ? 'phone' : target.includes('iin') ? 'iin' : 'email';
+    return res.status(409).json({
+      error: 'This account detail is already registered.',
+      details: [{ path: [field], message: `${field === 'phone' ? 'This phone number' : field === 'email' ? 'This email' : 'This IIN'} is already registered. Please use another one.` }],
+    });
+  }
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
 }
