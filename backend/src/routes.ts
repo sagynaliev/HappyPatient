@@ -38,18 +38,22 @@ router.post('/auth/forgot-password', async (req, res) => {
     if (!recentCode) {
       if (!config.RESEND_API_KEY) return res.status(503).json({ error: 'Password recovery email is not configured.' });
       const code = randomVerificationCode();
+      const resend = new Resend(config.RESEND_API_KEY);
+      try {
+        const { error } = await resend.emails.send({
+          from: 'onboarding@resend.dev',
+          to: user.email,
+          subject: 'Your HappyPatient password reset code',
+          text: `Your HappyPatient password reset code is: ${code}\n\nThis code expires in 10 minutes and can only be used once.`,
+        });
+        if (error) return res.status(502).json({ error: 'We could not send the verification code. Please try again.' });
+      } catch {
+        return res.status(502).json({ error: 'We could not send the verification code. Please try again.' });
+      }
       await prisma.$transaction([
         prisma.resetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } }),
         prisma.resetToken.create({ data: { userId: user.id, tokenHash: hashToken(code), expiresAt: new Date(Date.now() + 10 * 60_000) } }),
       ]);
-      const resend = new Resend(config.RESEND_API_KEY);
-      const { error } = await resend.emails.send({
-        from: 'onboarding@resend.dev',
-        to: user.email,
-        subject: 'Your HappyPatient password reset code',
-        text: `Your HappyPatient password reset code is: ${code}\n\nThis code expires in 10 minutes and can only be used once.`,
-      });
-      if (error) return res.status(502).json({ error: 'We could not send the verification code. Please try again.' });
     }
   }
   res.json(response);
