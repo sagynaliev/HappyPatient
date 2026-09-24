@@ -36,6 +36,7 @@ router.post('/auth/forgot-password', async (req, res) => {
     const cooldownSince = new Date(Date.now() - 60_000);
     const recentCode = await prisma.resetToken.findFirst({ where: { userId: user.id, createdAt: { gt: cooldownSince }, usedAt: null }, select: { id: true } });
     if (!recentCode) {
+      console.info(`RESEND_API_KEY configured: ${Boolean(process.env.RESEND_API_KEY)}`);
       if (!config.RESEND_API_KEY) return res.status(503).json({ error: 'Password recovery email is not configured.' });
       const code = randomVerificationCode();
       const resend = new Resend(config.RESEND_API_KEY);
@@ -46,8 +47,21 @@ router.post('/auth/forgot-password', async (req, res) => {
           subject: 'Your HappyPatient password reset code',
           text: `Your HappyPatient password reset code is: ${code}\n\nThis code expires in 10 minutes and can only be used once.`,
         });
-        if (error) return res.status(502).json({ error: 'We could not send the verification code. Please try again.' });
-      } catch {
+        if (error) {
+          console.error('Resend rejected password recovery email', {
+            statusCode: error.statusCode,
+            name: error.name,
+            message: error.message,
+            code: 'code' in error ? error.code : undefined,
+          });
+          return res.status(502).json({ error: 'We could not send the verification code. Please try again.' });
+        }
+        console.info('Resend accepted password recovery email');
+      } catch (error: unknown) {
+        console.error('Resend request failed while sending password recovery email', {
+          name: error instanceof Error ? error.name : undefined,
+          message: error instanceof Error ? error.message : undefined,
+        });
         return res.status(502).json({ error: 'We could not send the verification code. Please try again.' });
       }
       await prisma.$transaction([
