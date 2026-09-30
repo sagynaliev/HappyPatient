@@ -26,11 +26,17 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   }
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
     const target = Array.isArray(err.meta?.target) ? err.meta.target.map(String) : [];
+    if (target.some((field) => field.includes('doctorId') || field.includes('startAt'))) {
+      return res.status(409).json({ error: 'This schedule overlaps an existing slot.' });
+    }
     const field = target.includes('phone') ? 'phone' : target.includes('iin') ? 'iin' : 'email';
     return res.status(409).json({
       error: 'This account detail is already registered.',
       details: [{ path: [field], message: `${field === 'phone' ? 'This phone number' : field === 'email' ? 'This email' : 'This IIN'} is already registered. Please use another one.` }],
     });
+  }
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+    return res.status(409).json({ error: 'The schedule changed while it was being saved. Please try again.' });
   }
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });

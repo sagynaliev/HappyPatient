@@ -9,7 +9,7 @@ export default function Dashboard() {
         <div>
           <p className="eyebrow">Your dashboard</p>
           <h1>Good to see you, {user.firstName}.</h1>
-          <p className="lead">Here’s what’s happening with your care.</p>
+          <p className="lead">{user.role === "DOCTOR" ? "Manage your office location and working hours." : "Here’s what’s happening with your care."}</p>
         </div>
         <div className="profile-avatar">
           {user.firstName[0]}
@@ -36,14 +36,12 @@ export default function Dashboard() {
       <div className="dashboard-grid">
         <section className="panel">
           <div className="panel-title">
-            <h2>Find your care team</h2>
-            <span>⌕</span>
+            <h2>{user.role === "DOCTOR" ? "Your work schedule" : "Find your care team"}</h2>
+            <span>{user.role === "DOCTOR" ? "◷" : "⌕"}</span>
           </div>
-          <p>
-            Explore qualified doctors and specialists who are ready to help.
-          </p>
-          <Link className="button" to="/search">
-            Browse doctors →
+          <p>{user.role === "DOCTOR" ? "Set your office and publish 30-minute appointment slots." : "Explore qualified doctors and specialists who are ready to help."}</p>
+          <Link className="button" to={user.role === "DOCTOR" ? "/doctor/schedule" : "/search"}>
+            {user.role === "DOCTOR" ? "Manage schedule" : "Browse doctors →"}
           </Link>
         </section>
         <section className="panel soft">

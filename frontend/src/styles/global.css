@@ -143,3 +143,46 @@ footer { display: flex; align-items: end; justify-content: space-between; paddin
   .specialties-section { padding-top: 78px; }
   .specialty-tile { min-height: 132px; padding: 20px; }
 }
+
+/* Sprint 2 location search and schedule workspace */
+.discovery-bar { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+.schedule-page .page-heading { margin-bottom: 10px; }
+.schedule-setup { display: grid; gap: 14px; margin: 28px 0; }
+.schedule-office, .schedule-create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.schedule-create { grid-template-columns: minmax(150px, 1fr) repeat(2, minmax(120px, .6fr)) auto; }
+.schedule-label { display: grid; gap: 7px; color: #345966; font-size: 12px; font-weight: 700; }
+.schedule-label input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #cfe1e6; border-radius: 7px; padding: 9px 11px; color: var(--ink); background: #fff; }
+.schedule-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin: 34px 0 16px; }
+.schedule-toolbar > span { color: var(--muted); font-size: 13px; }
+.schedule-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .7fr); gap: 18px; align-items: start; }
+.schedule-list { border-top: 1px solid var(--line); }
+.schedule-slot { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 66px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: #fff; }
+.schedule-slot > div:first-child { display: flex; align-items: center; gap: 14px; }
+.schedule-slot strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.slot-status { display: inline-flex; align-items: center; min-height: 25px; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 800; text-transform: capitalize; }
+.slot-status.free { background: #e4f6ef; color: #167253; }
+.slot-status.booked { background: #fff1df; color: #98600f; }
+.slot-status.occupied { background: #fce7e7; color: #a33b43; }
+.slot-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 12px; }
+.slot-actions .text-link { font-size: 12px; }
+.slot-detail { position: sticky; top: 95px; padding: 20px; border: 1px solid var(--line); background: #fff; }
+.slot-detail .panel-title { margin-bottom: 18px; }
+.slot-detail p { color: var(--muted); font-size: 13px; }
+.slot-detail .schedule-label { margin: 14px 0; }
+.schedule-state { margin-top: 18px; }
+.schedule-back { margin-top: 26px; color: var(--teal-dark); font-weight: 700; }
+.alert.success { border-color: #bce4d4; background: #edfaf4; color: #17664e; }
+@media (max-width: 950px) {
+  .schedule-layout { grid-template-columns: 1fr; }
+  .slot-detail { position: static; }
+  .schedule-create { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .schedule-create .button { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .schedule-office, .schedule-create { grid-template-columns: 1fr; }
+  .schedule-office .button, .schedule-create .button { width: 100%; grid-column: auto; }
+  .schedule-toolbar { align-items: stretch; flex-direction: column; }
+  .schedule-slot { align-items: flex-start; flex-direction: column; }
+  .slot-actions { justify-content: flex-start; }
+  .schedule-slot > div:first-child { flex-wrap: wrap; }
+}

@@ -13,6 +13,12 @@ enum Role {
   ADMIN
 }
 
+enum SlotStatus {
+  FREE
+  BOOKED
+  OCCUPIED
+}
+
 model User {
   id           String        @id @default(cuid())
   email        String        @unique
@@ -27,6 +33,7 @@ model User {
 
   doctor       Doctor?
   resetTokens  ResetToken[]
+  bookedSlots  ScheduleSlot[] @relation("BookedSlots")
 }
 
 model Doctor {
@@ -39,6 +46,7 @@ model Doctor {
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   category    Category     @relation(fields: [categoryId], references: [id])
+  scheduleSlots ScheduleSlot[]
 }
 
 model Category {
@@ -61,4 +69,23 @@ model ResetToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model ScheduleSlot {
+  id           String     @id @default(cuid())
+  doctorId     String
+  patientId    String?
+  startAt      DateTime
+  endAt        DateTime
+  status       SlotStatus @default(FREE)
+  visitPurpose String?    @db.VarChar(300)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  doctor       Doctor     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient      User?      @relation("BookedSlots", fields: [patientId], references: [id], onDelete: SetNull)
+
+  @@unique([doctorId, startAt])
+  @@index([doctorId, startAt])
+  @@index([patientId])
 }

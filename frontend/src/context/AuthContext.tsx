@@ -11,7 +11,7 @@ type AuthContextValue = {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (data: Record<string, unknown>) => Promise<void>;
+  register: (data: Record<string, unknown>) => Promise<string>;
   logout: () => void;
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -37,8 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       login: async (e: string, p: string) =>
         save(await authApi.login({ email: e, password: p })),
-      register: async (d: Record<string, unknown>) =>
-        save(await authApi.register(d)),
+      register: async (d: Record<string, unknown>) => {
+        const result = await authApi.register(d);
+        save(result);
+        return result.notification?.message || "Confirmation notification recorded for local development.";
+      },
       logout: () => {
         localStorage.removeItem("hp_token");
         setUser(null);

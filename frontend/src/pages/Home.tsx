@@ -16,6 +16,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
+  const [office, setOffice] = useState("");
   const [specialties, setSpecialties] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
     api<{ categories: { id: string; name: string }[] }>("/categories")
@@ -27,6 +28,7 @@ export default function Home() {
     const searchParams = new URLSearchParams();
     if (query.trim()) searchParams.set("q", query.trim());
     if (category) searchParams.set("category", category);
+    if (office.trim()) searchParams.set("office", office.trim());
     const queryString = searchParams.toString();
     navigate(`/search${queryString ? `?${queryString}` : ""}`);
   }
@@ -41,7 +43,7 @@ export default function Home() {
           <p className="lead">Find the right doctor, book your appointment, and take care of your health — all in one place.</p>
           <div className="homepage-search">
             <div className="homepage-search-title"><strong>Find your doctor</strong><span>Personalized care starts here</span></div>
-            <DoctorSearchForm query={query} category={category} categories={specialties} onQueryChange={setQuery} onCategoryChange={setCategory} onSubmit={search} buttonLabel="Search Doctors" doctorFieldLabel="Doctor search" bare />
+            <DoctorSearchForm query={query} category={category} office={office} categories={specialties} onQueryChange={setQuery} onCategoryChange={setCategory} onOfficeChange={setOffice} onSubmit={search} buttonLabel="Search Doctors" doctorFieldLabel="Doctor search" bare />
           </div>
           <div className="hero-proof"><span className="proof-avatars"><i>MC</i><i>AP</i><i>LM</i></span><span>Care that feels personal, from first search to follow-up.</span></div>
         </div>

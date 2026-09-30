@@ -175,6 +175,7 @@ export function Register() {
   const [error, setError] = useState("");
   const [fields, setFields] = useState<FieldErrors>({});
   const [success, setSuccess] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -214,7 +215,7 @@ export function Register() {
       return;
     }
     try {
-      await register(payload);
+      setConfirmationMessage(await register(payload));
       setSuccess(true);
       window.setTimeout(() => navigate("/dashboard"), 1200);
     } catch (err) {
@@ -228,7 +229,7 @@ export function Register() {
   return (
     <AuthLayout eyebrow="Get started" title="Create your account" subtitle="A simple, secure home for your healthcare journey.">
       {success ? (
-        <div className="success-state" role="status"><div className="success-icon">✓</div><h3>Account created successfully</h3><p>Your account is ready. Taking you to your dashboard…</p></div>
+        <div className="success-state" role="status"><div className="success-icon">✓</div><h3>Account created successfully</h3><p>{confirmationMessage}</p><p>Taking you to your dashboard…</p></div>
       ) : (
         <form onSubmit={submit} noValidate>
           {error && <div className="alert error" role="alert"><strong>Registration could not be completed</strong><span>{error}</span></div>}

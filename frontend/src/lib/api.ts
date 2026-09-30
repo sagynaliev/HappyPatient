@@ -40,16 +40,36 @@ export type User = {
 };
 export type Doctor = {
   id: string;
+  office: string | null;
   category: { id: string; name: string };
   user: { firstName: string; lastName: string; email: string };
 };
-export type AuthResponse = { user: User; token: string };
+export type ScheduleSlot = {
+  id: string;
+  startAt: string;
+  endAt: string;
+  status: 'FREE' | 'BOOKED' | 'OCCUPIED';
+  visitPurpose?: string | null;
+  patient?: { id: string; firstName: string; lastName: string; email?: string } | null;
+};
+export type DoctorProfile = { id: string; office: string | null; category: { name: string } };
+export type AuthResponse = { user: User; token: string; notification?: { channel: 'email' | 'local'; message: string } };
 
 export const authApi = {
   login: (body: { email: string; password: string }) =>
     api<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   register: (body: Record<string, unknown>) =>
     api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
+  doctorProfile: () => api<{ doctor: DoctorProfile }>('/doctors/me'),
+  updateOffice: (office: string) => api<{ doctor: DoctorProfile }>('/doctors/me/office', { method: 'PATCH', body: JSON.stringify({ office }) }),
+  createSchedule: (body: { date: string; startTime: string; endTime: string }) =>
+    api<{ created: number }>('/doctors/me/schedule', { method: 'POST', body: JSON.stringify(body) }),
+  getSchedule: (doctorId: string, date: string) => api<{ slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule?date=${encodeURIComponent(date)}`),
+  bookSlot: (doctorId: string, slotId: string, visitPurpose: string) =>
+    api<{ slot: ScheduleSlot }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose }) }),
+  updateSlot: (slotId: string, body: { status: ScheduleSlot['status']; patientId?: string; visitPurpose?: string }) =>
+    api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  slotDetails: (slotId: string) => api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`),
   me: () => api<{ user: User }>('/me'),
   forgot: (email: string) =>
     api<{ message: string }>('/auth/forgot-password', {
