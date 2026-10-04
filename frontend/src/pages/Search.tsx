@@ -40,13 +40,175 @@ export default function Search() {
     api<{ categories: { id: string; name: string }[] }>("/categories").then((result) => setCategories(result.categories || [])).catch(() => {});
     search();
   }, []);
-  return <div className="search-page">
-    <section className="search-hero"><div><p className="eyebrow eyebrow-light">Your care, on your terms</p><h1>Find the right<br /><em>doctor for you.</em></h1><p>Search a growing network of specialists ready to listen, understand, and help.</p></div><div className="search-hero-orb"><span>+</span></div></section>
-    <div className="search-content">
-      <DoctorSearchForm query={q} category={category} office={office} categories={categories} onQueryChange={setQ} onCategoryChange={setCategory} onOfficeChange={setOffice} onSubmit={search} />
-      <div className="search-toolbar"><div><p className="eyebrow">Care directory</p><h2>{loading ? "Finding your care team…" : `${doctors.length} ${doctors.length === 1 ? "doctor" : "doctors"} found`}</h2></div><div className="view-chip">All available doctors</div></div>
-      {error && <div className="alert error" role="alert"><strong>We couldn’t load doctors</strong><span>{error}</span></div>}
-      <div className="doctor-grid doctor-grid-premium">{loading ? [1, 2, 3].map((item) => <div className="doctor-card skeleton-card" key={item}><div className="skeleton skeleton-photo" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>) : doctors.map((doctor) => <article className="doctor-card doctor-card-premium" key={doctor.id}><div className="doctor-photo"><img src={getDoctorPhoto(doctor.id, doctor.user.email)} alt="" /><span className="online-dot">● Directory listing</span></div><div className="doctor-card-body"><div className="doctor-card-heading"><div><h2>Dr. {doctor.user.firstName} {doctor.user.lastName}</h2><p className="specialty">{doctor.category.name}</p></div></div><p className="muted">A HappyPatient doctor in our {doctor.category.name.toLowerCase()} directory.</p><div className="doctor-meta"><span>◉ {doctor.category.name}</span><span>◎ {doctor.user.email}</span><span>⌖ {doctor.office || "Office location not set"}</span></div><div className="doctor-actions">{user?.role === "PATIENT" && <Link className="button button-outline" to={`/doctors/${doctor.id}/schedule`} state={{ doctorName: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}` }}>View schedule</Link>}{authLoading ? <span className="button button-outline" aria-live="polite">Checking access…</span> : user ? <Link className="button button-outline" to="/dashboard">{user.role === "PATIENT" ? "Patient dashboard" : "Open dashboard"}</Link> : <Link className="button button-outline" to="/login" state={{ from: `/search?q=${encodeURIComponent(q)}${category ? `&category=${encodeURIComponent(category)}` : ""}` }}>Sign in to continue</Link>}</div></div></article>)}{!loading && !doctors.length && <div className="empty empty-premium"><span>⌕</span><h2>No doctors found</h2><p>Try a different name, specialty, or office to discover your care team.</p><button className="text-link" onClick={() => { setQ(""); setCategory(""); setOffice(""); search(); }}>Clear filters</button></div>}</div>
+  return (
+    <div className="search-page">
+      <section className="search-hero">
+        <div>
+          <p className="eyebrow eyebrow-light">Your care, on your terms</p>
+          <h1>
+            Find the right<br />
+            <em>doctor for you.</em>
+          </h1>
+          <p>Search a growing network of specialists ready to listen, understand, and help.</p>
+        </div>
+        <div className="search-hero-orb" aria-hidden="true">
+          <span>+</span>
+        </div>
+      </section>
+
+      <div className="search-content">
+        <DoctorSearchForm
+          query={q}
+          category={category}
+          office={office}
+          categories={categories}
+          onQueryChange={setQ}
+          onCategoryChange={setCategory}
+          onOfficeChange={setOffice}
+          onSubmit={search}
+        />
+
+        <div className="search-toolbar">
+          <div>
+            <p className="eyebrow">Care directory</p>
+            <h2>
+              {loading ? "Finding your care team…" : `${doctors.length} ${doctors.length === 1 ? "doctor" : "doctors"} found`}
+            </h2>
+          </div>
+          <div className="toolbar-actions">
+            <span className="view-chip">All available doctors</span>
+            {(q || category || office) && (
+              <button
+                className="text-link"
+                type="button"
+                onClick={() => {
+                  setQ("");
+                  setCategory("");
+                  setOffice("");
+                  search();
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="alert error" role="alert">
+            <strong>We couldn’t load doctors.</strong>
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="doctor-list">
+          {loading ? (
+            [1, 2, 3, 4].map((item) => (
+              <div className="doctor-result-card skeleton-card" key={item}>
+                <div className="skeleton skeleton-photo" />
+                <div className="skeleton-block">
+                  <div className="skeleton skeleton-line" />
+                  <div className="skeleton skeleton-line short" />
+                  <div className="skeleton skeleton-line" />
+                </div>
+              </div>
+            ))
+          ) : doctors.length ? (
+            doctors.map((doctor) => (
+              <article className="doctor-result-card" key={doctor.id}>
+                <div className="doctor-photo-wrap">
+                  <img src={getDoctorPhoto(doctor.id, doctor.user.email)} alt="" />
+                  <span className="doctor-status-tag">Directory listing</span>
+                </div>
+
+                <div className="doctor-card-body">
+                  <div className="doctor-card-header">
+                    <div>
+                      <p className="eyebrow mini-eyebrow">Doctor</p>
+                      <h3>
+                        Dr. {doctor.user.firstName} {doctor.user.lastName}
+                      </h3>
+                    </div>
+                    <span className="availability-pill">Open schedule</span>
+                  </div>
+
+                  <div className="doctor-card-meta">
+                    <span>{doctor.category.name}</span>
+                    <span>{doctor.office || "Office location not set"}</span>
+                  </div>
+
+                  <p className="doctor-summary">
+                    A HappyPatient doctor in our {doctor.category.name.toLowerCase()} directory.
+                  </p>
+
+                  <div className="doctor-detail-grid">
+                    <div className="detail-item">
+                      <strong>Specialty</strong>
+                      <span>{doctor.category.name}</span>
+                    </div>
+                    <div className="detail-item">
+                      <strong>Location</strong>
+                      <span>{doctor.office || "Location available on request"}</span>
+                    </div>
+                  </div>
+
+                  <div className="doctor-actions">
+                    {user?.role === "PATIENT" ? (
+                      <Link
+                        className="button button-outline"
+                        to={`/doctors/${doctor.id}/schedule`}
+                        state={{
+                          doctorName: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`,
+                          specialty: doctor.category.name,
+                          office: doctor.office || "Location available on request",
+                        }}
+                      >
+                        Book appointment
+                      </Link>
+                    ) : authLoading ? (
+                      <span className="button button-outline" aria-live="polite">
+                        Checking access…
+                      </span>
+                    ) : user ? (
+                      <Link className="button button-outline" to="/dashboard">
+                        Open dashboard
+                      </Link>
+                    ) : (
+                      <Link
+                        className="button button-outline"
+                        to="/login"
+                        state={{
+                          from: `/search?q=${encodeURIComponent(q)}${category ? `&category=${encodeURIComponent(category)}` : ""}`,
+                        }}
+                      >
+                        Sign in to continue
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div className="empty empty-premium">
+              <span>⌕</span>
+              <h2>No doctors found</h2>
+              <p>Try a different name, specialty, or office to discover your care team.</p>
+              <button
+                className="text-link"
+                type="button"
+                onClick={() => {
+                  setQ("");
+                  setCategory("");
+                  setOffice("");
+                  void search();
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
-  </div>;
+  );
 }
