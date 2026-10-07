@@ -10,24 +10,36 @@ export function Layout({ children }: { children: ReactNode }) {
   const close = () => setOpen(false);
   const isAuthRoute = ["/login", "/register", "/forgot-password", "/reset-password"].includes(location.pathname);
   const dashboardPath = user?.role === "ADMIN" ? "/admin" : "/dashboard";
+  const getInitials = (firstName?: string, lastName?: string): string => {
+    const firstInitial = firstName?.charAt(0) || '';
+    const lastInitial = lastName?.charAt(0) || '';
+  
+    return `${firstInitial}${lastInitial}`.toUpperCase();
+  };
 
   return (
     <div className="app-shell">
       <header className={`topbar topbar-premium${isAuthRoute ? " auth-topbar" : ""}`}>
         <Link className="brand" to="/" onClick={close}>
-          <span className="brand-mark">+</span>
-          <span>Happy<span>Patient</span></span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="4" fill="#5B65DC"/>
+        <rect x="3" y="19" width="6" height="26" rx="3" transform="rotate(-90 3 19)" fill="white"/>
+        <rect x="12" y="2" width="8" height="27" rx="4" fill="#5B65DC"/>
+        <rect x="13" y="3" width="6" height="26" rx="3" fill="white"/>
+        </svg>
+        <span>Happy<span>Patient</span></span>
         </Link>
 
         <button className="menu-button" onClick={() => setOpen(!open)} aria-label="Toggle menu" aria-expanded={open}>☰</button>
 
         <nav className={open ? "nav open" : "nav"}>
-          <NavLink to="/search" onClick={close}>Find a Doctor</NavLink>
-          {!isAuthRoute && user && <NavLink to={dashboardPath} onClick={close}>{user.role === "ADMIN" ? "Admin dashboard" : "My account"}</NavLink>}
+          <NavLink to="/search" onClick={close} className = "find_doc">Find a Doctor</NavLink>
+          {!isAuthRoute && user && <NavLink to={dashboardPath} onClick={close}>{user.role === "ADMIN" ? "Admin dashboard" : <span className="user-chip">
+              {getInitials(user.firstName, user.lastName)}
+              </span>}</NavLink>}
 
           {!isAuthRoute && user ? (
             <>
-              <span className="user-chip">{user.firstName} · {roleLabel(user.role)}</span>
               <button
                 className="button button-outline small"
                 onClick={() => {
