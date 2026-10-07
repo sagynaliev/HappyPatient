@@ -26,6 +26,14 @@ export default function Schedule() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [bookingSuccess, setBookingSuccess] = useState<{ doctorName: string; date: string; time: string; purpose: string } | null>(null);
+  const statusLabel = (status: ScheduleSlot["status"]) => {
+    switch (status) {
+      case "FREE": return "Free";
+      case "BOOKED": return "Booked";
+      case "OCCUPIED": return "Occupied";
+      default: return status;
+    }
+  };
 
   async function refresh() {
     setLoading(true);
@@ -71,7 +79,8 @@ export default function Schedule() {
     setBusy(true);
     try {
       const result = await authApi.createSchedule({ date, startTime, endTime });
-      setMessage(`${result.created} 30-minute slots added.`);
+      const scheduleDate = new Date(`${date}T00:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+      setMessage(`Schedule created — ${result.created} slots created for ${scheduleDate} (${startTime}–${endTime}).`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create this schedule.");
@@ -189,7 +198,7 @@ export default function Schedule() {
       )}
 
       <div className="status-legend" aria-label="Appointment status legend">
-        <span className="legend-item"><span className="legend-dot available" />Available</span>
+        <span className="legend-item"><span className="legend-dot available" />Free</span>
         <span className="legend-item"><span className="legend-dot booked" />Booked</span>
         <span className="legend-item"><span className="legend-dot occupied" />Occupied</span>
       </div>
@@ -238,8 +247,8 @@ export default function Schedule() {
         </p>
       ) : slots.length === 0 ? (
         <div className="empty schedule-state">
-          <h2>No schedule published</h2>
-          <p>{isDoctor ? "Create availability for this date to get started." : "There are no available times for this date."}</p>
+          <h2>Schedule not available yet.</h2>
+          <p>{isDoctor ? "This doctor has not added working hours yet." : "This doctor has not added working hours yet."}</p>
         </div>
       ) : (
         <div className="schedule-layout">
@@ -251,7 +260,7 @@ export default function Schedule() {
                     <strong>{displayTime(slot.startAt)}</strong>
                     <small>– {displayTime(slot.endAt)}</small>
                   </div>
-                  <span className={`slot-status ${slot.status.toLowerCase()}`}>{slot.status.toLowerCase()}</span>
+                  <span className={`slot-status ${slot.status.toLowerCase()}`}>{statusLabel(slot.status)}</span>
                 </div>
 
                 <div className="schedule-slot-body">
@@ -306,7 +315,7 @@ export default function Schedule() {
                 </strong>
               </p>
               <p>
-                Status: <span className={`slot-status ${selected.status.toLowerCase()}`}>{selected.status.toLowerCase()}</span>
+                Status: <span className={`slot-status ${selected.status.toLowerCase()}`}>{statusLabel(selected.status)}</span>
               </p>
 
               {selected.patient ? (

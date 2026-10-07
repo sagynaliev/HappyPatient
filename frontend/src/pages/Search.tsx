@@ -74,6 +74,13 @@ export default function Search() {
             <h2>
               {loading ? "Finding your care team…" : `${doctors.length} ${doctors.length === 1 ? "doctor" : "doctors"} found`}
             </h2>
+            {(q || category || office) && !loading && (
+              <p className="simple-copy">
+                Showing results for {q ? `“${q}”` : "all doctors"}
+                {category ? ` in ${category}` : ""}
+                {office ? ` near ${office}` : ""}.
+              </p>
+            )}
           </div>
           <div className="toolbar-actions">
             <span className="view-chip">All available doctors</span>
@@ -85,7 +92,7 @@ export default function Search() {
                   setQ("");
                   setCategory("");
                   setOffice("");
-                  search();
+                  void search();
                 }}
               >
                 Clear filters
@@ -178,7 +185,7 @@ export default function Search() {
                         className="button button-outline"
                         to="/login"
                         state={{
-                          from: `/search?q=${encodeURIComponent(q)}${category ? `&category=${encodeURIComponent(category)}` : ""}`,
+                          from: `/search?q=${encodeURIComponent(q)}${category ? `&category=${encodeURIComponent(category)}` : ""}${office ? `&office=${encodeURIComponent(office)}` : ""}`,
                         }}
                       >
                         Sign in to continue
@@ -191,8 +198,12 @@ export default function Search() {
           ) : (
             <div className="empty empty-premium">
               <span>⌕</span>
-              <h2>No doctors found</h2>
-              <p>Try a different name, specialty, or office to discover your care team.</p>
+              <h2>No doctors found{q || category || office ? " at this location" : ""}</h2>
+              <p>
+                {q || category || office
+                  ? "Try another doctor name, specialty, or location to broaden the search."
+                  : "Try another doctor name, specialty, or office to discover your care team."}
+              </p>
               <button
                 className="text-link"
                 type="button"

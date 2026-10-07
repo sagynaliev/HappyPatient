@@ -36,8 +36,8 @@ export default function DoctorSearchForm({
         <input
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Search by doctor, specialty, or condition"
-          aria-label="Find your doctor"
+          placeholder="Search by doctor name"
+          aria-label="Search by doctor name"
         />
       </label>
       <label>
