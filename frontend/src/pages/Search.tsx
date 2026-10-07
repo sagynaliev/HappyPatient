@@ -232,12 +232,15 @@ export default function Search() {
                   <div className="doctor-card-body">
                     <div className="doctor-card-header">
                       <div>
-                        <h3 className="doctor-name">{doctorFullName}</h3>
+                        <h3>{doctorFullName}</h3>
                       </div>
                       <span className="availability-pill">Open schedule</span>
                     </div>
 
-                   
+                    <div className="doctor-card-meta">
+                      <span>{doctor.category.name}</span>
+                      <span>{doctor.office || "Office location not set"}</span>
+                    </div>
 
                     <p className="doctor-summary">
                       A HappyPatient doctor in our{" "}
