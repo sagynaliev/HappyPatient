@@ -25,12 +25,27 @@ export default function Home() {
   }, []);
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    navigateToSearch(query.trim(), category, office.trim());
+  }
+  function navigateToSearch(searchQuery: string, searchCategory: string, searchOffice: string) {
     const searchParams = new URLSearchParams();
-    if (query.trim()) searchParams.set("q", query.trim());
-    if (category) searchParams.set("category", category);
-    if (office.trim()) searchParams.set("office", office.trim());
+    if (searchQuery) searchParams.set("q", searchQuery);
+    if (searchCategory) searchParams.set("category", searchCategory);
+    if (searchOffice) searchParams.set("office", searchOffice);
     const queryString = searchParams.toString();
     navigate(`/search${queryString ? `?${queryString}` : ""}`);
+  }
+  function selectSuggestion(suggestion: { kind: "specialty" | "doctor" | "clinic"; label: string }) {
+    if (suggestion.kind === "specialty") {
+      setCategory(suggestion.label);
+      navigateToSearch("", suggestion.label, "");
+    } else if (suggestion.kind === "clinic") {
+      setOffice(suggestion.label);
+      navigateToSearch("", "", suggestion.label);
+    } else {
+      setQuery(suggestion.label);
+      navigateToSearch(suggestion.label, "", "");
+    }
   }
   return (
     <div className="home">
@@ -43,7 +58,7 @@ export default function Home() {
           <p className="lead">Find the right doctor, book your appointment, and take care of your health — all in one place.</p>
           <div className="homepage-search">
             <div className="homepage-search-title"><strong>Find your doctor</strong><span>Personalized care starts here</span></div>
-            <DoctorSearchForm query={query} category={category} office={office} categories={specialties} onQueryChange={setQuery} onCategoryChange={setCategory} onOfficeChange={setOffice} onSubmit={search} buttonLabel="Search Doctors" doctorFieldLabel="Doctor search" bare />
+            <DoctorSearchForm query={query} category={category} office={office} categories={specialties} onQueryChange={setQuery} onCategoryChange={setCategory} onOfficeChange={setOffice} onSubmit={search} onSuggestionSelect={selectSuggestion} doctorFieldLabel="Search doctors and specialties" bare />
           </div>
           <div className="hero-proof"><span className="proof-avatars"><i>MC</i><i>AP</i><i>LM</i></span><span>Care that feels personal, from first search to follow-up.</span></div>
         </div>
@@ -58,7 +73,7 @@ export default function Home() {
       <section className="trust-strip"><span>Designed around your everyday health</span><b>Find care</b><b>Manage appointments</b><b>Stay informed</b></section>
       <section className="home-section specialties-section" id="specialties">
         <div className="section-heading"><div><p className="eyebrow">Explore care</p><h2>Start with what<br /><em>matters to you.</em></h2></div><Link className="text-link" to="/search">View all specialties ↗</Link></div>
-        <div className="specialty-grid">{specialties.slice(0, 6).map((specialty, index) => { const style = specialtyStyles[index % specialtyStyles.length]; return <Link className={`specialty-tile ${style.tone}`} to={`/search?category=${encodeURIComponent(specialty.name)}`} key={specialty.id}><span className="tile-icon">{style.icon}</span><span><strong>{specialty.name}</strong><small>Find doctors in this specialty</small></span><b>↗</b></Link>; })}</div>
+        <div className="specialty-grid">{specialties.map((specialty, index) => { const style = specialtyStyles[index % specialtyStyles.length]; return <Link className={`specialty-tile ${style.tone}`} to={`/search?category=${encodeURIComponent(specialty.name)}`} key={specialty.id}><span className="tile-icon">{style.icon}</span><span><strong>{specialty.name}</strong><small>Find doctors in this specialty</small></span><b>↗</b></Link>; })}</div>
       </section>
       <section className="home-section featured-section" id="doctors">
         <div className="section-heading"><div><p className="eyebrow">A clearer care journey</p><h2>From search to<br /><em>the next right step.</em></h2></div><Link className="text-link" to="/search">Find a doctor ↗</Link></div>

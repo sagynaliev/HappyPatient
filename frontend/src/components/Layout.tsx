@@ -52,9 +52,9 @@ export function Layout({ children }: { children: ReactNode }) {
               </button>
             </>
           ) : isAuthRoute && location.pathname === "/register" ? (
-            <Link className="button small" to="/login" onClick={close}>Sign in</Link>
+            <Link className="button small" to="/login" state={location.state} onClick={close}>Sign in</Link>
           ) : isAuthRoute ? (
-            <Link className="button small" to="/register" onClick={close}>Create account</Link>
+            <Link className="button small" to="/register" state={location.state} onClick={close}>Create account</Link>
           ) : (
             <>
               <Link className="nav-signin" to="/login" onClick={close}>Sign in</Link>

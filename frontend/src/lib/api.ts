@@ -43,6 +43,7 @@ export type Doctor = {
   office: string | null;
   category: { id: string; name: string };
   user: { firstName: string; lastName: string; email: string };
+  scheduleSlots: Array<{ id: string; startAt: string; endAt: string }>;
 };
 export type ScheduleSlot = {
   id: string;

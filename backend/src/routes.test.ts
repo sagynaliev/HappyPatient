@@ -41,9 +41,57 @@ const bearer = (role: Role, id = `${role.toLowerCase()}-user`) => `Bearer ${sign
 describe('Sprint 2 doctor endpoints', () => {
   it('filters doctors by office while preserving existing search filters', async () => {
     await request(app).get('/api/doctors?q=cardio&category=Cardiology&office=North').expect(200);
-    expect(prismaMock.doctor.findMany).toHaveBeenCalledWith(expect.objectContaining({
+    const query = prismaMock.doctor.findMany.mock.calls[0][0];
+    expect(query).toEqual(expect.objectContaining({
       where: expect.objectContaining({ office: { contains: 'North', mode: 'insensitive' } }),
     }));
+    expect(query.where.OR).toEqual(expect.arrayContaining([
+      { office: { contains: 'cardio', mode: 'insensitive' } },
+    ]));
+    expect(query.include.scheduleSlots).toEqual(expect.objectContaining({
+      where: expect.objectContaining({ status: 'FREE' }),
+      orderBy: { startAt: 'asc' },
+      take: 1,
+    }));
+  });
+
+  it('matches full doctor names, including the displayed doctor title', async () => {
+    await request(app).get('/api/doctors?q=Dr.%20Ayan%20Bekov').expect(200);
+    const nameFilter = prismaMock.doctor.findMany.mock.calls[0][0].where.OR[2].user;
+    expect(nameFilter.AND).toEqual([
+      { OR: [
+        { firstName: { contains: 'Ayan', mode: 'insensitive' } },
+        { lastName: { contains: 'Ayan', mode: 'insensitive' } },
+      ] },
+      { OR: [
+        { firstName: { contains: 'Bekov', mode: 'insensitive' } },
+        { lastName: { contains: 'Bekov', mode: 'insensitive' } },
+      ] },
+    ]);
+  });
+
+  it('filters doctors by actual free slots for availability and time of day', async () => {
+    await request(app).get('/api/doctors?availability=today&timeOfDay=morning').expect(200);
+    const where = prismaMock.doctor.findMany.mock.calls[0][0].where;
+    expect(where.scheduleSlots.some.status).toBe('FREE');
+    expect(where.scheduleSlots.some.startAt.gte).toBeInstanceOf(Date);
+    expect(where.scheduleSlots.some.startAt.lt).toBeInstanceOf(Date);
+    expect(where.scheduleSlots.some.OR).toEqual(expect.arrayContaining([
+      { startAt: { gte: expect.any(Date), lt: expect.any(Date) } },
+    ]));
+  });
+
+  it('limits this-week availability to the remaining UTC calendar week', async () => {
+    await request(app).get('/api/doctors?availability=this-week').expect(200);
+    const scheduleFilter = prismaMock.doctor.findMany.mock.calls[0][0].where.scheduleSlots.some;
+    const utcToday = new Date();
+    const expectedDays = (7 - utcToday.getUTCDay()) % 7 + 1;
+    expect(scheduleFilter.startAt.lt.getTime() - scheduleFilter.startAt.gte.getTime()).toBe(expectedDays * 24 * 60 * 60_000);
+  });
+
+  it('rejects invalid availability filters', async () => {
+    await request(app).get('/api/doctors?availability=next-month').expect(400);
+    expect(prismaMock.doctor.findMany).not.toHaveBeenCalled();
   });
 
   it('returns a confirmation notification after patient registration', async () => {

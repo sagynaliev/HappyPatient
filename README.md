@@ -37,6 +37,8 @@ The seed creates an admin account from `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` 
 
 Doctors can update their office location and publish daily availability from their dashboard. Schedule ranges are interpreted in UTC and generated as non-overlapping 30-minute slots. Signed-in patients can book future free slots with a visit purpose; doctors can mark slots occupied or free and view booked patient details. Patient schedule responses include slot status but never another patient's details.
 
+The doctor directory provides debounced suggestions for doctor names, specialties, and offices. Patients can filter by specialty, location, published availability, and time of day; selecting a listed appointment opens that exact slot in the existing booking flow. Ratings, fees, experience, languages, and online-visit modes are not currently stored in doctor profiles, so the directory identifies those details as unavailable rather than displaying invented values.
+
 ## Docker
 
 `docker compose up --build` runs PostgreSQL, the API, and the built frontend. The backend applies pending Prisma migrations before it starts. To seed optional demo accounts in the local Compose database, run the seed script from the repository after installing host dependencies and setting `DATABASE_URL` to the local PostgreSQL URL:

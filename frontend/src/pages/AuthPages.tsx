@@ -148,7 +148,8 @@ export function Login() {
     const data = new FormData(event.currentTarget);
     try {
       await login(String(data.get("email")).trim(), String(data.get("password")));
-      navigate((location.state as { from?: string })?.from || "/dashboard");
+      const returnState = location.state as { from?: string; returnState?: unknown } | null;
+      navigate(returnState?.from || "/dashboard", returnState?.returnState ? { state: returnState.returnState } : undefined);
     } catch (err) {
       setError(err instanceof ApiError && err.status === 401 ? "The email or password doesn’t match our records." : errorsFromApi(err).form);
     } finally {
@@ -164,7 +165,7 @@ export function Login() {
         <div className="form-row"><label className="checkbox"><input type="checkbox" /> Remember me</label><Link to="/forgot-password">Forgot password?</Link></div>
         <button className="button full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       </form>
-      <p className="auth-footer">New here? <Link to="/register">Create an account</Link></p>
+      <p className="auth-footer">New here? <Link to="/register" state={location.state}>Create an account</Link></p>
     </AuthLayout>
   );
 }
@@ -172,6 +173,7 @@ export function Login() {
 export function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [error, setError] = useState("");
   const [fields, setFields] = useState<FieldErrors>({});
   const [success, setSuccess] = useState(false);
@@ -217,7 +219,10 @@ export function Register() {
     try {
       setConfirmationMessage(await register(payload));
       setSuccess(true);
-      window.setTimeout(() => navigate("/dashboard"), 1200);
+      window.setTimeout(() => {
+        const returnState = location.state as { from?: string; returnState?: unknown } | null;
+        navigate(returnState?.from || "/dashboard", returnState?.returnState ? { state: returnState.returnState } : undefined);
+      }, 1200);
     } catch (err) {
       const result = errorsFromApi(err);
       setError(result.form);
@@ -229,7 +234,7 @@ export function Register() {
   return (
     <AuthLayout eyebrow="Get started" title="Create your account" subtitle="A simple, secure home for your healthcare journey.">
       {success ? (
-        <div className="success-state" role="status"><div className="success-icon">✓</div><h3>Account created successfully</h3><p>{confirmationMessage}</p><p>Taking you to your dashboard…</p></div>
+        <div className="success-state" role="status"><div className="success-icon">✓</div><h3>Account created successfully</h3><p>{confirmationMessage}</p><p>{(location.state as { returnState?: unknown } | null)?.returnState ? "Taking you back to your appointment…" : "Taking you to your dashboard…"}</p></div>
       ) : (
         <form onSubmit={submit} noValidate>
           {error && <div className="alert error" role="alert"><strong>Registration could not be completed</strong><span>{error}</span></div>}
@@ -242,7 +247,7 @@ export function Register() {
           <button className="button full" disabled={busy}>{busy ? "Creating your account…" : "Create account"}</button>
         </form>
       )}
-      <p className="auth-footer">Already have an account? <Link to="/login">Sign in</Link></p>
+      <p className="auth-footer">Already have an account? <Link to="/login" state={location.state}>Sign in</Link></p>
     </AuthLayout>
   );
 }

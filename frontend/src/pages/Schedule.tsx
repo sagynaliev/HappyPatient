@@ -4,17 +4,22 @@ import { useAuth } from "../context/AuthContext";
 import { DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
 
 const today = () => new Date().toISOString().slice(0, 10);
-const displayTime = (value: string) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+const displayTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 
 export default function Schedule() {
   const { user } = useAuth();
   const location = useLocation();
   const { doctorId } = useParams();
   const isDoctor = user?.role === "DOCTOR";
-  const doctorMeta = (location.state as { doctorName?: string; specialty?: string; office?: string } | null) ?? null;
+  const routeState = location.state as { doctorName?: string; specialty?: string; office?: string; selectedSlotId?: string } | null;
+  const searchParams = new URLSearchParams(location.search);
+  const doctorMeta = routeState ?? null;
+  const selectedSlotId = routeState?.selectedSlotId || searchParams.get("slot") || undefined;
+  const requestedDate = searchParams.get("date");
+  const initialDate = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : today();
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [office, setOffice] = useState("");
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState(initialDate);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("17:00");
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
@@ -38,6 +43,7 @@ export default function Schedule() {
   async function refresh() {
     setLoading(true);
     setError("");
+    if (!selectedSlotId) setSelected(null);
     try {
       let targetDoctorId = doctorId;
       if (isDoctor) {
@@ -49,6 +55,14 @@ export default function Schedule() {
       if (!targetDoctorId) throw new Error("Doctor schedule is unavailable.");
       const result = await authApi.getSchedule(targetDoctorId, date);
       setSlots(result.slots);
+      if (selectedSlotId) {
+        const requestedSlot = result.slots.find((slot) => slot.id === selectedSlotId);
+        setSelected(
+          requestedSlot?.status === "FREE" && Date.parse(requestedSlot.startAt) > Date.now()
+            ? requestedSlot
+            : null,
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load this schedule.");
     } finally {
@@ -56,7 +70,11 @@ export default function Schedule() {
     }
   }
 
-  useEffect(() => { void refresh(); }, [date, doctorId, isDoctor]);
+  useEffect(() => {
+    if (requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) setDate(requestedDate);
+  }, [requestedDate]);
+
+  useEffect(() => { void refresh(); }, [date, doctorId, isDoctor, selectedSlotId]);
 
   async function saveOffice(event: FormEvent) {
     event.preventDefault();
@@ -79,7 +97,7 @@ export default function Schedule() {
     setBusy(true);
     try {
       const result = await authApi.createSchedule({ date, startTime, endTime });
-      const scheduleDate = new Date(`${date}T00:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+      const scheduleDate = new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
       setMessage(`Schedule created — ${result.created} slots created for ${scheduleDate} (${startTime}–${endTime}).`);
       await refresh();
     } catch (err) {
@@ -110,7 +128,7 @@ export default function Schedule() {
       const chosenTime = `${displayTime(selected.startAt)} – ${displayTime(selected.endAt)}`;
       setBookingSuccess({
         doctorName: doctorName,
-        date: new Date(`${date}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }),
+        date: new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         time: chosenTime,
         purpose: visitPurpose.trim(),
       });
@@ -136,7 +154,7 @@ export default function Schedule() {
   }
 
   const doctorName = doctorMeta?.doctorName || "Doctor";
-  const formattedDate = new Date(`${date}T00:00:00`).toLocaleDateString([], {
+  const formattedDate = new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",

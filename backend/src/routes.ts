@@ -107,9 +107,93 @@ router.get('/doctors', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
   const office = typeof req.query.office === 'string' ? req.query.office.trim() : '';
+  const normalizedNameQuery = q.replace(/^(?:dr\.?|doctor)\s+/i, '').trim();
+  const nameTerms = (normalizedNameQuery || q).split(/\s+/).filter(Boolean);
+  const availability = typeof req.query.availability === 'string' ? req.query.availability : '';
+  const timeOfDay = typeof req.query.timeOfDay === 'string' ? req.query.timeOfDay : '';
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const daysThroughSunday = (7 - today.getUTCDay()) % 7 + 1;
+  const availabilityStart = availability === 'tomorrow'
+    ? new Date(today.getTime() + 24 * 60 * 60_000)
+    : availability === 'this-week' || availability === 'today'
+      ? today
+      : undefined;
+  const availabilityEnd = availability === 'today'
+    ? new Date(today.getTime() + 24 * 60 * 60_000)
+    : availability === 'tomorrow'
+      ? new Date(today.getTime() + 2 * 24 * 60 * 60_000)
+      : availability === 'this-week'
+        ? new Date(today.getTime() + daysThroughSunday * 24 * 60 * 60_000)
+        : undefined;
+  const timeRanges = {
+    morning: [6, 12],
+    afternoon: [12, 17],
+    evening: [17, 24],
+  } as const;
+  const timeRange = timeOfDay in timeRanges
+    ? timeRanges[timeOfDay as keyof typeof timeRanges]
+    : undefined;
+  const firstDay = availabilityStart ?? today;
+  const lastDay = availabilityEnd ?? new Date(today.getTime() + 24 * 60 * 60_000);
+  const timeWindows = timeRange
+    ? Array.from(
+        { length: Math.ceil((lastDay.getTime() - firstDay.getTime()) / (24 * 60 * 60_000)) },
+        (_, index) => {
+          const day = new Date(firstDay.getTime() + index * 24 * 60 * 60_000);
+          return {
+            startAt: {
+              gte: new Date(day.getTime() + timeRange[0] * 60 * 60_000),
+              lt: new Date(day.getTime() + timeRange[1] * 60 * 60_000),
+            },
+          };
+        },
+      )
+    : undefined;
+  const slotFilter = {
+    status: SlotStatus.FREE,
+    startAt: {
+      gt: now,
+      ...(availabilityStart ? { gte: availabilityStart } : {}),
+      ...(availabilityEnd ? { lt: availabilityEnd } : {}),
+    },
+    ...(timeWindows ? { OR: timeWindows } : {}),
+  };
+  if (availability && !availabilityStart) return res.status(400).json({ error: 'Choose a valid availability filter.' });
+  if (timeOfDay && !timeRange) return res.status(400).json({ error: 'Choose a valid time filter.' });
   const doctors = await prisma.doctor.findMany({
-    where: { ...(q ? { OR: [{ category: { name: { contains: q, mode: 'insensitive' } } }, { user: { OR: [{ firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }] } }] } : {}), ...(category ? { category: { name: { contains: category, mode: 'insensitive' } } } : {}), ...(office ? { office: { contains: office, mode: 'insensitive' } } : {}) },
-    include: { category: true, user: { select: { firstName: true, lastName: true, email: true } } }, orderBy: { user: { lastName: 'asc' } }
+    where: {
+      ...(q ? {
+        OR: [
+          { category: { name: { contains: q, mode: 'insensitive' } } },
+          { office: { contains: q, mode: 'insensitive' } },
+          {
+            user: {
+              AND: nameTerms.map((term) => ({
+                OR: [
+                  { firstName: { contains: term, mode: 'insensitive' } },
+                  { lastName: { contains: term, mode: 'insensitive' } },
+                ],
+              })),
+            },
+          },
+        ],
+      } : {}),
+      ...(category ? { category: { name: { contains: category, mode: 'insensitive' } } } : {}),
+      ...(office ? { office: { contains: office, mode: 'insensitive' } } : {}),
+      ...(availability || timeOfDay ? { scheduleSlots: { some: slotFilter } } : {}),
+    },
+    include: {
+      category: true,
+      user: { select: { firstName: true, lastName: true, email: true } },
+      scheduleSlots: {
+        where: slotFilter,
+        orderBy: { startAt: 'asc' },
+        take: 1,
+        select: { id: true, startAt: true, endAt: true },
+      },
+    },
+    orderBy: { user: { lastName: 'asc' } },
   });
   res.json({ doctors });
 });
