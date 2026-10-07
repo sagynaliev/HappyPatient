@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookingSchema, officeSchema, registrationSchema, scheduleSchema, slotUpdateSchema, verificationCodeSchema } from './validation';
+import { bookingSchema, officeSchema, registrationSchema, scheduleBatchSchema, scheduleSchema, slotUpdateSchema, verificationCodeSchema } from './validation';
 
 describe('registration validation', () => {
   it('normalizes email', () => expect(registrationSchema.parse({ email: 'USER@Example.COM', password: 'password123', firstName: 'A', lastName: 'B', iin: '123456789012' }).email).toBe('user@example.com'));
@@ -29,6 +29,24 @@ describe('schedule validation', () => {
     expect(() => scheduleSchema.parse({ date: '2099-02-30', startTime: '09:00', endTime: '10:00' })).toThrow();
     expect(() => scheduleSchema.parse({ date: '2099-05-10', startTime: '09:15', endTime: '10:00' })).toThrow();
     expect(() => scheduleSchema.parse({ date: '2099-05-10', startTime: '10:00', endTime: '09:00' })).toThrow();
+  });
+
+  it('validates a weekly set of unique work dates and shared working hours', () => {
+    expect(scheduleBatchSchema.parse({
+      dates: ['2099-05-10', '2099-05-12'],
+      startTime: '09:00',
+      endTime: '10:30',
+    }).dates).toHaveLength(2);
+    expect(() => scheduleBatchSchema.parse({
+      dates: ['2099-05-10', '2099-05-10'],
+      startTime: '09:00',
+      endTime: '10:30',
+    })).toThrow();
+    expect(() => scheduleBatchSchema.parse({
+      dates: ['2099-05-10'],
+      startTime: '09:15',
+      endTime: '10:30',
+    })).toThrow();
   });
 
   it('requires patient and purpose for booked slots', () => {

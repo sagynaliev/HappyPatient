@@ -53,7 +53,12 @@ export type ScheduleSlot = {
   visitPurpose?: string | null;
   patient?: { id: string; firstName: string; lastName: string; email?: string } | null;
 };
-export type DoctorProfile = { id: string; office: string | null; category: { name: string } };
+export type DoctorProfile = {
+  id: string;
+  office: string | null;
+  category: { name: string };
+  user?: { firstName: string; lastName: string };
+};
 export type AuthResponse = { user: User; token: string; notification?: { channel: 'email' | 'local'; message: string } };
 
 export const authApi = {
@@ -65,7 +70,9 @@ export const authApi = {
   updateOffice: (office: string) => api<{ doctor: DoctorProfile }>('/doctors/me/office', { method: 'PATCH', body: JSON.stringify({ office }) }),
   createSchedule: (body: { date: string; startTime: string; endTime: string }) =>
     api<{ created: number }>('/doctors/me/schedule', { method: 'POST', body: JSON.stringify(body) }),
-  getSchedule: (doctorId: string, date: string) => api<{ slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule?date=${encodeURIComponent(date)}`),
+  createWorkingDays: (body: { dates: string[]; startTime: string; endTime: string }) =>
+    api<{ created: number; dates: string[] }>('/doctors/me/schedule/working-days', { method: 'POST', body: JSON.stringify(body) }),
+  getSchedule: (doctorId: string, date: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule?date=${encodeURIComponent(date)}`),
   bookSlot: (doctorId: string, slotId: string, visitPurpose: string) =>
     api<{ slot: ScheduleSlot }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose }) }),
   updateSlot: (slotId: string, body: { status: ScheduleSlot['status']; patientId?: string; visitPurpose?: string }) =>
@@ -87,4 +94,9 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+};
+
+export const doctorDirectoryApi = {
+  locations: (options: RequestInit = {}) =>
+    api<{ locations: string[] }>('/doctors/locations', options),
 };

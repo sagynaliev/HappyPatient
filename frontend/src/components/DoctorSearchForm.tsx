@@ -14,6 +14,7 @@ type DoctorSearchFormProps = {
   onOfficeChange?: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onSuggestionSelect?: (suggestion: Suggestion) => void;
+  onClear?: () => void;
   buttonLabel?: string;
   doctorFieldLabel?: string;
   bare?: boolean;
@@ -42,11 +43,13 @@ export default function DoctorSearchForm({
   onOfficeChange,
   onSubmit,
   onSuggestionSelect,
+  onClear,
   doctorFieldLabel = "Find a doctor",
   bare = false,
 }: DoctorSearchFormProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState("");
   const [doctorResults, setDoctorResults] = useState<{ query: string; doctors: Doctor[] }>({ query: "", doctors: [] });
   const [activeIndex, setActiveIndex] = useState(-1);
   const formRef = useRef<HTMLFormElement>(null);
@@ -57,6 +60,7 @@ export default function DoctorSearchForm({
 
   useEffect(() => {
     setLoading(Boolean(normalizedQuery));
+    setSuggestionError("");
     if (!normalizedQuery) {
       setDoctorResults({ query: "", doctors: [] });
       return;
@@ -71,7 +75,7 @@ export default function DoctorSearchForm({
         .then((result) => setDoctorResults({ query: normalizedQuery, doctors: result.doctors || [] }))
         .catch((error: unknown) => {
           if (!(error instanceof DOMException && error.name === "AbortError")) {
-            setDoctorResults({ query: normalizedQuery, doctors: [] });
+            setSuggestionError(error instanceof Error ? error.message : "Unable to load suggestions.");
           }
         })
         .finally(() => {
@@ -195,7 +199,7 @@ export default function DoctorSearchForm({
         }}
       >
         <label htmlFor={inputId}>{doctorFieldLabel}</label>
-        <div className="doctor-search-input-wrap">
+        <div className={`doctor-search-input-wrap${query ? " has-query" : ""}`}>
           <span className="doctor-search-icon" aria-hidden="true">⌕</span>
           <input
             id={inputId}
@@ -207,7 +211,7 @@ export default function DoctorSearchForm({
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search doctors, specialties..."
+            placeholder="Search doctors or specialties..."
             autoComplete="off"
             role="combobox"
             aria-autocomplete="list"
@@ -222,6 +226,7 @@ export default function DoctorSearchForm({
               aria-label="Clear search"
               onClick={() => {
                 onQueryChange("");
+                onClear?.();
                 setOpen(false);
                 setActiveIndex(-1);
               }}
@@ -234,6 +239,21 @@ export default function DoctorSearchForm({
           <div className="search-suggestions">
             {loading && !suggestions.length ? (
               <p className="suggestion-state" role="status">Searching doctors and clinics…</p>
+            ) : suggestionError && !suggestions.length ? (
+              <>
+                <p className="suggestion-state" role="alert">Suggestions could not be loaded. You can still view all results.</p>
+                <button
+                  className="suggestion-view-all"
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    formRef.current?.requestSubmit();
+                  }}
+                >
+                  View all results
+                  <span aria-hidden="true">→</span>
+                </button>
+              </>
             ) : suggestions.length ? (
               <>
                 <div id={listId} role="listbox" aria-label="Search suggestions">
@@ -268,6 +288,7 @@ export default function DoctorSearchForm({
                   ))}
                 </div>
                 {loading && <p className="suggestion-loading" role="status">Searching for more matches…</p>}
+                {suggestionError && <p className="suggestion-loading" role="alert">Some suggestions could not be loaded.</p>}
                 <button
                   className="suggestion-view-all"
                   type="button"
@@ -286,7 +307,7 @@ export default function DoctorSearchForm({
                 <span>Try a doctor name, specialty, or clinic.</span>
               </div>
             )}
-            {!loading && !suggestions.length && (
+            {!loading && !suggestionError && !suggestions.length && (
               <button
                 className="suggestion-view-all"
                 type="button"

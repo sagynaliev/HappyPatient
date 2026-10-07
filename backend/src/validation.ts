@@ -29,6 +29,18 @@ export const scheduleSchema = z.object({
   if (startTime >= endTime) context.addIssue({ code: 'custom', path: ['endTime'], message: 'End time must be later than start time.' });
 });
 export const scheduleDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidDate, 'Enter a valid calendar date.');
+export const scheduleBatchSchema = z.object({
+  dates: z.array(scheduleDateSchema).min(1).max(7),
+  startTime: timeSchema,
+  endTime: timeSchema,
+}).superRefine(({ dates, startTime, endTime }, context) => {
+  if (new Set(dates).size !== dates.length) {
+    context.addIssue({ code: 'custom', path: ['dates'], message: 'Working dates must be unique.' });
+  }
+  if (startTime >= endTime) {
+    context.addIssue({ code: 'custom', path: ['endTime'], message: 'End time must be later than start time.' });
+  }
+});
 export const bookingSchema = z.object({ visitPurpose: z.string().trim().min(1).max(300) });
 export const slotUpdateSchema = z.object({
   status: z.enum(['FREE', 'BOOKED', 'OCCUPIED']),

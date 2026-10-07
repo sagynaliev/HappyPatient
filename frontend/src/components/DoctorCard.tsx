@@ -16,13 +16,11 @@ function formatAppointment(value: string) {
   const time = date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "UTC",
   });
   const day = date.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
-    timeZone: "UTC",
   });
   return { day, time };
 }
@@ -103,7 +101,7 @@ export default function DoctorCard({ doctor, canBook, checkingAccess, role, quer
           {nextAppointment ? (
             <span>
               <strong>Next available</strong>
-              <span>{nextAppointment.day} · {nextAppointment.time} UTC</span>
+              <span>{nextAppointment.day} · {nextAppointment.time}</span>
             </span>
           ) : (
             <span><strong>No times published</strong><span>Check back later for availability.</span></span>

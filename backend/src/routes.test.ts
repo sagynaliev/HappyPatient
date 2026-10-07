@@ -26,7 +26,13 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.resetAllMocks();
   prismaMock.doctor.findMany.mockResolvedValue([]);
-  prismaMock.doctor.findUnique.mockResolvedValue({ id: 'doctor-1', userId: 'doctor-user' });
+  prismaMock.doctor.findUnique.mockResolvedValue({
+    id: 'doctor-1',
+    userId: 'doctor-user',
+    office: 'North Clinic',
+    category: { name: 'Cardiology' },
+    user: { firstName: 'Sam', lastName: 'Doctor' },
+  });
   prismaMock.scheduleSlot.findFirst.mockResolvedValue(null);
   prismaMock.scheduleSlot.findMany.mockResolvedValue([]);
   prismaMock.scheduleSlot.createMany.mockResolvedValue({ count: 4 });
@@ -39,15 +45,36 @@ beforeEach(() => {
 const bearer = (role: Role, id = `${role.toLowerCase()}-user`) => `Bearer ${signToken({ id, email: `${role.toLowerCase()}@example.test`, role })}`;
 
 describe('Sprint 2 doctor endpoints', () => {
+  it('returns unique, configured office locations without inventing options', async () => {
+    prismaMock.doctor.findMany.mockResolvedValue([
+      { office: 'North Clinic' },
+      { office: ' north clinic ' },
+      { office: 'West Medical Center' },
+      { office: null },
+      { office: ' ' },
+    ]);
+    const response = await request(app).get('/api/doctors/locations').expect(200);
+    expect(response.body.locations).toEqual(['North Clinic', 'West Medical Center']);
+    expect(prismaMock.doctor.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { office: { not: null } },
+      select: { office: true },
+      distinct: ['office'],
+    }));
+  });
+
   it('filters doctors by office while preserving existing search filters', async () => {
-    await request(app).get('/api/doctors?q=cardio&category=Cardiology&office=North').expect(200);
+    await request(app).get('/api/doctors?q=cardio&category=Cardiology&office=North&availability=today').expect(200);
     const query = prismaMock.doctor.findMany.mock.calls[0][0];
     expect(query).toEqual(expect.objectContaining({
-      where: expect.objectContaining({ office: { contains: 'North', mode: 'insensitive' } }),
+      where: expect.objectContaining({
+        category: { name: { contains: 'Cardiology', mode: 'insensitive' } },
+        office: { contains: 'North', mode: 'insensitive' },
+      }),
     }));
     expect(query.where.OR).toEqual(expect.arrayContaining([
       { office: { contains: 'cardio', mode: 'insensitive' } },
     ]));
+    expect(query.where.scheduleSlots.some).toEqual(expect.objectContaining({ status: 'FREE' }));
     expect(query.include.scheduleSlots).toEqual(expect.objectContaining({
       where: expect.objectContaining({ status: 'FREE' }),
       orderBy: { startAt: 'asc' },
@@ -79,6 +106,23 @@ describe('Sprint 2 doctor endpoints', () => {
     expect(where.scheduleSlots.some.OR).toEqual(expect.arrayContaining([
       { startAt: { gte: expect.any(Date), lt: expect.any(Date) } },
     ]));
+  });
+
+  it('applies availability and time-of-day windows in the patient time zone', async () => {
+    await request(app).get('/api/doctors?availability=today&timeOfDay=morning&timeZone=Asia%2FAlmaty').expect(200);
+    const scheduleFilter = prismaMock.doctor.findMany.mock.calls[0][0].where.scheduleSlots.some;
+    expect(scheduleFilter.startAt.gte.getUTCHours()).toBe(19);
+    expect(scheduleFilter.startAt.lt.getTime() - scheduleFilter.startAt.gte.getTime()).toBe(24 * 60 * 60_000);
+    expect(scheduleFilter.OR).toEqual([
+      { startAt: { gte: expect.any(Date), lt: expect.any(Date) } },
+    ]);
+    expect(scheduleFilter.OR[0].startAt.gte.getUTCHours()).toBe(1);
+    expect(scheduleFilter.OR[0].startAt.lt.getUTCHours()).toBe(7);
+  });
+
+  it('rejects an invalid time zone', async () => {
+    await request(app).get('/api/doctors?timeZone=not-a-time-zone').expect(400);
+    expect(prismaMock.doctor.findMany).not.toHaveBeenCalled();
   });
 
   it('limits this-week availability to the remaining UTC calendar week', async () => {
@@ -126,12 +170,48 @@ describe('Sprint 2 doctor endpoints', () => {
     expect(prismaMock.scheduleSlot.createMany).not.toHaveBeenCalled();
   });
 
+  it('creates 30-minute slots for selected working days as one transaction', async () => {
+    prismaMock.scheduleSlot.createMany.mockImplementation(async ({ data }) => ({ count: data.length }));
+    const response = await request(app).post('/api/doctors/me/schedule/working-days')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({
+        dates: ['2099-05-10', '2099-05-12'],
+        startTime: '09:00',
+        endTime: '11:00',
+      })
+      .expect(201);
+    expect(response.body).toEqual({ created: 8, dates: ['2099-05-10', '2099-05-12'] });
+    const overlapQuery = prismaMock.scheduleSlot.findFirst.mock.calls[0][0];
+    expect(overlapQuery.where.OR).toHaveLength(2);
+    expect(prismaMock.scheduleSlot.createMany.mock.calls[0][0].data).toHaveLength(8);
+  });
+
+  it('does not create any working-day slots if one date overlaps', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValue({ id: 'existing-slot' });
+    await request(app).post('/api/doctors/me/schedule/working-days')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({
+        dates: ['2099-05-10', '2099-05-12'],
+        startTime: '09:00',
+        endTime: '11:00',
+      })
+      .expect(409);
+    expect(prismaMock.scheduleSlot.createMany).not.toHaveBeenCalled();
+  });
+
   it('allows patients to view statuses without patient details', async () => {
     prismaMock.scheduleSlot.findMany.mockResolvedValue([{ id: 'slot-1', status: 'BOOKED', startAt: new Date('2099-05-10T09:00:00Z'), endAt: new Date('2099-05-10T09:30:00Z') }]);
     const response = await request(app).get('/api/doctors/doctor-1/schedule?date=2099-05-10')
       .set('Authorization', bearer(Role.PATIENT))
       .expect(200);
     expect(response.body.slots[0].status).toBe('BOOKED');
+    expect(response.body.doctor).toEqual({
+      id: 'doctor-1',
+      office: 'North Clinic',
+      category: { name: 'Cardiology' },
+      user: { firstName: 'Sam', lastName: 'Doctor' },
+    });
+    expect(response.body.doctor.user).not.toHaveProperty('email');
     expect(prismaMock.scheduleSlot.findMany.mock.calls[0][0]).not.toHaveProperty('include');
   });
 

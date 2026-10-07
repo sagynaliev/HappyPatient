@@ -1,10 +1,31 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
 
 const today = () => new Date().toISOString().slice(0, 10);
-const displayTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+const displayTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+const weekdays = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 0, label: "Sunday" },
+];
+
+function getWeekDates(weekDate: string, selectedWeekdays: number[]) {
+  const monday = new Date(`${weekDate}T00:00:00.000Z`);
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+  return selectedWeekdays
+    .map((weekday) => {
+      const date = new Date(monday);
+      date.setUTCDate(monday.getUTCDate() + ((weekday + 6) % 7));
+      return date.toISOString().slice(0, 10);
+    })
+    .sort();
+}
 
 export default function Schedule() {
   const { user } = useAuth();
@@ -20,6 +41,8 @@ export default function Schedule() {
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [office, setOffice] = useState("");
   const [date, setDate] = useState(initialDate);
+  const [scheduleWeek, setScheduleWeek] = useState(today());
+  const [workingDays, setWorkingDays] = useState([1, 2, 3, 4, 5]);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("17:00");
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
@@ -31,6 +54,7 @@ export default function Schedule() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [bookingSuccess, setBookingSuccess] = useState<{ doctorName: string; date: string; time: string; purpose: string } | null>(null);
+  const refreshRequest = useRef(0);
   const statusLabel = (status: ScheduleSlot["status"]) => {
     switch (status) {
       case "FREE": return "Free";
@@ -41,6 +65,7 @@ export default function Schedule() {
   };
 
   async function refresh() {
+    const requestId = ++refreshRequest.current;
     setLoading(true);
     setError("");
     if (!selectedSlotId) setSelected(null);
@@ -48,12 +73,15 @@ export default function Schedule() {
       let targetDoctorId = doctorId;
       if (isDoctor) {
         const result = await authApi.doctorProfile();
+        if (requestId !== refreshRequest.current) return;
         setDoctor(result.doctor);
         setOffice(result.doctor.office || "");
         targetDoctorId = result.doctor.id;
       }
       if (!targetDoctorId) throw new Error("Doctor schedule is unavailable.");
       const result = await authApi.getSchedule(targetDoctorId, date);
+      if (requestId !== refreshRequest.current) return;
+      if (!isDoctor) setDoctor(result.doctor);
       setSlots(result.slots);
       if (selectedSlotId) {
         const requestedSlot = result.slots.find((slot) => slot.id === selectedSlotId);
@@ -64,9 +92,11 @@ export default function Schedule() {
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load this schedule.");
+      if (requestId === refreshRequest.current) {
+        setError(err instanceof Error ? err.message : "Unable to load this schedule.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === refreshRequest.current) setLoading(false);
     }
   }
 
@@ -74,7 +104,10 @@ export default function Schedule() {
     if (requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) setDate(requestedDate);
   }, [requestedDate]);
 
-  useEffect(() => { void refresh(); }, [date, doctorId, isDoctor, selectedSlotId]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshRequest.current += 1; };
+  }, [date, doctorId, isDoctor, selectedSlotId]);
 
   async function saveOffice(event: FormEvent) {
     event.preventDefault();
@@ -94,12 +127,21 @@ export default function Schedule() {
     event.preventDefault();
     setError("");
     setMessage("");
+    const selectedDates = getWeekDates(scheduleWeek, workingDays).filter((workingDate) => workingDate >= today());
+    if (!selectedDates.length) {
+      setError("Choose at least one future working day in this week.");
+      return;
+    }
     setBusy(true);
     try {
-      const result = await authApi.createSchedule({ date, startTime, endTime });
-      const scheduleDate = new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
-      setMessage(`Schedule created — ${result.created} slots created for ${scheduleDate} (${startTime}–${endTime}).`);
-      await refresh();
+      const result = await authApi.createWorkingDays({ dates: selectedDates, startTime, endTime });
+      const selectedDayNames = selectedDates.map((workingDate) =>
+        new Date(`${workingDate}T00:00:00.000Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }),
+      );
+      setMessage(`Schedule created — ${result.created} slots across ${selectedDayNames.join(", ")} (${startTime}–${endTime}).`);
+      const firstDate = selectedDates[0];
+      setDate(firstDate);
+      if (firstDate === date) await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create this schedule.");
     } finally { setBusy(false); }
@@ -153,19 +195,24 @@ export default function Schedule() {
     }
   }
 
-  const doctorName = doctorMeta?.doctorName || "Doctor";
+  const doctorName = doctorMeta?.doctorName
+    || (doctor?.user ? `Dr. ${doctor.user.firstName} ${doctor.user.lastName}` : "Doctor");
   const formattedDate = new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",
   });
+  const freeSlotCount = slots.filter((slot) => slot.status === "FREE" && Date.parse(slot.startAt) > Date.now()).length;
+  const workingHours = slots.length
+    ? `${displayTime(slots[0].startAt)}–${displayTime(slots[slots.length - 1].endAt)}`
+    : "Not published";
 
   return (
     <div className="page schedule-page">
       <p className="eyebrow">{isDoctor ? "Doctor calendar" : "Doctor availability"}</p>
       <h1 className="page-heading">{isDoctor ? "Work schedule" : `${doctorName} schedule`}</h1>
-      <p className="lead">Appointment times are shown in UTC.</p>
+      <p className="lead">{isDoctor ? "Set working days, hours, and appointment availability." : "Choose a date to view available appointment times."}</p>
 
       {error && (
         <div className="alert error" role="alert">
@@ -187,7 +234,7 @@ export default function Schedule() {
         </div>
       )}
 
-      {!isDoctor && doctorMeta && (
+      {!isDoctor && doctor && (
         <section className="doctor-profile-sheet" aria-label="Doctor profile summary">
           <div className="doctor-profile-header">
             <div>
@@ -198,8 +245,8 @@ export default function Schedule() {
           </div>
 
           <div className="doctor-profile-meta">
-            <span>{doctorMeta.specialty || "Specialty available on request"}</span>
-            <span>{doctorMeta.office || "Location available on request"}</span>
+            <span>{doctorMeta?.specialty || doctor.category.name}</span>
+            <span>{doctorMeta?.office || doctor.office || "Location available on request"}</span>
           </div>
 
           <div className="doctor-profile-grid">
@@ -208,8 +255,12 @@ export default function Schedule() {
               <span>{formattedDate}</span>
             </div>
             <div className="detail-item">
-              <strong>Care focus</strong>
-              <span>{doctorMeta.specialty || "General care"}</span>
+              <strong>Working hours</strong>
+              <span>{workingHours}</span>
+            </div>
+            <div className="detail-item">
+              <strong>Available appointments</strong>
+              <span>{freeSlotCount}</span>
             </div>
           </div>
         </section>
@@ -233,8 +284,8 @@ export default function Schedule() {
 
           <form className="schedule-create" onSubmit={createSchedule}>
             <label className="schedule-label">
-              Date
-              <input type="date" value={date} min={today()} onChange={(event) => setDate(event.target.value)} required />
+              Week containing
+              <input type="date" value={scheduleWeek} min={today()} onChange={(event) => setScheduleWeek(event.target.value)} required />
             </label>
             <label className="schedule-label">
               Start
@@ -244,7 +295,27 @@ export default function Schedule() {
               End
               <input type="time" step={1800} value={endTime} onChange={(event) => setEndTime(event.target.value)} required />
             </label>
-            <button className="button" disabled={busy}>Create 30-minute slots</button>
+            <fieldset className="schedule-working-days">
+              <legend>Working days</legend>
+              <div className="schedule-weekday-options">
+                {weekdays.map((weekday) => (
+                  <label className="schedule-weekday-option" key={weekday.value}>
+                    <input
+                      type="checkbox"
+                      checked={workingDays.includes(weekday.value)}
+                      onChange={(event) => setWorkingDays((current) =>
+                        event.target.checked
+                          ? [...current, weekday.value]
+                          : current.filter((day) => day !== weekday.value),
+                      )}
+                    />
+                    <span>{weekday.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <p className="schedule-setup-hint">Selected days in the chosen week are added. Past days are skipped. Each slot is 30 minutes.</p>
+            <button className="button" disabled={busy}>{busy ? "Saving schedule…" : "Save working days"}</button>
           </form>
         </div>
       )}
@@ -383,7 +454,7 @@ export default function Schedule() {
                 </div>
                 <div className="booking-summary-row">
                   <span>Time</span>
-                  <strong>{displayTime(selected.startAt)} – {displayTime(selected.endAt)} UTC</strong>
+                  <strong>{displayTime(selected.startAt)} – {displayTime(selected.endAt)}</strong>
                 </div>
               </div>
 

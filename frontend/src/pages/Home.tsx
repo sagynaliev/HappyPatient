@@ -49,25 +49,27 @@ export default function Home() {
   }
   return (
     <div className="home">
-      <section className="hero hero-premium">
+      <section className="hero-premium">
         <div className="hero-glow hero-glow-one" />
         <div className="hero-glow hero-glow-two" />
-        <div className="hero-copy">
-          <p className="eyebrow eyebrow-light">Your health, your way</p>
-          <h1>Healthcare that <em>puts you first.</em></h1>
-          <p className="lead">Find the right doctor, book your appointment, and take care of your health — all in one place.</p>
-          <div className="homepage-search">
-            <div className="homepage-search-title"><strong>Find your doctor</strong><span>Personalized care starts here</span></div>
-            <DoctorSearchForm query={query} category={category} office={office} categories={specialties} onQueryChange={setQuery} onCategoryChange={setCategory} onOfficeChange={setOffice} onSubmit={search} onSuggestionSelect={selectSuggestion} doctorFieldLabel="Search doctors and specialties" bare />
+        <div className="hero-premium-layout">
+          <div className="hero-copy">
+            <p className="eyebrow eyebrow-light">Your health, your way</p>
+            <h1><span>Healthcare that</span><em>puts you first.</em></h1>
+            <p className="lead">Find the right doctor, book your appointment, and take care of your health — all in one place.</p>
+            <div className="homepage-search">
+              <div className="homepage-search-title"><strong>Find your doctor</strong><span>Personalized care starts here</span></div>
+              <DoctorSearchForm query={query} category={category} office={office} categories={specialties} onQueryChange={setQuery} onCategoryChange={setCategory} onOfficeChange={setOffice} onSubmit={search} onSuggestionSelect={selectSuggestion} doctorFieldLabel="Search doctors and specialties" bare />
+            </div>
+            <div className="hero-proof"><span className="proof-avatars"><i>MC</i><i>AP</i><i>LM</i></span><span>Care that feels personal, from first search to follow-up.</span></div>
           </div>
-          <div className="hero-proof"><span className="proof-avatars"><i>MC</i><i>AP</i><i>LM</i></span><span>Care that feels personal, from first search to follow-up.</span></div>
-        </div>
-        <div className="hero-visual" aria-label="A doctor ready to help">
-          <div className="visual-orbit orbit-one" /><div className="visual-orbit orbit-two" />
-          <div className="doctor-portrait"><img src={heroDoctorImage} alt="Doctor smiling" /><span className="portrait-status"><b /> Find your care team</span></div>
-          <div className="floating-stat stat-top"><span>✦</span><strong>Care, connected</strong><small>One simple experience</small></div>
-          <div className="floating-stat stat-bottom"><strong>24/7</strong><small>Find support when you need it</small></div>
-          <div className="visual-cross">+</div>
+          <div className="hero-visual" aria-label="A doctor ready to help">
+            <div className="visual-orbit orbit-one" /><div className="visual-orbit orbit-two" />
+            <div className="doctor-portrait"><img src={heroDoctorImage} alt="Doctor smiling" /><span className="portrait-status"><b /> Find your care team</span></div>
+            <div className="floating-stat stat-top"><span>✦</span><strong>Care, connected</strong><small>One simple experience</small></div>
+            <div className="floating-stat stat-bottom"><strong>24/7</strong><small>Find support when you need it</small></div>
+            <div className="visual-cross">+</div>
+          </div>
         </div>
       </section>
       <section className="trust-strip"><span>Designed around your everyday health</span><b>Find care</b><b>Manage appointments</b><b>Stay informed</b></section>

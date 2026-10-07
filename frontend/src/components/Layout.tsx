@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useAuth, roleLabel } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
 export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -22,9 +22,9 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className={`topbar topbar-premium${isAuthRoute ? " auth-topbar" : ""}`}>
         <Link className="brand" to="/" onClick={close}>
         <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
-        <rect width="32" height="32" rx="4" fill="#5B65DC"/>
+        <rect width="32" height="32" rx="4" fill="#0F766E"/>
         <rect x="3" y="19" width="6" height="26" rx="3" transform="rotate(-90 3 19)" fill="white"/>
-        <rect x="12" y="2" width="8" height="27" rx="4" fill="#5B65DC"/>
+        <rect x="12" y="2" width="8" height="27" rx="4" fill="#0F766E"/>
         <rect x="13" y="3" width="6" height="26" rx="3" fill="white"/>
         </svg>
         <span>Happy<span>Patient</span></span>

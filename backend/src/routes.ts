@@ -4,9 +4,9 @@ import { prisma } from './prisma';
 import { comparePassword, hashPassword, hashToken, randomToken, randomVerificationCode, signToken } from './auth';
 import { config } from './config';
 import { requireAuth, requireRole } from './middleware';
-import { bookingSchema, officeSchema, registrationSchema, loginSchema, recoverySchema, resetSchema, scheduleDateSchema, slotUpdateSchema, verificationCodeSchema } from './validation';
+import { bookingSchema, officeSchema, registrationSchema, loginSchema, recoverySchema, resetSchema, scheduleBatchSchema, scheduleDateSchema, slotUpdateSchema, verificationCodeSchema } from './validation';
 import { Resend } from 'resend';
-import { generateScheduleSlots, utcDateBounds } from './schedule';
+import { generateScheduleSlots, localDateAt, localTimeToUtc, utcDateBounds } from './schedule';
 import { sendRegistrationConfirmation } from './registrationNotification';
 
 const router = Router();
@@ -103,6 +103,20 @@ router.get('/categories', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   res.json({ categories: await prisma.category.findMany({ where: q ? { name: { contains: q, mode: 'insensitive' } } : undefined, orderBy: { name: 'asc' } }) });
 });
+router.get('/doctors/locations', async (_req, res) => {
+  const offices = await prisma.doctor.findMany({
+    where: { office: { not: null } },
+    select: { office: true },
+    distinct: ['office'],
+    orderBy: { office: 'asc' },
+  });
+  const locations = new Map<string, string>();
+  offices.forEach(({ office }) => {
+    const name = office?.trim();
+    if (name && !locations.has(name.toLowerCase())) locations.set(name.toLowerCase(), name);
+  });
+  res.json({ locations: Array.from(locations.values()).sort((a, b) => a.localeCompare(b)) });
+});
 router.get('/doctors', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
@@ -112,20 +126,37 @@ router.get('/doctors', async (req, res) => {
   const availability = typeof req.query.availability === 'string' ? req.query.availability : '';
   const timeOfDay = typeof req.query.timeOfDay === 'string' ? req.query.timeOfDay : '';
   const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const daysThroughSunday = (7 - today.getUTCDay()) % 7 + 1;
-  const availabilityStart = availability === 'tomorrow'
-    ? new Date(today.getTime() + 24 * 60 * 60_000)
+  const timeZone = typeof req.query.timeZone === 'string' ? req.query.timeZone : 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+  } catch {
+    return res.status(400).json({ error: 'Choose a valid time zone.' });
+  }
+  const today = localDateAt(now, timeZone);
+  const shiftDate = (date: string, days: number) => {
+    const shifted = new Date(`${date}T00:00:00.000Z`);
+    shifted.setUTCDate(shifted.getUTCDate() + days);
+    return shifted.toISOString().slice(0, 10);
+  };
+  const daysThroughSunday = (7 - new Date(`${today}T00:00:00.000Z`).getUTCDay()) % 7 + 1;
+  const availabilityStartDate = availability === 'tomorrow'
+    ? shiftDate(today, 1)
     : availability === 'this-week' || availability === 'today'
       ? today
       : undefined;
-  const availabilityEnd = availability === 'today'
-    ? new Date(today.getTime() + 24 * 60 * 60_000)
+  const availabilityEndDate = availability === 'today'
+    ? shiftDate(today, 1)
     : availability === 'tomorrow'
-      ? new Date(today.getTime() + 2 * 24 * 60 * 60_000)
+      ? shiftDate(today, 2)
       : availability === 'this-week'
-        ? new Date(today.getTime() + daysThroughSunday * 24 * 60 * 60_000)
+        ? shiftDate(today, daysThroughSunday)
         : undefined;
+  const availabilityStart = availabilityStartDate
+    ? localTimeToUtc(availabilityStartDate, 0, timeZone)
+    : undefined;
+  const availabilityEnd = availabilityEndDate
+    ? localTimeToUtc(availabilityEndDate, 0, timeZone)
+    : undefined;
   const timeRanges = {
     morning: [6, 12],
     afternoon: [12, 17],
@@ -134,17 +165,21 @@ router.get('/doctors', async (req, res) => {
   const timeRange = timeOfDay in timeRanges
     ? timeRanges[timeOfDay as keyof typeof timeRanges]
     : undefined;
-  const firstDay = availabilityStart ?? today;
-  const lastDay = availabilityEnd ?? new Date(today.getTime() + 24 * 60 * 60_000);
+  const firstDay = availabilityStartDate ?? today;
+  const lastDay = availabilityEndDate ?? shiftDate(today, 1);
+  const dayCount = Math.round(
+    (Date.parse(`${lastDay}T00:00:00.000Z`) - Date.parse(`${firstDay}T00:00:00.000Z`))
+    / (24 * 60 * 60_000),
+  );
   const timeWindows = timeRange
     ? Array.from(
-        { length: Math.ceil((lastDay.getTime() - firstDay.getTime()) / (24 * 60 * 60_000)) },
+        { length: dayCount },
         (_, index) => {
-          const day = new Date(firstDay.getTime() + index * 24 * 60 * 60_000);
+          const day = shiftDate(firstDay, index);
           return {
             startAt: {
-              gte: new Date(day.getTime() + timeRange[0] * 60 * 60_000),
-              lt: new Date(day.getTime() + timeRange[1] * 60 * 60_000),
+              gte: localTimeToUtc(day, timeRange[0], timeZone),
+              lt: localTimeToUtc(day, timeRange[1], timeZone),
             },
           };
         },
@@ -232,9 +267,50 @@ router.post('/doctors/me/schedule', requireAuth, requireRole(Role.DOCTOR), async
   res.status(201).json({ created: result, slots });
 });
 
+router.post('/doctors/me/schedule/working-days', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
+  const input = parsed(scheduleBatchSchema, req.body);
+  const slotsByDate = input.dates.map((date) => generateScheduleSlots({
+    date,
+    startTime: input.startTime,
+    endTime: input.endTime,
+  }));
+  const slots = slotsByDate.flat();
+  if (slots.some((slot) => slot.startAt <= new Date())) {
+    return res.status(400).json({ error: 'Schedule slots must start in the future.' });
+  }
+  const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
+  const dateRanges = slotsByDate.map((daySlots) => ({
+    startAt: { lt: daySlots[daySlots.length - 1].endAt },
+    endAt: { gt: daySlots[0].startAt },
+  }));
+  const result = await prisma.$transaction(async (tx) => {
+    const overlap = await tx.scheduleSlot.findFirst({
+      where: { doctorId: doctor.id, OR: dateRanges },
+      select: { id: true },
+    });
+    if (overlap) return null;
+    const created = await tx.scheduleSlot.createMany({
+      data: slots.map((slot) => ({ ...slot, doctorId: doctor.id })),
+    });
+    return created.count;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  if (result === null) return res.status(409).json({ error: 'One or more working days overlap an existing slot. No slots were created.' });
+  res.status(201).json({ created: result, dates: input.dates });
+});
+
 router.get('/doctors/:doctorId/schedule', requireAuth, requireRole(Role.PATIENT, Role.DOCTOR, Role.ADMIN), async (req, res) => {
   const doctorId = Array.isArray(req.params.doctorId) ? req.params.doctorId[0] : req.params.doctorId;
-  const doctor = await prisma.doctor.findUnique({ where: { id: doctorId }, select: { id: true, userId: true } });
+  const doctor = await prisma.doctor.findUnique({
+    where: { id: doctorId },
+    select: {
+      id: true,
+      userId: true,
+      office: true,
+      category: { select: { name: true } },
+      user: { select: { firstName: true, lastName: true } },
+    },
+  });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found.' });
   const isDoctorOwner = req.user!.role === Role.DOCTOR && req.user!.id === doctor.userId;
   if (req.user!.role === Role.DOCTOR && !isDoctorOwner) return res.status(403).json({ error: 'Doctors can only view their own schedule.' });
@@ -245,7 +321,15 @@ router.get('/doctors/:doctorId/schedule', requireAuth, requireRole(Role.PATIENT,
     orderBy: { startAt: 'asc' },
     ...(isDoctorOwner || req.user!.role === Role.ADMIN ? { include: { patient: { select: { id: true, firstName: true, lastName: true } } } } : {}),
   });
-  res.json({ slots });
+  res.json({
+    doctor: {
+      id: doctor.id,
+      office: doctor.office,
+      category: doctor.category,
+      user: doctor.user,
+    },
+    slots,
+  });
 });
 
 router.post('/doctors/:doctorId/schedule/:slotId/book', requireAuth, requireRole(Role.PATIENT), async (req, res) => {
