@@ -210,7 +210,7 @@ describe("doctor discovery and cards", () => {
       (path === "/categories"
         ? { categories: [{ id: "category-1", name: "Cardiology" }] }
         : path === "/doctors/locations"
-          ? { locations: [doctor.office] }
+          ? { locations: [doctor.office, "Office 101", "Office 102", "Office 205", "Office 230"] }
           : { doctors: [doctor] }) as never,
     ));
 
@@ -222,7 +222,22 @@ describe("doctor discovery and cards", () => {
 
     await screen.findByText("1 doctor found");
     fireEvent.click(screen.getByRole("button", { name: "All filters" }));
-    const locationOption = await screen.findByRole("radio", { name: "Cardio Clinic" });
+    fireEvent.click(await screen.findByRole("button", { name: "Any location" }));
+    expect(screen.getByText("Astana")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Office 101" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Floor 2/ }));
+    expect(screen.getByRole("button", { name: "Office 205" })).not.toBeNull();
+    const locationSearch = screen.getByRole("searchbox", { name: "Search office or location" });
+    fireEvent.change(locationSearch, {
+      target: { value: "205" },
+    });
+    expect(screen.getByRole("button", { name: "Office 205" })).not.toBeNull();
+    fireEvent.change(locationSearch, { target: { value: "not-a-location" } });
+    expect(screen.getByText("No results found")).not.toBeNull();
+    fireEvent.change(locationSearch, {
+      target: { value: "Cardio" },
+    });
+    const locationOption = await screen.findByRole("button", { name: "Cardio Clinic" });
     fireEvent.click(locationOption);
     await screen.findByRole("button", { name: "Remove Cardio Clinic location filter" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
