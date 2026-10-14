@@ -2,7 +2,7 @@ import { KeyboardEvent, RefObject, useEffect, useId, useRef, useState } from "re
 
 export type AvailabilityFilter = "" | "today" | "tomorrow" | "this-week";
 export type TimeFilter = "" | "morning" | "afternoon" | "evening";
-export type FilterFocus = "specialty" | "availability";
+export type FilterFocus = "specialty" | "availability" | "location";
 
 type Category = { id: string; name: string };
 
@@ -66,8 +66,6 @@ export default function DoctorFilters({
   const [specialtyQuery, setSpecialtyQuery] = useState("");
   const [locationQuery, setLocationQuery] = useState("");
   const [locationSelectorOpen, setLocationSelectorOpen] = useState(false);
-  const [expandedFloors, setExpandedFloors] = useState<Set<string>>(new Set(["1"]));
-  const [collapsedFloors, setCollapsedFloors] = useState<Set<string>>(new Set());
   const dialogRef = useRef<HTMLElement>(null);
   const searchId = useId();
   const locationSearchId = useId();
@@ -93,7 +91,7 @@ export default function DoctorFilters({
       document.body.style.overflow = previousOverflow;
       const activeFilter = focusTarget === "specialty"
         ? "category"
-        : focusTarget === "availability" ? "availability" : undefined;
+        : focusTarget === "availability" ? "availability" : focusTarget === "location" ? "office" : undefined;
       const fallback = activeFilter
         ? document.querySelector<HTMLButtonElement>(`[data-active-filter="${activeFilter}"]`)
         : null;
@@ -130,25 +128,9 @@ export default function DoctorFilters({
     item.name.toLocaleLowerCase().includes(specialtyQuery.trim().toLocaleLowerCase()),
   );
   const normalizedLocationQuery = locationQuery.trim().toLocaleLowerCase();
-  const floorQuery = /^(?:floor\s*)?(\d+)$/i.exec(normalizedLocationQuery)?.[1];
   const matchingLocations = locations.filter((location) =>
-    location.toLocaleLowerCase().includes(normalizedLocationQuery)
-      || (floorQuery !== undefined && /^office\s+\d+$/i.test(location)
-        && String(Math.floor(Number(location.match(/\d+/)?.[0]) / 100)) === floorQuery),
+    location.toLocaleLowerCase().includes(normalizedLocationQuery),
   );
-  const officesByFloor = new Map<string, string[]>();
-  const otherLocations: string[] = [];
-  matchingLocations.forEach((location) => {
-    const officeNumber = /^office\s+(\d+)$/i.exec(location)?.[1];
-    const floor = officeNumber ? String(Math.floor(Number(officeNumber) / 100)) : "";
-    if (!floor || Number(floor) < 1) {
-      otherLocations.push(location);
-      return;
-    }
-    officesByFloor.set(floor, [...(officesByFloor.get(floor) ?? []), location]);
-  });
-  const floorGroups = [...officesByFloor.entries()].sort(([floorA], [floorB]) => Number(floorA) - Number(floorB));
-  floorGroups.forEach(([, offices]) => offices.sort((officeA, officeB) => officeA.localeCompare(officeB, undefined, { numeric: true })));
 
   return (
     <div className="filter-overlay" onClick={(event) => {
@@ -233,7 +215,7 @@ export default function DoctorFilters({
             </div>
           </fieldset>
 
-          <fieldset className="filter-section">
+          <fieldset className="filter-section" data-filter-focus="location" tabIndex={-1}>
             <legend>Time of day</legend>
             <div className="filter-choice-list">
               {timeOptions.map((option) => (
@@ -271,16 +253,15 @@ export default function DoctorFilters({
               </button>
               {locationSelectorOpen && (
                 <div className="location-panel" id="location-selector-panel" aria-label="Choose a location">
-                  <label className="sr-only" htmlFor={locationSearchId}>Search office or location</label>
+                  <label className="sr-only" htmlFor={locationSearchId}>Search city</label>
                   <input
                     id={locationSearchId}
                     className="location-search"
                     type="search"
-                    placeholder="Search office or location..."
+                    placeholder="Search city..."
                     value={locationQuery}
                     onChange={(event) => {
                       setLocationQuery(event.target.value);
-                      setCollapsedFloors(new Set());
                     }}
                   />
                   <button
@@ -305,87 +286,29 @@ export default function DoctorFilters({
                       </div>
                     )}
                     {!locationsLoading && !locationsError && locations.length === 0 && (
-                      <p className="location-state">No clinic locations are available.</p>
+                      <p className="location-state">No cities are available.</p>
                     )}
                     {!locationsLoading && !locationsError && locations.length > 0 && matchingLocations.length === 0 && (
                       <p className="location-state" role="status">No results found</p>
                     )}
                     {!locationsLoading && !locationsError && matchingLocations.length > 0 && (
-                      <>
-                        <p className="location-city">Astana</p>
-                        {floorGroups.map(([floor, offices]) => {
-                          const expanded = expandedFloors.has(floor)
-                            || (normalizedLocationQuery.length > 0 && !collapsedFloors.has(floor));
-                          return (
-                            <section className="location-floor" key={floor}>
-                              <button
-                                className="location-floor-toggle"
-                                type="button"
-                                aria-expanded={expanded}
-                                onClick={() => {
-                                  setExpandedFloors((current) => {
-                                  const next = new Set(current);
-                                  if (expanded) next.delete(floor);
-                                  else next.add(floor);
-                                  return next;
-                                  });
-                                  setCollapsedFloors((current) => {
-                                    const next = new Set(current);
-                                    if (expanded) next.add(floor);
-                                    else next.delete(floor);
-                                    return next;
-                                  });
-                                }}
-                              >
-                                <span className="location-floor-chevron" aria-hidden="true" />
-                                <span>Floor {floor}</span>
-                                <small>{offices.length}</small>
-                              </button>
-                              {expanded && (
-                                <div className="location-office-grid">
-                                  {offices.map((location) => (
-                                    <button
-                                      className={`location-office${office === location ? " is-selected" : ""}`}
-                                      type="button"
-                                      key={location}
-                                      aria-pressed={office === location}
-                                      onClick={() => {
-                                        onOfficeChange(location);
-                                        setLocationSelectorOpen(false);
-                                        onClose();
-                                      }}
-                                    >
-                                      {location}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </section>
-                          );
-                        })}
-                        {otherLocations.length > 0 && (
-                          <section className="location-floor">
-                            <p className="location-city">Other locations</p>
-                            <div className="location-office-grid">
-                              {otherLocations.map((location) => (
-                                <button
-                                  className={`location-office${office === location ? " is-selected" : ""}`}
-                                  type="button"
-                                  key={location}
-                                  aria-pressed={office === location}
-                                  onClick={() => {
-                                    onOfficeChange(location);
-                                    setLocationSelectorOpen(false);
-                                    onClose();
-                                  }}
-                                >
-                                  {location}
-                                </button>
-                              ))}
-                            </div>
-                          </section>
-                        )}
-                      </>
+                      <div className="location-office-grid">
+                        {matchingLocations.map((city) => (
+                          <button
+                            className={`location-office${office === city ? " is-selected" : ""}`}
+                            type="button"
+                            key={city}
+                            aria-pressed={office === city}
+                            onClick={() => {
+                              onOfficeChange(city);
+                              setLocationSelectorOpen(false);
+                              onClose();
+                            }}
+                          >
+                            {city}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

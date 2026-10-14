@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { slotDateInAlmaty } from "./AvailabilityCalendar";
 import { Doctor, Role } from "../lib/api";
-import { getDoctorPhoto } from "../lib/doctorImages";
+import DoctorLocation from "./DoctorLocation";
+import { doctorLocationText } from "../lib/doctorLocation";
 
 type DoctorCardProps = {
   doctor: Doctor;
@@ -11,140 +13,162 @@ type DoctorCardProps = {
   queryString: string;
 };
 
-function formatAppointment(value: string) {
+const timeZone = "Asia/Almaty";
+const priceFormatter = new Intl.NumberFormat("en-US");
+
+function getAppointmentLabel(value: string) {
   const date = new Date(value);
-  const time = date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const day = date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
+  const day = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
-  });
+    month: "short",
+    timeZone,
+  }).format(date);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).format(date);
   return { day, time };
+}
+
+function initialsFor(doctor: Doctor) {
+  return `${doctor.user.firstName.charAt(0)}${doctor.user.lastName.charAt(0)}`.toLocaleUpperCase();
 }
 
 export function DoctorCardSkeleton() {
   return (
-    <article className="doctor-card doctor-card-skeleton" aria-hidden="true">
-      <div className="doctor-card-photo skeleton" />
-      <div className="doctor-card-content">
-        <div className="skeleton skeleton-line" />
-        <div className="skeleton skeleton-line short" />
-        <div className="skeleton skeleton-line" />
-        <div className="skeleton skeleton-line short" />
+    <article className="fd-card fd-card-skeleton" aria-hidden="true">
+      <div className="fd-card-top">
+        <div className="fd-skeleton fd-skeleton-avatar" />
+        <div className="fd-skeleton-copy">
+          <div className="fd-skeleton fd-skeleton-line" />
+          <div className="fd-skeleton fd-skeleton-line fd-skeleton-short" />
+        </div>
       </div>
+      <div className="fd-skeleton fd-skeleton-line" />
+      <div className="fd-skeleton fd-skeleton-line" />
+      <div className="fd-skeleton fd-skeleton-button" />
     </article>
   );
 }
 
 export default function DoctorCard({ doctor, canBook, checkingAccess, role, queryString }: DoctorCardProps) {
-  const [favorites, setFavorites] = useState(() => {
-    const stored = window.localStorage.getItem("hp_favorite_doctors");
-    return new Set(stored ? stored.split("|").filter(Boolean) : []);
-  });
-  const isFavorite = favorites.has(doctor.id);
-  const nextSlot = doctor.scheduleSlots?.[0];
-  const nextAppointment = nextSlot ? formatAppointment(nextSlot.startAt) : null;
+  const nextSlot = doctor.scheduleSlots[0];
+  const available = Boolean(nextSlot);
+  const [favorite, setFavorite] = useState(() =>
+    (window.localStorage.getItem("hp_favorite_doctors") || "").split(",").includes(doctor.id),
+  );
   const doctorName = `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`;
+  const profilePath = `/doctors/${encodeURIComponent(doctor.id)}`;
   const schedulePath = nextSlot
-    ? `/doctors/${encodeURIComponent(doctor.id)}/schedule?date=${encodeURIComponent(nextSlot.startAt.slice(0, 10))}`
+    ? `/doctors/${encodeURIComponent(doctor.id)}/schedule?date=${encodeURIComponent(slotDateInAlmaty(nextSlot.startAt))}`
     : `/doctors/${encodeURIComponent(doctor.id)}/schedule`;
   const bookingState = {
     doctorName,
     specialty: doctor.category.name,
-    office: doctor.office || "",
+    office: doctorLocationText(doctor, ""),
+    city: doctor.city,
+    clinicName: doctor.clinicName,
+    streetAddress: doctor.streetAddress,
+    officeNumber: doctor.officeNumber,
+    consultationFee: doctor.consultationFee,
     selectedSlotId: nextSlot?.id,
   };
+  const nextLabel = nextSlot ? getAppointmentLabel(nextSlot.startAt) : null;
+  const bookingPath = `${schedulePath}${queryString ? `&${queryString}` : ""}`;
+  const appointmentSlots = doctor.scheduleSlots.slice(0, 3);
 
-  function toggleFavorite() {
-    setFavorites((current) => {
-      const updated = new Set(current);
-      if (updated.has(doctor.id)) updated.delete(doctor.id);
-      else updated.add(doctor.id);
-      window.localStorage.setItem("hp_favorite_doctors", Array.from(updated).join("|"));
-      return updated;
-    });
-  }
+  useEffect(() => {
+    const favorites = new Set((window.localStorage.getItem("hp_favorite_doctors") || "").split(",").filter(Boolean));
+    if (favorite) favorites.add(doctor.id);
+    else favorites.delete(doctor.id);
+    window.localStorage.setItem("hp_favorite_doctors", [...favorites].join(","));
+  }, [doctor.id, favorite]);
 
   return (
-    <article className="doctor-card">
-      <div className="doctor-card-photo-wrap">
-        <img className="doctor-card-photo" src={getDoctorPhoto(doctor.id, doctor.user.email)} alt="" />
+    <article className="fd-card">
+      <div className="fd-card-top">
+        <div className="fd-avatar" aria-hidden="true">{initialsFor(doctor)}</div>
+        <div className="fd-card-identity">
+          <h2>{doctorName}</h2>
+          <p className="fd-specialty">{doctor.category.name}</p>
+        </div>
+        <button
+          className={`favorite-button${favorite ? " is-favorite" : ""}`}
+          type="button"
+          aria-label={`${favorite ? "Remove" : "Add"} ${doctorName} ${favorite ? "from" : "to"} favorites`}
+          aria-pressed={favorite}
+          onClick={() => setFavorite((value) => !value)}
+        >
+          {favorite ? "♥" : "♡"}
+        </button>
       </div>
 
-      <div className="doctor-card-content">
-        <div className="doctor-card-identity">
-          <div>
-            <h2>{doctorName}</h2>
-            <p className="doctor-card-specialty">{doctor.category.name}</p>
-          </div>
-          <button
-            className={`favorite-button${isFavorite ? " is-favorite" : ""}`}
-            type="button"
-            aria-label={isFavorite ? `Remove ${doctorName} from favorites` : `Add ${doctorName} to favorites`}
-            aria-pressed={isFavorite}
-            onClick={toggleFavorite}
-          >
-            <span aria-hidden="true">{isFavorite ? "♥" : "♡"}</span>
-          </button>
-        </div>
+      <div className="fd-card-meta">
+        <DoctorLocation {...doctor} />
+      </div>
 
-        <div className="doctor-card-facts">
-          <p><span className="fact-symbol" aria-hidden="true">⌖</span>{doctor.office || "Clinic location not listed"}</p>
-          <p><span className="fact-symbol" aria-hidden="true">◷</span>Visit type not listed</p>
-        </div>
+      <div className="fd-card-badges">
+        <span className={`fd-status-badge${available ? " fd-status-success" : " fd-status-neutral"}`}>
+          {available ? "Appointments available" : "No appointments listed"}
+        </span>
+      </div>
 
-        <div className={`doctor-next-availability${nextAppointment ? "" : " is-unavailable"}`} aria-live="polite">
-          <span className="availability-indicator" aria-hidden="true" />
-          {nextAppointment ? (
-            <span>
-              <strong>Next available</strong>
-              <span>{nextAppointment.day} · {nextAppointment.time}</span>
-            </span>
-          ) : (
-            <span><strong>No times published</strong><span>Check back later for availability.</span></span>
-          )}
-        </div>
+      {doctor.consultationFee > 0 && (
+        <p className="fd-price">{priceFormatter.format(doctor.consultationFee)} KZT <span>/ consultation</span></p>
+      )}
 
-        <div className="doctor-card-footer">
-          <div className="doctor-unlisted-details">
-            <span>Rating &amp; reviews not listed</span>
-            <span>Experience not listed</span>
-            <span>Price not listed</span>
-          </div>
-          {checkingAccess ? (
-            <button className="button doctor-book-button" type="button" disabled>Checking access…</button>
-          ) : !nextSlot ? (
-            <button className="button doctor-book-button" type="button" disabled title="This doctor has not published a free appointment time.">
-              No appointment times
-            </button>
-          ) : role && role !== "PATIENT" ? (
-            <button className="button doctor-book-button" type="button" disabled title="Appointment booking is available to patient accounts.">
-              Patient account required
-            </button>
-          ) : canBook ? (
-            <Link
-              className="button doctor-book-button"
-              to={schedulePath}
-              state={bookingState}
-            >
-              Book appointment
-            </Link>
-          ) : (
-            <Link
-              className="button doctor-book-button"
-              to="/login"
-              state={{
-                from: `${schedulePath}${queryString ? `&${queryString}` : ""}`,
-                returnState: bookingState,
-              }}
-            >
-              Sign in to book
-            </Link>
-          )}
+      <p className="fd-next-slot">
+        Next: {nextLabel ? `${nextLabel.day} · ${nextLabel.time} · UTC+5` : "No upcoming slots listed · UTC+5"}
+      </p>
+
+      {appointmentSlots.length > 0 && (
+        <div className="fd-time-slots" aria-label={`Available appointments for ${doctorName}`}>
+          {appointmentSlots.map((slot) => {
+            const slotLabel = getAppointmentLabel(slot.startAt);
+            const slotPath = `/doctors/${encodeURIComponent(doctor.id)}/schedule?date=${encodeURIComponent(slotDateInAlmaty(slot.startAt))}`;
+            const state = { ...bookingState, selectedSlotId: slot.id };
+            return role && role !== "PATIENT" ? (
+              <span className="fd-time-chip fd-time-chip-disabled" key={slot.id} aria-label={`${slotLabel.day} at ${slotLabel.time}, booking requires a patient account`}>
+                {slotLabel.time}
+              </span>
+            ) : (
+              <Link
+                className="fd-time-chip"
+                to={role === "PATIENT" ? slotPath : "/login"}
+                state={role === "PATIENT" ? state : { from: slotPath, returnState: state }}
+                aria-label={`Book ${slotLabel.day} at ${slotLabel.time}`}
+                key={slot.id}
+              >
+                {slotLabel.time}
+              </Link>
+            );
+          })}
         </div>
+      )}
+
+      <div className="fd-card-actions">
+        <Link
+          className="fd-outline-button"
+          to={{ pathname: profilePath, search: queryString ? `?${queryString}` : "" }}
+          state={{ doctor }}
+        >
+          View Profile
+        </Link>
+        {checkingAccess ? (
+          <button className="fd-primary-button" type="button" disabled>Checking access…</button>
+        ) : !available ? (
+          <button className="fd-primary-button" type="button" disabled>Book Appointment</button>
+        ) : role && role !== "PATIENT" ? (
+          <button className="fd-primary-button" type="button" disabled>Patient account required</button>
+        ) : canBook ? (
+          <Link className="fd-primary-button" to={schedulePath} state={bookingState}>Book Appointment</Link>
+        ) : (
+          <Link className="fd-primary-button" to="/login" state={{ from: bookingPath, returnState: bookingState }}>
+            Sign in to book
+          </Link>
+        )}
       </div>
     </article>
   );

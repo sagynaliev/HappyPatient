@@ -1,17 +1,16 @@
-import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import DoctorCard, { DoctorCardSkeleton } from "../components/DoctorCard";
-import DoctorFilters, {
-  AvailabilityFilter,
-  FilterFocus,
-  TimeFilter,
-} from "../components/DoctorFilters";
+import FindDoctorFilters from "../components/FindDoctorFilters";
 import DoctorSearchForm from "../components/DoctorSearchForm";
+import { AvailabilityFilter, TimeFilter } from "../components/DoctorFilters";
 import { useAuth } from "../context/AuthContext";
 import { api, Doctor, doctorDirectoryApi } from "../lib/api";
+import "../styles/findDoctor.css";
 
 type Category = { id: string; name: string };
-type Suggestion = { kind: "specialty" | "doctor" | "clinic"; label: string };
+type SortOption = "recommended" | "name" | "price-low" | "price-high" | "availability";
+type RemovableFilter = "category" | "city" | "availability" | "timeOfDay" | "maxPrice";
 
 const availabilityLabels: Record<Exclude<AvailabilityFilter, "">, string> = {
   today: "Today",
@@ -33,6 +32,20 @@ function parseTime(value: string | null): TimeFilter {
   return value === "morning" || value === "afternoon" || value === "evening" ? value : "";
 }
 
+function parseSort(value: string | null): SortOption {
+  return value === "name" || value === "price-low" || value === "price-high" || value === "availability"
+    ? value
+    : "recommended";
+}
+
+function SearchIcon() {
+  return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>;
+}
+
+function FilterIcon() {
+  return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M5.5 10h9M8 15h4" /><circle cx="7" cy="5" r="1.5" /><circle cx="12.5" cy="10" r="1.5" /><circle cx="10" cy="15" r="1.5" /></svg>;
+}
+
 export default function Search() {
   const { user, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -40,86 +53,88 @@ export default function Search() {
   const category = searchParams.get("category") || "";
   const availability = parseAvailability(searchParams.get("availability"));
   const timeOfDay = parseTime(searchParams.get("timeOfDay"));
-  const office = searchParams.get("office") || "";
+  const city = searchParams.get("city") || "";
+  const maximumPrice = searchParams.get("maxPrice") || "";
+  const sort = parseSort(searchParams.get("sort"));
+  const requestedPage = Number(searchParams.get("page"));
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const [query, setQuery] = useState(appliedQuery);
+  const [location, setLocation] = useState(city);
+  const [draftSpecialty, setDraftSpecialty] = useState(category);
+  const [draftAvailability, setDraftAvailability] = useState<AvailabilityFilter>(availability);
+  const [draftTimeOfDay, setDraftTimeOfDay] = useState<TimeFilter>(timeOfDay);
+  const [draftMaximumPrice, setDraftMaximumPrice] = useState(maximumPrice);
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<string[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [categoriesError, setCategoriesError] = useState("");
-  const [locationsLoading, setLocationsLoading] = useState(true);
   const [locationsError, setLocationsError] = useState("");
-  const [sort, setSort] = useState<"recommended" | "name">("recommended");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [focusTarget, setFocusTarget] = useState<FilterFocus>("specialty");
   const [retryCount, setRetryCount] = useState(0);
   const [categoriesRetryCount, setCategoriesRetryCount] = useState(0);
   const [locationsRetryCount, setLocationsRetryCount] = useState(0);
-  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const filterTriggerRef = useRef<HTMLButtonElement | null>(null);
 
+  useEffect(() => setQuery(appliedQuery), [appliedQuery]);
+  useEffect(() => setLocation(city), [city]);
   useEffect(() => {
-    setQuery(appliedQuery);
-  }, [appliedQuery]);
+    setDraftSpecialty(category);
+    setDraftAvailability(availability);
+    setDraftTimeOfDay(timeOfDay);
+    setDraftMaximumPrice(maximumPrice);
+  }, [availability, category, maximumPrice, timeOfDay]);
 
   useEffect(() => {
     const controller = new AbortController();
     setCategoriesError("");
     api<{ categories: Category[] }>("/categories", { signal: controller.signal })
-      .then((result) => setCategories(result.categories || []))
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setCategoriesError(err instanceof Error ? err.message : "Unable to load specialties.");
+      .then((result) => setCategories(result.categories))
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setCategoriesError(cause instanceof Error ? cause.message : "Unable to load specialties.");
       });
     return () => controller.abort();
   }, [categoriesRetryCount]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLocationsLoading(true);
     setLocationsError("");
-    doctorDirectoryApi.locations({ signal: controller.signal })
-      .then((result) => setLocations(result.locations))
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setLocationsError(err instanceof Error ? err.message : "Unable to load clinic locations.");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLocationsLoading(false);
+    doctorDirectoryApi.cities({ signal: controller.signal })
+      .then((result) => setLocations(result.cities))
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setLocationsError(cause instanceof Error ? cause.message : "Unable to load locations.");
       });
     return () => controller.abort();
   }, [locationsRetryCount]);
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setLoading(true);
-      setError("");
-      const filters = new URLSearchParams();
-      filters.set("q", appliedQuery);
-      filters.set("category", category);
-      filters.set("office", office);
-      filters.set("timeZone", Intl.DateTimeFormat().resolvedOptions().timeZone);
-      if (availability) filters.set("availability", availability);
-      if (timeOfDay) filters.set("timeOfDay", timeOfDay);
+    setLoading(true);
+    setError("");
+    const filters = new URLSearchParams();
+    if (appliedQuery) filters.set("q", appliedQuery);
+    if (category) filters.set("category", category);
+    if (city) filters.set("city", city);
+    if (availability) filters.set("availability", availability);
+    if (timeOfDay) filters.set("timeOfDay", timeOfDay);
+    filters.set("timeZone", "Asia/Almaty");
 
+    const timer = window.setTimeout(() => {
       api<{ doctors: Doctor[] }>(`/doctors?${filters.toString()}`, { signal: controller.signal })
-        .then((result) => setDoctors(result.doctors || []))
-        .catch((err: unknown) => {
-          if (!controller.signal.aborted) {
-            setError(err instanceof Error ? err.message : "Unable to load doctors.");
-          }
+        .then((result) => setDoctors(result.doctors))
+        .catch((cause: unknown) => {
+          if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Unable to load doctors.");
         })
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false);
         });
-    }, 160);
-
+    }, 120);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [appliedQuery, availability, category, office, retryCount, timeOfDay]);
+  }, [appliedQuery, availability, category, city, retryCount, timeOfDay]);
 
   function updateParams(updates: Record<string, string>) {
     const next = new URLSearchParams(searchParams);
@@ -127,218 +142,252 @@ export default function Search() {
       if (value) next.set(key, value);
       else next.delete(key);
     });
+    if (!("page" in updates)) next.delete("page");
     setSearchParams(next, { replace: true });
   }
 
-  function submitSearch(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    updateParams({ q: query.trim() });
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    updateParams({ q: query.trim(), city: location });
   }
 
-  function selectSuggestion(suggestion: Suggestion) {
-    if (suggestion.kind === "specialty") {
-      setQuery("");
-      updateParams({ q: "", category: suggestion.label });
-    } else if (suggestion.kind === "clinic") {
-      setQuery("");
-      updateParams({ q: "", office: suggestion.label });
-    } else {
-      setQuery(suggestion.label);
-      updateParams({ q: suggestion.label });
-    }
+  function closeFilters() {
+    setFiltersOpen(false);
+    window.requestAnimationFrame(() => filterTriggerRef.current?.focus());
   }
 
-  function openFilters(event: MouseEvent<HTMLButtonElement>, target: FilterFocus) {
-    returnFocusRef.current = event.currentTarget;
-    setFocusTarget(target);
-    setFiltersOpen(true);
-  }
-
-  function clearFilters() {
-    updateParams({ category: "", availability: "", timeOfDay: "", office: "" });
-    window.requestAnimationFrame(() => {
-      if (filtersOpen) {
-        document.querySelector<HTMLButtonElement>("[data-show-doctors]")?.focus();
-      } else {
-        document.querySelector<HTMLButtonElement>('[data-filter-trigger="specialty"]')?.focus();
-      }
+  function applyFilters() {
+    updateParams({
+      category: draftSpecialty,
+      availability: draftAvailability,
+      timeOfDay: draftTimeOfDay,
+      maxPrice: draftMaximumPrice.trim(),
     });
+    closeFilters();
   }
 
-  function removeFilter(key: "category" | "availability" | "timeOfDay" | "office") {
+  function resetAll() {
+    setQuery("");
+    setLocation("");
+    setDraftSpecialty("");
+    setDraftAvailability("");
+    setDraftTimeOfDay("");
+    setDraftMaximumPrice("");
+    updateParams({ q: "", category: "", city: "", availability: "", timeOfDay: "", maxPrice: "", sort: "" });
+    closeFilters();
+  }
+
+  function removeFilter(key: RemovableFilter) {
     updateParams({ [key]: "" });
-    const trigger = key === "category"
-      ? "specialty"
-      : key === "availability"
-          ? "availability"
-          : "all-filters";
-    window.requestAnimationFrame(() => {
-      document.querySelector<HTMLButtonElement>(`[data-filter-trigger="${trigger}"]`)?.focus();
-    });
   }
-
-  const sortedDoctors = useMemo(() => {
-    if (sort === "recommended") return doctors;
-    return [...doctors].sort((a, b) => {
-      const nameA = `${a.user.firstName} ${a.user.lastName}`;
-      const nameB = `${b.user.firstName} ${b.user.lastName}`;
-      return nameA.localeCompare(nameB);
-    });
-  }, [doctors, sort]);
 
   const activeFilterCount = Number(Boolean(category))
+    + Number(Boolean(city))
     + Number(Boolean(availability))
     + Number(Boolean(timeOfDay))
-    + Number(Boolean(office));
-  const queryString = searchParams.toString();
-  const hasSearch = Boolean(appliedQuery || activeFilterCount);
+    + Number(Boolean(maximumPrice));
+
+  const filteredDoctors = useMemo(() => {
+    const maximum = Number(maximumPrice);
+    const hasMaximumPrice = maximumPrice.trim() !== "" && Number.isFinite(maximum) && maximum >= 0;
+    const filtered = hasMaximumPrice
+      ? doctors.filter((doctor) => doctor.consultationFee <= maximum)
+      : doctors.slice();
+
+    switch (sort) {
+      case "name":
+        filtered.sort((a, b) => `${a.user.lastName} ${a.user.firstName}`.localeCompare(`${b.user.lastName} ${b.user.firstName}`));
+        break;
+      case "price-low":
+        filtered.sort((a, b) => a.consultationFee - b.consultationFee);
+        break;
+      case "price-high":
+        filtered.sort((a, b) => b.consultationFee - a.consultationFee);
+        break;
+      case "availability":
+        filtered.sort((a, b) => (a.scheduleSlots[0]?.startAt || "9999").localeCompare(b.scheduleSlots[0]?.startAt || "9999"));
+        break;
+    }
+    return filtered;
+  }, [doctors, maximumPrice, sort]);
+
+  const pageSize = 4;
+  const pageCount = Math.max(1, Math.ceil(filteredDoctors.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageStart = (currentPage - 1) * pageSize;
+  const visiblePageCount = Math.min(pageCount, 5);
+  const firstVisiblePage = Math.max(1, Math.min(currentPage - Math.floor(visiblePageCount / 2), pageCount - visiblePageCount + 1));
+  const visiblePages = Array.from({ length: visiblePageCount }, (_, index) => firstVisiblePage + index);
+  const pageDoctors = filteredDoctors.slice(pageStart, pageStart + pageSize);
+  const rangeStart = filteredDoctors.length ? pageStart + 1 : 0;
+  const rangeEnd = Math.min(pageStart + pageSize, filteredDoctors.length);
+  const sortedBy = (value: SortOption) => updateParams({ sort: value === "recommended" ? "" : value });
+  const goToPage = (value: number) => updateParams({ page: value > 1 ? String(value) : "" });
+
+  const chips: Array<{ key: RemovableFilter; label: string }> = [];
+  if (category) chips.push({ key: "category", label: category });
+  if (city) chips.push({ key: "city", label: city });
+  if (availability) chips.push({ key: "availability", label: `Available ${availabilityLabels[availability].toLocaleLowerCase()}` });
+  if (timeOfDay) chips.push({ key: "timeOfDay", label: timeLabels[timeOfDay] });
+  if (maximumPrice) chips.push({ key: "maxPrice", label: `Up to ${Number(maximumPrice).toLocaleString("en-US")} KZT` });
 
   return (
-    <div className="search-page">
-      <section className="search-hero">
-        <div>
-          <p className="eyebrow eyebrow-light">Your care, on your terms</p>
-          <h1>
-            Find the right<br />
-            <em>doctor for you.</em>
-          </h1>
-          <p>Search a growing network of specialists ready to listen, understand, and help.</p>
-        </div>
-        <div className="search-hero-orb" aria-hidden="true"><span>+</span></div>
-      </section>
+    <div className="fd-page">
+      <div className="fd-container">
+        <header className="fd-title-block">
+          <h1>Find Your Doctor</h1>
+          <p>Care that fits your needs, your location and your schedule.</p>
+        </header>
 
-      <div className="search-content">
-        <DoctorSearchForm
-          query={query}
-          category={category}
-          office={office}
-          categories={categories}
-          onQueryChange={setQuery}
-          onCategoryChange={(value) => updateParams({ category: value })}
-          onOfficeChange={(value) => updateParams({ office: value })}
-          onSubmit={submitSearch}
-          onSuggestionSelect={selectSuggestion}
-          onClear={() => updateParams({ q: "" })}
-        />
+        <section className="fd-search" aria-label="Find a doctor">
+          <DoctorSearchForm
+            query={query}
+            category={category}
+            office={location}
+            categories={categories}
+            locations={locations}
+            onQueryChange={setQuery}
+            onCategoryChange={setDraftSpecialty}
+            onOfficeChange={setLocation}
+            onSubmit={submitSearch}
+            onSuggestionSelect={(suggestion) => {
+              if (suggestion.kind === "specialty") updateParams({ category: suggestion.label });
+              else if (suggestion.kind === "clinic") updateParams({ q: suggestion.label, city: "" });
+              else updateParams({ q: suggestion.label });
+            }}
+            onClear={() => {
+              setQuery("");
+              updateParams({ q: "" });
+            }}
+            doctorFieldLabel="Name or specialty"
+            buttonLabel="Search"
+            showSubmit
+            showLocation
+            bare
+          />
+          {locationsError && (
+            <p className="fd-inline-error" role="alert">
+              Locations could not be loaded. <button type="button" onClick={() => setLocationsRetryCount((count) => count + 1)}>Try again</button>
+            </p>
+          )}
+        </section>
 
-        <section className="results-section" aria-labelledby="results-title">
-          <div className="results-heading-row">
-            <div>
-              <p className="eyebrow">Care directory</p>
-              <h2 id="results-title">Doctors</h2>
-              <p className="results-count" aria-live="polite">
-                {loading ? "Finding available care…" : `${doctors.length} ${doctors.length === 1 ? "doctor" : "doctors"} found`}
-              </p>
+        <section className="fd-results" aria-label={`${filteredDoctors.length} doctors found`}>
+          <div className="fd-results-toolbar">
+            <h2 id="fd-results-title" aria-live="polite">
+              {loading ? "Finding doctors…" : `${filteredDoctors.length} ${filteredDoctors.length === 1 ? "doctor" : "doctors"} found`}
+            </h2>
+            <div className="fd-toolbar-actions">
+              <button
+                className="fd-toolbar-button"
+                type="button"
+                onClick={() => setFiltersOpen(true)}
+                ref={filterTriggerRef}
+                aria-haspopup="dialog"
+                aria-expanded={filtersOpen}
+              >
+                <FilterIcon /> Filters ({activeFilterCount})
+              </button>
+              <label className="fd-sort-control">
+                <span>Sort</span>
+                <select aria-label="Sort doctors" value={sort} onChange={(event) => sortedBy(event.target.value as SortOption)}>
+                  <option value="recommended">Recommended</option>
+                  <option value="availability">Earliest available</option>
+                  <option value="price-low">Lowest price</option>
+                  <option value="price-high">Highest price</option>
+                  <option value="name">Name A–Z</option>
+                </select>
+              </label>
             </div>
-            <label className="sort-control">
-              <span>Sort by</span>
-              <select value={sort} onChange={(event) => setSort(event.target.value as "recommended" | "name")}>
-                <option value="recommended">Recommended</option>
-                <option value="name">Name, A to Z</option>
-              </select>
-            </label>
           </div>
 
-          <div className="filter-chip-row" aria-label="Doctor filters">
-            {category ? (
-              <button className="filter-chip is-active" data-active-filter="category" type="button" aria-label={`Remove ${category} filter`} onClick={() => removeFilter("category")}>
-                {category}<span aria-hidden="true">×</span>
-              </button>
-            ) : (
-              <button className="filter-chip" data-filter-trigger="specialty" type="button" onClick={(event) => openFilters(event, "specialty")}>Specialty</button>
-            )}
-            {availability ? (
-              <button className="filter-chip is-active" data-active-filter="availability" type="button" aria-label={`Remove ${availabilityLabels[availability]} filter`} onClick={() => removeFilter("availability")}>
-                {availabilityLabels[availability]}<span aria-hidden="true">×</span>
-              </button>
-            ) : (
-              <button className="filter-chip" data-filter-trigger="availability" type="button" onClick={(event) => openFilters(event, "availability")}>Availability</button>
-            )}
-            {timeOfDay && (
-              <button className="filter-chip is-active" data-active-filter="timeOfDay" type="button" aria-label={`Remove ${timeLabels[timeOfDay]} filter`} onClick={() => removeFilter("timeOfDay")}>
-                {timeLabels[timeOfDay]}<span aria-hidden="true">×</span>
-              </button>
-            )}
-            {office && (
-              <button className="filter-chip is-active" data-active-filter="office" type="button" aria-label={`Remove ${office} location filter`} onClick={() => removeFilter("office")}>
-                {office}<span aria-hidden="true">×</span>
-              </button>
-            )}
-            <button className="filter-chip" type="button" disabled aria-label="Price filter, not available yet" title="This filter is not available yet">Price</button>
-            <button className="filter-chip" type="button" disabled aria-label="Rating filter, not available yet" title="This filter is not available yet">Rating</button>
-            <button className="filter-chip" type="button" disabled aria-label="Online filter, not available yet" title="This filter is not available yet">Online</button>
-            <button className="filter-chip filter-chip-all" data-filter-trigger="all-filters" type="button" onClick={(event) => openFilters(event, "specialty")}>All filters</button>
-            {activeFilterCount > 1 && (
-              <button className="clear-filters-link" type="button" onClick={clearFilters}>Clear all</button>
-            )}
-          </div>
+          {chips.length > 0 && (
+            <div className="fd-active-filters" aria-label="Active filters">
+              {chips.map(({ key, label }) => (
+                <span className="active-filter-chip" key={key}>
+                  {label}
+                  <button type="button" aria-label={`Remove filter: ${label}`} onClick={() => removeFilter(key)}>×</button>
+                </span>
+              ))}
+              <button className="clear-filters-link" type="button" onClick={resetAll}>Clear all</button>
+            </div>
+          )}
 
           {categoriesError && (
-            <div className="alert error" role="alert">
-              <strong>Specialties could not be loaded.</strong>
-              <span>{categoriesError}</span>
-              <button className="text-link" type="button" onClick={() => setCategoriesRetryCount((value) => value + 1)}>Try again</button>
+            <div className="fd-alert" role="alert">
+              <span>Specialties could not be loaded.</span>
+              <button type="button" onClick={() => setCategoriesRetryCount((count) => count + 1)}>Try again</button>
             </div>
           )}
 
-          {error && (
-            <div className="search-state search-error" role="alert">
-              <span className="search-state-icon" aria-hidden="true">!</span>
-              <h3>Something went wrong</h3>
+          {error ? (
+            <div className="fd-state fd-error-state" role="alert">
+              <h3>Failed to load doctors</h3>
               <p>{error}</p>
-              <button className="button" type="button" onClick={() => setRetryCount((value) => value + 1)}>Try again</button>
+              <button className="button" type="button" onClick={() => setRetryCount((count) => count + 1)}>Try again</button>
             </div>
-          )}
-
-          {!error && (
-            <div className="doctor-list" aria-busy={loading}>
-              {loading ? (
-                Array.from({ length: 3 }, (_, index) => <DoctorCardSkeleton key={index} />)
-              ) : sortedDoctors.length ? (
-                sortedDoctors.map((doctor) => (
+          ) : loading ? (
+            <div className="fd-grid" aria-busy="true">
+              {Array.from({ length: 4 }, (_, index) => <DoctorCardSkeleton key={index} />)}
+            </div>
+          ) : filteredDoctors.length === 0 ? (
+            <div className="fd-state fd-empty-state">
+              <span className="fd-empty-icon" aria-hidden="true"><SearchIcon /></span>
+              <h3>No doctors found matching your criteria</h3>
+              <p>Try changing your search or removing some filters.</p>
+              <button className="button button-outline" type="button" onClick={resetAll}>Reset filters</button>
+            </div>
+          ) : (
+            <>
+              <div className="fd-grid">
+                {pageDoctors.map((doctor) => (
                   <DoctorCard
                     key={doctor.id}
                     doctor={doctor}
                     canBook={user?.role === "PATIENT"}
                     checkingAccess={authLoading}
                     role={user?.role}
-                    queryString={queryString}
+                    queryString={searchParams.toString()}
                   />
-                ))
-              ) : (
-                <div className="search-state">
-                  <span className="search-state-icon" aria-hidden="true">⌕</span>
-                  <h3>No doctors found</h3>
-                  <p>{hasSearch ? "Try adjusting your search or clearing the filters to see more results." : "There are no doctors to show right now. Please check back later."}</p>
-                  {hasSearch && <button className="button" type="button" onClick={() => { setQuery(""); updateParams({ q: "", category: "", availability: "", timeOfDay: "", office: "" }); }}>Clear filters</button>}
+                ))}
+              </div>
+              <nav className="fd-pagination" aria-label="Doctor results pages">
+                <span>Showing {rangeStart}–{rangeEnd} of {filteredDoctors.length}</span>
+                <div className="fd-pagination-buttons">
+                  <button type="button" disabled={currentPage === 1} onClick={() => goToPage(Math.max(1, currentPage - 1))}>Previous</button>
+                  {visiblePages.map((pageNumber) => (
+                    <button
+                      type="button"
+                      className={pageNumber === currentPage ? "is-current" : ""}
+                      aria-current={pageNumber === currentPage ? "page" : undefined}
+                      aria-label={`Page ${pageNumber}`}
+                      key={pageNumber}
+                      onClick={() => goToPage(pageNumber)}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+                  <button type="button" disabled={currentPage === pageCount} onClick={() => goToPage(Math.min(pageCount, currentPage + 1))}>Next</button>
                 </div>
-              )}
-            </div>
+              </nav>
+            </>
           )}
         </section>
       </div>
-
-      <DoctorFilters
+      <FindDoctorFilters
         open={filtersOpen}
-        focusTarget={focusTarget}
         categories={categories}
-        locations={locations}
-        locationsLoading={locationsLoading}
-        locationsError={locationsError}
-        specialty={category}
-        availability={availability}
-        timeOfDay={timeOfDay}
-        office={office}
-        returnFocusRef={returnFocusRef}
-        onClose={() => setFiltersOpen(false)}
-        onSpecialtyChange={(value) => updateParams({ category: value })}
-        onAvailabilityChange={(value) => updateParams({ availability: value })}
-        onTimeChange={(value) => updateParams({ timeOfDay: value })}
-        onOfficeChange={(value) => updateParams({ office: value })}
-        onRetryLocations={() => setLocationsRetryCount((value) => value + 1)}
-        onClearAll={clearFilters}
-        onShowDoctors={() => setFiltersOpen(false)}
-        activeFilterCount={activeFilterCount}
+        specialty={draftSpecialty}
+        availability={draftAvailability}
+        timeOfDay={draftTimeOfDay}
+        maximumPrice={draftMaximumPrice}
+        onSpecialtyChange={setDraftSpecialty}
+        onAvailabilityChange={setDraftAvailability}
+        onTimeOfDayChange={setDraftTimeOfDay}
+        onMaximumPriceChange={setDraftMaximumPrice}
+        onApply={applyFilters}
+        onReset={resetAll}
+        onClose={closeFilters}
       />
     </div>
   );

@@ -10,23 +10,19 @@ const specialtyStyles = [
   { icon: "⌁", tone: "blue" },
 ];
 
-const heroDoctorImage = "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=700&q=85";
-
 export default function Home() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [office, setOffice] = useState("");
   const [specialties, setSpecialties] = useState<{ id: string; name: string }[]>([]);
+
   useEffect(() => {
     api<{ categories: { id: string; name: string }[] }>("/categories")
       .then((result) => setSpecialties(result.categories || []))
       .catch(() => setSpecialties([]));
   }, []);
-  function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    navigateToSearch(query.trim(), category, office.trim());
-  }
+
   function navigateToSearch(searchQuery: string, searchCategory: string, searchOffice: string) {
     const searchParams = new URLSearchParams();
     if (searchQuery) searchParams.set("q", searchQuery);
@@ -35,53 +31,89 @@ export default function Home() {
     const queryString = searchParams.toString();
     navigate(`/search${queryString ? `?${queryString}` : ""}`);
   }
-  function selectSuggestion(suggestion: { kind: "specialty" | "doctor" | "clinic"; label: string }) {
-    if (suggestion.kind === "specialty") {
-      setCategory(suggestion.label);
-      navigateToSearch("", suggestion.label, "");
-    } else if (suggestion.kind === "clinic") {
-      setOffice(suggestion.label);
-      navigateToSearch("", "", suggestion.label);
-    } else {
-      setQuery(suggestion.label);
-      navigateToSearch(suggestion.label, "", "");
-    }
+
+  function search(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    navigateToSearch(query.trim(), category, office.trim());
   }
+
+  function selectSuggestion(suggestion: { kind: "specialty" | "doctor" | "clinic"; label: string }) {
+    if (suggestion.kind === "specialty") navigateToSearch("", suggestion.label, "");
+    else if (suggestion.kind === "clinic") navigateToSearch(suggestion.label, "", "");
+    else navigateToSearch(suggestion.label, "", "");
+  }
+
   return (
     <div className="home">
-      <section className="hero-premium">
-        <div className="hero-glow hero-glow-one" />
-        <div className="hero-glow hero-glow-two" />
+      <section className="hero-premium home-hero">
+        <div className="hero-glow hero-glow-one" aria-hidden="true" />
+        <div className="hero-glow hero-glow-two" aria-hidden="true" />
         <div className="hero-premium-layout">
           <div className="hero-copy">
-            <p className="eyebrow eyebrow-light">Your health, your way</p>
-            <h1><span>Healthcare that</span><em>puts you first.</em></h1>
-            <p className="lead">Find the right doctor, book your appointment, and take care of your health — all in one place.</p>
+            <p className="eyebrow eyebrow-light">HappyPatient care directory</p>
+            <h1><span>Find care that</span><em>fits your needs.</em></h1>
+            <p className="lead">Search doctors by name, specialty, or location, then review available appointment times.</p>
             <div className="homepage-search">
-              <div className="homepage-search-title"><strong>Find your doctor</strong><span>Personalized care starts here</span></div>
-              <DoctorSearchForm query={query} category={category} office={office} categories={specialties} onQueryChange={setQuery} onCategoryChange={setCategory} onOfficeChange={setOffice} onSubmit={search} onSuggestionSelect={selectSuggestion} doctorFieldLabel="Search doctors and specialties" bare />
+              <div className="homepage-search-title">
+                <strong>Find a doctor</strong>
+                <span>Search the doctor directory</span>
+              </div>
+              <DoctorSearchForm
+                query={query}
+                category={category}
+                office={office}
+                categories={specialties}
+                onQueryChange={setQuery}
+                onCategoryChange={setCategory}
+                onOfficeChange={setOffice}
+                onSubmit={search}
+                onSuggestionSelect={selectSuggestion}
+                doctorFieldLabel="Doctor name, specialty, or location"
+                bare
+              />
             </div>
-            <div className="hero-proof"><span className="proof-avatars"><i>MC</i><i>AP</i><i>LM</i></span><span>Care that feels personal, from first search to follow-up.</span></div>
+            <p className="home-search-hint">You can refine your search by specialty, location, and availability.</p>
           </div>
-          <div className="hero-visual" aria-label="A doctor ready to help">
-            <div className="visual-orbit orbit-one" /><div className="visual-orbit orbit-two" />
-            <div className="doctor-portrait"><img src={heroDoctorImage} alt="Doctor smiling" /><span className="portrait-status"><b /> Find your care team</span></div>
-            <div className="floating-stat stat-top"><span>✦</span><strong>Care, connected</strong><small>One simple experience</small></div>
-            <div className="floating-stat stat-bottom"><strong>24/7</strong><small>Find support when you need it</small></div>
-            <div className="visual-cross">+</div>
+          <div className="home-search-panel" aria-label="Search tips">
+            <span className="home-search-panel-icon" aria-hidden="true">⌕</span>
+            <p className="eyebrow">Start with a search</p>
+            <h2>Choose what matters to you.</h2>
+            <ul>
+              <li>Search by a doctor’s name</li>
+              <li>Browse available specialties</li>
+              <li>Filter by listed office location</li>
+            </ul>
+            <Link className="text-link" to="/search">Open doctor directory <span aria-hidden="true">→</span></Link>
           </div>
         </div>
       </section>
-      <section className="trust-strip"><span>Designed around your everyday health</span><b>Find care</b><b>Manage appointments</b><b>Stay informed</b></section>
-      <section className="home-section specialties-section" id="specialties">
-        <div className="section-heading"><div><p className="eyebrow">Explore care</p><h2>Start with what<br /><em>matters to you.</em></h2></div><Link className="text-link" to="/search">View all specialties ↗</Link></div>
-        <div className="specialty-grid">{specialties.map((specialty, index) => { const style = specialtyStyles[index % specialtyStyles.length]; return <Link className={`specialty-tile ${style.tone}`} to={`/search?category=${encodeURIComponent(specialty.name)}`} key={specialty.id}><span className="tile-icon">{style.icon}</span><span><strong>{specialty.name}</strong><small>Find doctors in this specialty</small></span><b>↗</b></Link>; })}</div>
+
+      <section className="home-section specialties-section" id="specialties" aria-labelledby="specialties-heading">
+        <div className="section-heading">
+          <div><p className="eyebrow">Browse the directory</p><h2 id="specialties-heading">Search by specialty</h2></div>
+          <Link className="text-link" to="/search">View all doctors <span aria-hidden="true">↗</span></Link>
+        </div>
+        {specialties.length ? (
+          <div className="specialty-grid">
+            {specialties.map((specialty, index) => {
+              const style = specialtyStyles[index % specialtyStyles.length];
+              return (
+                <Link className={`specialty-tile ${style.tone}`} to={`/search?category=${encodeURIComponent(specialty.name)}`} key={specialty.id}>
+                  <span className="tile-icon" aria-hidden="true">{style.icon}</span>
+                  <span><strong>{specialty.name}</strong><small>View doctors in this specialty</small></span>
+                  <b aria-hidden="true">↗</b>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="muted">Specialties will appear here when the directory is available.</p>
+        )}
       </section>
-      <section className="home-section featured-section" id="doctors">
-        <div className="section-heading"><div><p className="eyebrow">A clearer care journey</p><h2>From search to<br /><em>the next right step.</em></h2></div><Link className="text-link" to="/search">Find a doctor ↗</Link></div>
-        <div className="care-steps"><article><span>01</span><h3>Search</h3><p>Find doctors by name or specialty using the live directory.</p></article><article><span>02</span><h3>Compare</h3><p>Review each doctor’s specialty, category, and contact details.</p></article><article><span>03</span><h3>Continue</h3><p>Sign in to keep moving through the care journey.</p></article></div>
+      <section className="home-directory-cta">
+        <div><p className="eyebrow">Ready to continue?</p><h2>Explore the doctor directory.</h2></div>
+        <Link className="button" to="/search">Find a doctor <span aria-hidden="true">→</span></Link>
       </section>
-      <section className="cta-banner"><div><p className="eyebrow eyebrow-light">A better way to care for yourself</p><h2>Good care starts<br />with a simple step.</h2></div><Link className="button button-bright" to="/register">Create your account <span>↗</span></Link></section>
     </div>
   );
 }

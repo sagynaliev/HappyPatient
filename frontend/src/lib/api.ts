@@ -38,9 +38,16 @@ export type User = {
   phone?: string | null;
   role: Role;
 };
+export type ProfileUser = User & { maskedIin: string | null; createdAt: string };
+export type ProfileUpdate = { firstName: string; lastName: string; phone: string | null };
 export type Doctor = {
   id: string;
   office: string | null;
+  city?: string | null;
+  clinicName?: string | null;
+  streetAddress?: string | null;
+  officeNumber?: string | null;
+  consultationFee: number;
   category: { id: string; name: string };
   user: { firstName: string; lastName: string; email: string };
   scheduleSlots: Array<{ id: string; startAt: string; endAt: string }>;
@@ -56,8 +63,78 @@ export type ScheduleSlot = {
 export type DoctorProfile = {
   id: string;
   office: string | null;
+  city?: string | null;
+  clinicName?: string | null;
+  streetAddress?: string | null;
+  officeNumber?: string | null;
+  consultationFee?: number;
   category: { name: string };
   user?: { firstName: string; lastName: string };
+};
+export type PatientAppointment = {
+  id: string;
+  startAt: string;
+  endAt: string;
+  status: 'FREE' | 'BOOKED' | 'OCCUPIED';
+  visitPurpose?: string | null;
+  doctor: { name: string; specialty: string; office: string | null; consultationFee: number };
+};
+export type DoctorProfileDraft = {
+  firstName?: string;
+  lastName?: string;
+  specialty?: string;
+  qualification?: string;
+  experience?: string;
+  consultationFee?: number;
+  languages?: string[];
+  email?: string;
+  phone?: string;
+  office?: string;
+  city?: string | null;
+  clinicName?: string | null;
+  streetAddress?: string | null;
+  officeNumber?: string | null;
+  bio?: string;
+  license?: string;
+  inPerson?: boolean;
+  online?: boolean;
+};
+export type TimeOffRequest = {
+  startDate: string;
+  endDate: string;
+  allDay?: boolean;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+  note?: string;
+  hideFromSearch?: boolean;
+};
+export type RescheduleRequest = {
+  newSlotId?: string;
+  newDate?: string;
+  newTime?: string;
+  patientMessage?: string;
+  sendNotification?: boolean;
+};
+export type AdminMetrics = {
+  totalUsers: number;
+  patients: number;
+  doctors: number;
+  admins: number;
+  appointments: number;
+  pendingReviews: number;
+  recentUsers: Array<{ id: string; firstName: string; lastName: string; email: string; role: Role; createdAt: string }>;
+};
+export type AdminUserRecord = User & { maskedIin?: string | null; status?: 'active' | 'inactive'; createdAt: string; phone?: string | null };
+export type AdminDoctorRecord = {
+  id: string;
+  name: string;
+  email: string;
+  specialty: string;
+  office: string | null;
+  status: 'verified' | 'pending' | 'needs-info' | 'rejected';
+  createdAt: string;
+  scheduleSlots: Array<{ startAt: string; endAt: string; status: string }>;
 };
 export type AuthResponse = { user: User; token: string; notification?: { channel: 'email' | 'local'; message: string } };
 
@@ -68,17 +145,45 @@ export const authApi = {
     api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   doctorProfile: () => api<{ doctor: DoctorProfile }>('/doctors/me'),
   updateOffice: (office: string) => api<{ doctor: DoctorProfile }>('/doctors/me/office', { method: 'PATCH', body: JSON.stringify({ office }) }),
+  updateLocation: (body: { city: string | null; clinicName: string | null; streetAddress: string | null; officeNumber: string | null }) =>
+    api<{ doctor: DoctorProfile }>('/doctors/me/location', { method: 'PUT', body: JSON.stringify(body) }),
   createSchedule: (body: { date: string; startTime: string; endTime: string }) =>
     api<{ created: number }>('/doctors/me/schedule', { method: 'POST', body: JSON.stringify(body) }),
   createWorkingDays: (body: { dates: string[]; startTime: string; endTime: string }) =>
     api<{ created: number; dates: string[] }>('/doctors/me/schedule/working-days', { method: 'POST', body: JSON.stringify(body) }),
-  getSchedule: (doctorId: string, date: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule?date=${encodeURIComponent(date)}`),
+  getSchedule: (doctorId: string, date?: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule${date ? `?date=${encodeURIComponent(date)}` : ""}`),
   bookSlot: (doctorId: string, slotId: string, visitPurpose: string) =>
     api<{ slot: ScheduleSlot }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose }) }),
-  updateSlot: (slotId: string, body: { status: ScheduleSlot['status']; patientId?: string; visitPurpose?: string }) =>
+  updateSlot: (slotId: string, body: { status: ScheduleSlot['status']; patientId?: string; visitPurpose?: string; releaseBooking?: boolean }) =>
     api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   slotDetails: (slotId: string) => api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`),
-  me: () => api<{ user: User }>('/me'),
+  me: () => api<{ user: ProfileUser }>('/me'),
+  updateProfile: (body: ProfileUpdate) => api<{ user: ProfileUser }>('/me', { method: 'PATCH', body: JSON.stringify(body) }),
+  myAppointments: () => api<{ appointments: PatientAppointment[] }>('/me/appointments'),
+  updateDoctorProfile: (body: DoctorProfileDraft) =>
+    api<{ doctor: DoctorProfile }>('/doctors/me/profile', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  createTimeOff: (body: TimeOffRequest) =>
+    api<{ message: string }>('/doctors/me/time-off', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  rescheduleAppointment: (appointmentId: string, body: RescheduleRequest) =>
+    api<{ message: string }>(`/doctors/me/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminMetrics: () => api<AdminMetrics>('/admin/metrics'),
+  adminUsers: (query?: { role?: Role; status?: string; q?: string }) =>
+    api<{ users: AdminUserRecord[] }>(`/admin/users${query ? `?${new URLSearchParams({ ...(query.role ? { role: query.role } : {}), ...(query.status ? { status: query.status } : {}), ...(query.q ? { q: query.q } : {}) }).toString()}` : ''}`),
+  patchAdminUser: (id: string, data: Partial<AdminUserRecord> & { role?: Role; status?: 'active' | 'inactive' }) =>
+    api<{ user: AdminUserRecord }>(`/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  adminDoctors: () => api<{ doctors: AdminDoctorRecord[] }>('/admin/doctors'),
+  adminAppointments: () => api<{ appointments: Array<{ id: string; patient: string; doctor: string; specialty: string; date: string; status: string; purpose?: string | null }> }>('/admin/appointments'),
+  adminApproveDoctor: (id: string, note?: string) => api<{ ok: boolean; doctor: { id: string; name: string; specialty: string; status: string; note?: string } }>(`/admin/doctors/${encodeURIComponent(id)}/approve`, { method: 'POST', body: JSON.stringify({ note }) }),
+  adminRejectDoctor: (id: string, reason?: string) => api<{ ok: boolean; doctor: { id: string; name: string; specialty: string; status: string; reason?: string } }>(`/admin/doctors/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   forgot: (email: string) =>
     api<{ message: string }>('/auth/forgot-password', {
       method: 'POST',
@@ -97,6 +202,6 @@ export const authApi = {
 };
 
 export const doctorDirectoryApi = {
-  locations: (options: RequestInit = {}) =>
-    api<{ locations: string[] }>('/doctors/locations', options),
+  cities: (options: RequestInit = {}) =>
+    api<{ cities: string[] }>('/doctors/locations', options),
 };

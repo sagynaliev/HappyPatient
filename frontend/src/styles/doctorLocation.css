@@ -1,0 +1,36 @@
+.hp-doctor-location {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.hp-doctor-location-heading {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hp-doctor-location-address {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.hp-doctor-location-address svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.hp-doctor-location-fallback {
+  overflow-wrap: anywhere;
+}

@@ -9,6 +9,7 @@ type DoctorSearchFormProps = {
   category: string;
   office?: string;
   categories: Category[];
+  locations?: string[];
   onQueryChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
   onOfficeChange?: (value: string) => void;
@@ -17,6 +18,8 @@ type DoctorSearchFormProps = {
   onClear?: () => void;
   buttonLabel?: string;
   doctorFieldLabel?: string;
+  showSubmit?: boolean;
+  showLocation?: boolean;
   bare?: boolean;
 };
 
@@ -38,13 +41,17 @@ export default function DoctorSearchForm({
   category,
   office = "",
   categories,
+  locations = [],
   onQueryChange,
   onCategoryChange,
   onOfficeChange,
   onSubmit,
   onSuggestionSelect,
   onClear,
+  buttonLabel = "Search",
   doctorFieldLabel = "Find a doctor",
+  showSubmit = false,
+  showLocation = false,
   bare = false,
 }: DoctorSearchFormProps) {
   const [open, setOpen] = useState(false);
@@ -114,9 +121,9 @@ export default function DoctorSearchForm({
       }));
     const matchingClinics = Array.from(new Set(
       suggestionDoctors
-        .map((doctor) => doctor.office?.trim())
-        .filter((office): office is string => Boolean(office))
-        .filter((office) => office.toLocaleLowerCase().includes(normalizedQuery.toLocaleLowerCase())),
+        .map((doctor) => doctor.clinicName?.trim())
+        .filter((clinic): clinic is string => Boolean(clinic))
+        .filter((clinic) => clinic.toLocaleLowerCase().includes(normalizedQuery.toLocaleLowerCase())),
     ))
       .slice(0, 3)
       .map((clinic) => ({ kind: "clinic" as const, id: clinic, label: clinic }));
@@ -136,8 +143,7 @@ export default function DoctorSearchForm({
       onQueryChange("");
       onCategoryChange(suggestion.label);
     } else if (suggestion.kind === "clinic") {
-      onQueryChange("");
-      onOfficeChange?.(suggestion.label);
+      onQueryChange(suggestion.label);
     } else {
       onQueryChange(suggestion.label);
     }
@@ -200,7 +206,9 @@ export default function DoctorSearchForm({
       >
         <label htmlFor={inputId}>{doctorFieldLabel}</label>
         <div className={`doctor-search-input-wrap${query ? " has-query" : ""}`}>
-          <span className="doctor-search-icon" aria-hidden="true">⌕</span>
+          <span className="doctor-search-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
+          </span>
           <input
             id={inputId}
             value={query}
@@ -211,13 +219,15 @@ export default function DoctorSearchForm({
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search doctors or specialties..."
+            placeholder="Doctor name or specialty"
             autoComplete="off"
             role="combobox"
+            aria-label={doctorFieldLabel}
             aria-autocomplete="list"
             aria-expanded={open && Boolean(normalizedQuery)}
             aria-controls={suggestions.length ? listId : undefined}
             aria-activedescendant={activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined}
+            aria-busy={loading}
           />
           {query && (
             <button
@@ -238,7 +248,7 @@ export default function DoctorSearchForm({
         {open && Boolean(normalizedQuery) && (
           <div className="search-suggestions">
             {loading && !suggestions.length ? (
-              <p className="suggestion-state" role="status">Searching doctors and clinics…</p>
+              <p className="suggestion-state" role="status">Searching doctors, specialties, and locations…</p>
             ) : suggestionError && !suggestions.length ? (
               <>
                 <p className="suggestion-state" role="alert">Suggestions could not be loaded. You can still view all results.</p>
@@ -304,7 +314,7 @@ export default function DoctorSearchForm({
             ) : (
               <div className="suggestion-state">
                 <strong>No matches yet</strong>
-                <span>Try a doctor name, specialty, or clinic.</span>
+        <span>Try a doctor name, specialty, or location.</span>
               </div>
             )}
             {!loading && !suggestionError && !suggestions.length && (
@@ -321,6 +331,21 @@ export default function DoctorSearchForm({
               </button>
             )}
           </div>
+        )}
+        {showLocation && onOfficeChange && (
+          <label className="doctor-search-office-field">
+            <span>Location</span>
+            <select aria-label="Location" value={office} onChange={(event) => onOfficeChange(event.target.value)}>
+              <option value="">All locations</option>
+              {locations.map((city) => <option value={city} key={city}>{city}</option>)}
+            </select>
+          </label>
+        )}
+        {showSubmit && (
+          <button className="doctor-search-submit" type="submit">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
+            {buttonLabel}
+          </button>
         )}
       </form>
     </div>

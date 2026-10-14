@@ -1,0 +1,45 @@
+.patient-profile-page { min-width:0; flex:1; padding:32px 24px 52px; background:#f8fafc; color:#0f172a; }
+.pp-container { width:min(100%,1232px); margin:0 auto; }
+.pp-heading { margin:0 0 22px; }
+.pp-heading h1 { margin:0; color:#0f172a; font:800 clamp(27px,3vw,32px)/1.2 Manrope,sans-serif; letter-spacing:-.6px; }
+.pp-heading p { margin:5px 0 0; color:#64748b; font-size:14px; }
+.pp-summary,.pp-information,.pp-skeleton { border:1px solid #e2e8f0; border-radius:16px; background:#fff; box-shadow:0 1px 3px #0f172a08; }
+.pp-summary { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:18px; padding:24px; }
+.pp-identity { display:flex; min-width:0; align-items:center; gap:16px; }
+.pp-avatar { display:grid; width:64px; height:64px; flex:0 0 64px; place-items:center; border-radius:50%; background:#eff6ff; color:#2563eb; font-size:20px; font-weight:800; }
+.pp-summary-copy { min-width:0; }
+.pp-summary-copy h2 { margin:0; overflow-wrap:anywhere; color:#0f172a; font:700 23px/1.25 Manrope,sans-serif; }
+.pp-badges { display:flex; flex-wrap:wrap; gap:7px; margin-top:7px; }
+.pp-badge { display:inline-flex; min-height:23px; align-items:center; padding:3px 9px; border-radius:6px; font-size:11px; font-weight:700; }
+.pp-role { background:#eff6ff; color:#1d4ed8; }
+.pp-session { background:#ecfdf5; color:#047857; }
+.pp-summary-copy p { margin:7px 0 0; color:#64748b; font-size:12px; }
+.pp-edit-button,.pp-cancel,.pp-save { display:inline-flex; min-height:40px; align-items:center; justify-content:center; gap:7px; padding:8px 14px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#2563eb; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+.pp-edit-button:hover,.pp-cancel:hover { background:#eff6ff; }
+.pp-edit-button:focus-visible,.pp-cancel:focus-visible,.pp-save:focus-visible,.pp-alert button:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.pp-information { padding:24px; }
+.pp-section-heading { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:19px; }
+.pp-section-heading h2 { margin:0; color:#0f172a; font:700 20px/1.3 Manrope,sans-serif; }
+.pp-section-heading p { margin:5px 0 0; color:#64748b; font-size:13px; }
+.pp-field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:17px 16px; }
+.pp-field,.pp-field-wrap { display:grid; min-width:0; gap:6px; }
+.pp-field>span { color:#0f172a; font-size:12px; font-weight:700; }
+.pp-field input { width:100%; min-height:43px; border:1px solid #cbd5e1; border-radius:8px; padding:9px 11px; background:#fff; color:#0f172a; font:inherit; font-size:14px; }
+.pp-field input[readonly] { background:#f8fafc; }
+.pp-field input:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.pp-field-wrap small { color:#64748b; font-size:11px; line-height:1.45; }
+.pp-created { margin:20px 0 0; padding-top:14px; border-top:1px solid #e2e8f0; color:#64748b; font-size:12px; }
+.pp-edit-note { margin:14px 0 0; color:#64748b; font-size:12px; }
+.pp-form-actions { display:flex; justify-content:flex-end; gap:9px; margin-top:18px; }
+.pp-save { border-color:#2563eb; background:#2563eb; color:#fff; }
+.pp-save:hover { background:#1d4ed8; }
+.pp-save:disabled,.pp-cancel:disabled { opacity:.55; cursor:not-allowed; }
+.pp-alert,.pp-success { display:flex; justify-content:space-between; gap:12px; margin:0 0 15px; padding:12px 14px; border:1px solid #fecaca; border-radius:9px; background:#fef2f2; color:#991b1b; font-size:13px; }
+.pp-alert button { border:0; background:none; color:inherit; font:inherit; font-weight:800; text-decoration:underline; cursor:pointer; }
+.pp-success { border-color:#a7f3d0; background:#ecfdf5; color:#047857; }
+.pp-skeleton { display:grid; gap:16px; padding:24px; }
+.pp-skeleton span { display:block; height:42px; border-radius:8px; background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size:200% 100%; animation:pp-shimmer 1.35s ease-in-out infinite; }
+.pp-skeleton span:first-child { width:44%; height:64px; border-radius:14px; }
+@keyframes pp-shimmer { to { background-position:-200% 0; } }
+@media (max-width:767px) { .patient-profile-page { padding:24px 16px 36px; }.pp-summary { align-items:stretch; flex-direction:column; padding:18px; }.pp-edit-button { width:100%; }.pp-information { padding:18px; }.pp-field-grid { grid-template-columns:1fr; gap:14px; }.pp-form-actions { display:grid; grid-template-columns:1fr 1fr; }.pp-summary-copy h2 { font-size:20px; } }
+@media (prefers-reduced-motion:reduce) { .pp-skeleton span { animation:none; } }

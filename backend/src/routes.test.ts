@@ -1,11 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
-import { Role } from '@prisma/client';
+import { Role, SlotStatus } from '@prisma/client';
 
 const prismaMock = vi.hoisted(() => ({
   doctor: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   scheduleSlot: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  user: { findUnique: vi.fn(), create: vi.fn() },
+  user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn(), update: vi.fn() },
   $transaction: vi.fn(),
 }));
 const notificationMock = vi.hoisted(() => vi.fn());
@@ -38,41 +38,140 @@ beforeEach(() => {
   prismaMock.scheduleSlot.createMany.mockResolvedValue({ count: 4 });
   prismaMock.scheduleSlot.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.user.findUnique.mockResolvedValue(null);
+  prismaMock.user.update.mockResolvedValue({
+    id: 'patient-user', email: 'patient@example.test', firstName: 'Casey', lastName: 'Patient', role: Role.PATIENT,
+    phone: '+7 700 111 22 33', iin: '123456789012', createdAt: new Date('2026-10-01T00:00:00.000Z'),
+  });
   notificationMock.mockResolvedValue({ channel: 'local', message: 'Confirmation notification recorded for local development.' });
   prismaMock.$transaction.mockImplementation(async (callback) => callback({ scheduleSlot: prismaMock.scheduleSlot }));
 });
 
 const bearer = (role: Role, id = `${role.toLowerCase()}-user`) => `Bearer ${signToken({ id, email: `${role.toLowerCase()}@example.test`, role })}`;
 
+describe('authenticated self profile endpoints', () => {
+  it('returns account details with a masked IIN and creation date', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'patient-user', email: 'patient@example.test', firstName: 'Casey', lastName: 'Patient', role: Role.PATIENT,
+      phone: '+7 700 111 22 33', iin: '123456789012', createdAt: new Date('2026-10-01T00:00:00.000Z'),
+    });
+    const response = await request(app).get('/api/me').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(200);
+    expect(response.body.user.maskedIin).toBe('••••••••••12');
+    expect(response.body.user.createdAt).toBe('2026-10-01T00:00:00.000Z');
+    expect(response.body.user).not.toHaveProperty('iin');
+  });
+
+  it('updates only the signed-in user name and phone fields', async () => {
+    const response = await request(app).patch('/api/me')
+      .set('Authorization', bearer(Role.PATIENT, 'patient-user'))
+      .send({ firstName: 'Casey', lastName: 'Patient', phone: '+7 700 111 22 33', email: 'unverified@example.test', iin: '000000000000' })
+      .expect(200);
+    expect(prismaMock.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'patient-user' },
+      data: { firstName: 'Casey', lastName: 'Patient', phone: '+7 700 111 22 33' },
+    }));
+    expect(response.body.user.maskedIin).toBe('••••••••••12');
+    expect(response.body.user).not.toHaveProperty('iin');
+  });
+
+  it('requires authentication and validates profile changes', async () => {
+    await request(app).get('/api/me').expect(401);
+    await request(app).patch('/api/me').set('Authorization', bearer(Role.PATIENT, 'patient-user'))
+      .send({ firstName: '', lastName: 'Patient', phone: null }).expect(400);
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it('returns only the signed-in patient appointments with non-sensitive doctor details', async () => {
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([{
+      id: 'slot-1',
+      startAt: new Date('2099-05-10T09:00:00.000Z'),
+      endAt: new Date('2099-05-10T09:30:00.000Z'),
+      status: 'BOOKED',
+      visitPurpose: 'Annual checkup',
+      doctor: {
+        office: 'Central Clinic',
+        consultationFee: 18000,
+        category: { name: 'Cardiology' },
+        user: { firstName: 'Sam', lastName: 'Doctor' },
+      },
+    }]);
+    const response = await request(app).get('/api/me/appointments')
+      .set('Authorization', bearer(Role.PATIENT, 'patient-user'))
+      .expect(200);
+    expect(response.body.appointments[0]).toEqual({
+      id: 'slot-1',
+      startAt: '2099-05-10T09:00:00.000Z',
+      endAt: '2099-05-10T09:30:00.000Z',
+      status: 'BOOKED',
+      visitPurpose: 'Annual checkup',
+      doctor: {
+        name: 'Dr. Sam Doctor',
+        specialty: 'Cardiology',
+        office: 'Central Clinic',
+        consultationFee: 18000,
+      },
+    });
+    expect(prismaMock.scheduleSlot.findMany).toHaveBeenCalledWith({
+      where: { patientId: 'patient-user' },
+      orderBy: { startAt: 'asc' },
+      select: {
+        id: true,
+        startAt: true,
+        endAt: true,
+        status: true,
+        visitPurpose: true,
+        doctor: {
+          select: {
+            office: true,
+            consultationFee: true,
+            category: { select: { name: true } },
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+  });
+
+  it('requires a patient role to view their appointments', async () => {
+    await request(app).get('/api/me/appointments').expect(401);
+    await request(app).get('/api/me/appointments')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .expect(403);
+    expect(prismaMock.scheduleSlot.findMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('Sprint 2 doctor endpoints', () => {
-  it('returns unique, configured office locations without inventing options', async () => {
+  it('returns only unique configured cities without inventing options', async () => {
     prismaMock.doctor.findMany.mockResolvedValue([
-      { office: 'North Clinic' },
-      { office: ' north clinic ' },
-      { office: 'West Medical Center' },
-      { office: null },
-      { office: ' ' },
+      { city: 'Almaty' },
+      { city: ' almaty ' },
+      { city: 'Astana' },
+      { city: 'Shymkent' },
+      { city: null },
+      { city: ' ' },
     ]);
     const response = await request(app).get('/api/doctors/locations').expect(200);
-    expect(response.body.locations).toEqual(['North Clinic', 'West Medical Center']);
+    expect(response.body.cities).toEqual(['Almaty', 'Astana', 'Shymkent']);
     expect(prismaMock.doctor.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { office: { not: null } },
-      select: { office: true },
-      distinct: ['office'],
+      where: { city: { not: null } },
+      select: { city: true },
+      distinct: ['city'],
     }));
   });
 
-  it('filters doctors by office while preserving existing search filters', async () => {
-    await request(app).get('/api/doctors?q=cardio&category=Cardiology&office=North&availability=today').expect(200);
+  it('filters doctors by exact city while preserving existing search filters', async () => {
+    await request(app).get('/api/doctors?q=cardio&category=Cardiology&city=Almaty&availability=today').expect(200);
     const query = prismaMock.doctor.findMany.mock.calls[0][0];
     expect(query).toEqual(expect.objectContaining({
       where: expect.objectContaining({
         category: { name: { contains: 'Cardiology', mode: 'insensitive' } },
-        office: { contains: 'North', mode: 'insensitive' },
+        city: { equals: 'Almaty', mode: 'insensitive' },
       }),
     }));
     expect(query.where.OR).toEqual(expect.arrayContaining([
       { office: { contains: 'cardio', mode: 'insensitive' } },
+      { city: { contains: 'cardio', mode: 'insensitive' } },
+      { clinicName: { contains: 'cardio', mode: 'insensitive' } },
     ]));
     expect(query.where.scheduleSlots.some).toEqual(expect.objectContaining({ status: 'FREE' }));
     expect(query.include.scheduleSlots).toEqual(expect.objectContaining({
@@ -84,7 +183,7 @@ describe('Sprint 2 doctor endpoints', () => {
 
   it('matches full doctor names, including the displayed doctor title', async () => {
     await request(app).get('/api/doctors?q=Dr.%20Ayan%20Bekov').expect(200);
-    const nameFilter = prismaMock.doctor.findMany.mock.calls[0][0].where.OR[2].user;
+    const nameFilter = prismaMock.doctor.findMany.mock.calls[0][0].where.OR[6].user;
     expect(nameFilter.AND).toEqual([
       { OR: [
         { firstName: { contains: 'Ayan', mode: 'insensitive' } },
@@ -213,6 +312,12 @@ describe('Sprint 2 doctor endpoints', () => {
     });
     expect(response.body.doctor.user).not.toHaveProperty('email');
     expect(prismaMock.scheduleSlot.findMany.mock.calls[0][0]).not.toHaveProperty('include');
+    expect(prismaMock.scheduleSlot.findMany.mock.calls[0][0].select).toEqual({
+      id: true,
+      startAt: true,
+      endAt: true,
+      status: true,
+    });
   });
 
   it('returns patient and purpose details to the owning doctor', async () => {
@@ -251,8 +356,9 @@ describe('Sprint 2 doctor endpoints', () => {
 
   it('links a patient and visit purpose when a doctor marks a slot booked', async () => {
     prismaMock.user.findUnique.mockResolvedValue({ role: Role.PATIENT });
-    prismaMock.scheduleSlot.findFirst.mockResolvedValue({ id: 'slot-1' });
-    prismaMock.scheduleSlot.update.mockResolvedValue({
+    prismaMock.scheduleSlot.findFirst
+      .mockResolvedValueOnce({ id: 'slot-1', status: SlotStatus.FREE, startAt: new Date('2099-05-10T09:00:00.000Z') })
+      .mockResolvedValueOnce({
       id: 'slot-1', status: 'BOOKED', visitPurpose: 'Consultation',
       patient: { id: 'patient-1', firstName: 'Casey', lastName: 'Patient', email: 'casey@example.test' },
     });
@@ -261,8 +367,46 @@ describe('Sprint 2 doctor endpoints', () => {
       .send({ status: 'BOOKED', patientId: 'patient-1', visitPurpose: 'Consultation' })
       .expect(200);
     expect(response.body.slot.patient.id).toBe('patient-1');
-    expect(prismaMock.scheduleSlot.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'slot-1', doctorId: 'doctor-1', status: SlotStatus.FREE },
       data: { status: 'BOOKED', patientId: 'patient-1', visitPurpose: 'Consultation' },
+    }));
+  });
+
+  it('prevents a booked appointment from being changed without explicit release', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValue({ id: 'slot-1', status: SlotStatus.BOOKED });
+    await request(app).patch('/api/doctors/me/schedule/slot-1')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({ status: 'FREE' })
+      .expect(409);
+    expect(prismaMock.scheduleSlot.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not allow a past slot to be newly booked by a doctor', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ role: Role.PATIENT });
+    prismaMock.scheduleSlot.findFirst.mockResolvedValue({
+      id: 'slot-1',
+      status: SlotStatus.FREE,
+      startAt: new Date('2000-05-10T09:00:00.000Z'),
+    });
+    await request(app).patch('/api/doctors/me/schedule/slot-1')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({ status: 'BOOKED', patientId: 'patient-1', visitPurpose: 'Consultation' })
+      .expect(400);
+    expect(prismaMock.scheduleSlot.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('requires a booked slot to release appointments and applies the release atomically', async () => {
+    prismaMock.scheduleSlot.findFirst
+      .mockResolvedValueOnce({ id: 'slot-1', status: SlotStatus.BOOKED })
+      .mockResolvedValueOnce({ id: 'slot-1', status: SlotStatus.FREE, patient: null });
+    await request(app).patch('/api/doctors/me/schedule/slot-1')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({ status: 'FREE', releaseBooking: true })
+      .expect(200);
+    expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'slot-1', doctorId: 'doctor-1', status: SlotStatus.BOOKED },
+      data: { status: 'FREE', patientId: null, visitPurpose: null },
     }));
   });
 
@@ -275,11 +419,51 @@ describe('Sprint 2 doctor endpoints', () => {
       .set('Authorization', bearer(Role.PATIENT))
       .send({ office: 'North Clinic' })
       .expect(403);
+    await request(app).put('/api/doctors/me/location')
+      .set('Authorization', bearer(Role.PATIENT))
+      .send({ city: 'Almaty', clinicName: null, streetAddress: null, officeNumber: null })
+      .expect(403);
     await request(app).post('/api/doctors/doctor-1/schedule/slot-1/book')
       .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
       .send({ visitPurpose: 'Consultation' })
       .expect(403);
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(prismaMock.doctor.update).not.toHaveBeenCalled();
+  });
+
+  it('allows doctors to update structured location fields and clears blank values', async () => {
+    prismaMock.doctor.update.mockResolvedValue({
+      id: 'doctor-1',
+      city: 'Almaty',
+      clinicName: 'Central Clinic',
+      streetAddress: '18 Abay Avenue',
+      officeNumber: 'Office 101',
+      category: { name: 'Cardiology' },
+    });
+    await request(app).put('/api/doctors/me/location')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({
+        city: ' Almaty ',
+        clinicName: ' Central Clinic ',
+        streetAddress: '18 Abay Avenue',
+        officeNumber: 'Office 101',
+      })
+      .expect(200);
+    expect(prismaMock.doctor.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'doctor-1' },
+      data: {
+        city: 'Almaty',
+        clinicName: 'Central Clinic',
+        streetAddress: '18 Abay Avenue',
+        officeNumber: 'Office 101',
+      },
+    }));
+    await request(app).put('/api/doctors/me/location')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({ city: ' ', clinicName: '', streetAddress: null, officeNumber: null })
+      .expect(200);
+    expect(prismaMock.doctor.update).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: { city: null, clinicName: null, streetAddress: null, officeNumber: null },
+    }));
   });
 });

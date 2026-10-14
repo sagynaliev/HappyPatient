@@ -48,7 +48,6 @@ npm run seed
 ```
 
 ## Verification
-##sadasdasdasd
 
 ```bash
 npm run typecheck

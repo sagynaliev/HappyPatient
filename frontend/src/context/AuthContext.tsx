@@ -2,17 +2,20 @@ import {
   createContext,
   useContext,
   useEffect,
+  useCallback,
   useMemo,
   useState,
   ReactNode,
 } from "react";
-import { authApi, Role, User } from "../lib/api";
+import { authApi, ProfileUpdate, ProfileUser, Role, User } from "../lib/api";
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: Record<string, unknown>) => Promise<string>;
   logout: () => void;
+  refreshProfile: () => Promise<ProfileUser>;
+  updateProfile: (data: ProfileUpdate) => Promise<ProfileUser>;
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -31,6 +34,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("hp_token", r.token);
     setUser(r.user);
   };
+  const refreshProfile = useCallback(async () => {
+    const result = await authApi.me();
+    setUser(result.user);
+    return result.user;
+  }, []);
+  const updateProfile = useCallback(async (data: ProfileUpdate) => {
+    const result = await authApi.updateProfile(data);
+    setUser(result.user);
+    return result.user;
+  }, []);
   const value = useMemo(
     () => ({
       user,
@@ -42,12 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         save(result);
         return result.notification?.message || "Confirmation notification recorded for local development.";
       },
+      refreshProfile,
+      updateProfile,
       logout: () => {
         localStorage.removeItem("hp_token");
         setUser(null);
       },
     }),
-    [user, loading],
+    [user, loading, refreshProfile, updateProfile],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

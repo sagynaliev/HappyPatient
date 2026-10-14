@@ -8,6 +8,11 @@ export const registrationSchema = z.object({
   iin: z.string().regex(/^\d{12}$/, 'IIN must contain exactly 12 digits.')
 });
 export const loginSchema = z.object({ email: z.string().email().transform(v => v.toLowerCase()), password: z.string().min(1) });
+export const profileUpdateSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  phone: z.string().trim().max(30).transform(value => value || null).nullable(),
+});
 export const recoverySchema = z.object({ email: z.string().email().transform(v => v.toLowerCase()) });
 export const verificationCodeSchema = z.object({
   email: z.string().email().transform(v => v.toLowerCase()),
@@ -21,6 +26,14 @@ const isValidDate = (value: string) => {
 };
 const timeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):(?:00|30)$/, 'Times must use 24-hour time in 30-minute increments.');
 export const officeSchema = z.object({ office: z.string().trim().min(1).max(200) });
+const optionalLocationText = (maximumLength: number) =>
+  z.string().trim().max(maximumLength).transform(value => value || null).nullable();
+export const doctorLocationSchema = z.object({
+  city: optionalLocationText(100),
+  clinicName: optionalLocationText(150),
+  streetAddress: optionalLocationText(200),
+  officeNumber: optionalLocationText(50),
+});
 export const scheduleSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidDate, 'Enter a valid calendar date.'),
   startTime: timeSchema,
@@ -46,11 +59,15 @@ export const slotUpdateSchema = z.object({
   status: z.enum(['FREE', 'BOOKED', 'OCCUPIED']),
   patientId: z.string().min(1).optional(),
   visitPurpose: z.string().trim().min(1).max(300).optional(),
+  releaseBooking: z.boolean().optional(),
 }).superRefine((slot, context) => {
   if (slot.status === 'BOOKED' && (!slot.patientId || !slot.visitPurpose)) {
     context.addIssue({ code: 'custom', path: ['patientId'], message: 'A booked slot requires a patient and visit purpose.' });
   }
   if (slot.status !== 'BOOKED' && (slot.patientId || slot.visitPurpose)) {
     context.addIssue({ code: 'custom', path: ['status'], message: 'Patient details can only be set for booked slots.' });
+  }
+  if (slot.releaseBooking && slot.status !== 'FREE') {
+    context.addIssue({ code: 'custom', path: ['releaseBooking'], message: 'A released appointment must become available.' });
   }
 });

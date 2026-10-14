@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookingSchema, officeSchema, registrationSchema, scheduleBatchSchema, scheduleSchema, slotUpdateSchema, verificationCodeSchema } from './validation';
+import { bookingSchema, doctorLocationSchema, officeSchema, registrationSchema, scheduleBatchSchema, scheduleSchema, slotUpdateSchema, verificationCodeSchema } from './validation';
 
 describe('registration validation', () => {
   it('normalizes email', () => expect(registrationSchema.parse({ email: 'USER@Example.COM', password: 'password123', firstName: 'A', lastName: 'B', iin: '123456789012' }).email).toBe('user@example.com'));
@@ -22,6 +22,32 @@ describe('schedule validation', () => {
     expect(officeSchema.parse({ office: ' North Clinic ' }).office).toBe('North Clinic');
     expect(() => officeSchema.parse({ office: ' ' })).toThrow();
     expect(() => officeSchema.parse({ office: 'x'.repeat(201) })).toThrow();
+  });
+
+  it('normalizes structured doctor location details and accepts missing optional components', () => {
+    expect(doctorLocationSchema.parse({
+      city: ' Almaty ',
+      clinicName: ' Central Clinic ',
+      streetAddress: ' 18 Abay Avenue ',
+      officeNumber: ' Office 101 ',
+    })).toEqual({
+      city: 'Almaty',
+      clinicName: 'Central Clinic',
+      streetAddress: '18 Abay Avenue',
+      officeNumber: 'Office 101',
+    });
+    expect(doctorLocationSchema.parse({ city: '', clinicName: null, streetAddress: null, officeNumber: null })).toEqual({
+      city: null,
+      clinicName: null,
+      streetAddress: null,
+      officeNumber: null,
+    });
+    expect(() => doctorLocationSchema.parse({
+      city: 'A'.repeat(101),
+      clinicName: null,
+      streetAddress: null,
+      officeNumber: null,
+    })).toThrow();
   });
 
   it('accepts valid dates and half-hour boundaries only', () => {

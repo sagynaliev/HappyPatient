@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DoctorFilters, { AvailabilityFilter, TimeFilter } from "./DoctorFilters";
 import DoctorCard from "./DoctorCard";
@@ -10,7 +10,7 @@ import Search from "../pages/Search";
 
 vi.mock("../lib/api", () => {
   const api = vi.fn();
-  return { api, doctorDirectoryApi: { locations: (options: RequestInit) => api("/doctors/locations", options) } };
+  return { api, doctorDirectoryApi: { cities: (options: RequestInit) => api("/doctors/locations", options) } };
 });
 vi.mock("../context/AuthContext", () => ({
   useAuth: () => ({ user: null, loading: false }),
@@ -19,6 +19,11 @@ vi.mock("../context/AuthContext", () => ({
 const doctor: Doctor = {
   id: "doctor-1",
   office: "Cardio Clinic",
+  city: "Almaty",
+  clinicName: "Cardio Clinic",
+  streetAddress: "18 Abay Avenue",
+  officeNumber: "Office 101",
+  consultationFee: 18000,
   category: { id: "category-1", name: "Cardiology" },
   user: { firstName: "Ayan", lastName: "Bekov", email: "ayan@example.test" },
   scheduleSlots: [{ id: "slot-1", startAt: "2099-05-10T09:00:00.000Z", endAt: "2099-05-10T09:30:00.000Z" }],
@@ -35,6 +40,11 @@ function installLocalStorage() {
       clear: () => values.clear(),
     },
   });
+}
+
+function CurrentSearchParameters() {
+  const location = useLocation();
+  return <output aria-label="Current search parameters">{location.search}</output>;
 }
 
 describe("doctor discovery and cards", () => {
@@ -68,7 +78,7 @@ describe("doctor discovery and cards", () => {
     render(<SearchHarness />);
 
     const input = screen.getByRole("combobox");
-    expect(input.getAttribute("placeholder")).toBe("Search doctors or specialties...");
+    expect(input.getAttribute("placeholder")).toBe("Doctor name or specialty");
     fireEvent.change(input, { target: { value: "cardio" } });
     expect(screen.getByRole("group", { name: "Specialties" }).textContent).toContain("Cardiology");
     await screen.findByRole("option", { name: /Ayan Bekov/ });
@@ -88,23 +98,50 @@ describe("doctor discovery and cards", () => {
     await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
   });
 
-  it("persists favorite state and links booking to the real next free slot", () => {
+  it("shows real availability and links booking and profile actions to their routes", () => {
     render(
       <MemoryRouter>
         <DoctorCard doctor={doctor} canBook queryString="" checkingAccess={false} />
       </MemoryRouter>,
     );
 
-    const favorite = screen.getByRole("button", { name: "Add Dr. Ayan Bekov to favorites" });
-    fireEvent.click(favorite);
-    expect(screen.getByRole("button", { name: "Remove Dr. Ayan Bekov from favorites" }).getAttribute("aria-pressed")).toBe("true");
-    expect(window.localStorage.getItem("hp_favorite_doctors")).toBe("doctor-1");
-
-    expect(screen.getByText(/Next available/)).not.toBeNull();
-    expect(screen.queryByText(/UTC/)).toBeNull();
-    expect(screen.getByRole("link", { name: "Book appointment" }).getAttribute("href")).toBe(
+    expect(screen.getByText(/Next: 10 May · 14:00 · UTC\+5/)).not.toBeNull();
+    expect(screen.getByText("Almaty · Cardio Clinic")).not.toBeNull();
+    expect(screen.getByText("18 Abay Avenue, Office 101")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Book Appointment" }).getAttribute("href")).toBe(
       "/doctors/doctor-1/schedule?date=2099-05-10",
     );
+    expect(screen.getByRole("link", { name: "View Profile" }).getAttribute("href")).toBe("/doctors/doctor-1");
+  });
+
+  it("keeps pagination compact for large doctor directories", async () => {
+    const doctors = Array.from({ length: 32 }, (_, index) => ({
+      ...doctor,
+      id: `doctor-${index + 1}`,
+      user: { ...doctor.user, firstName: `Ayan${index + 1}` },
+    }));
+    vi.mocked(api).mockImplementation((path) => Promise.resolve(
+      (path === "/categories"
+        ? { categories: [{ id: "category-1", name: "Cardiology" }] }
+        : path === "/doctors/locations"
+          ? { cities: ["Almaty", "Astana"] }
+          : { doctors }) as never,
+    ));
+
+    render(
+      <MemoryRouter initialEntries={["/search"]}>
+        <>
+          <Search />
+          <CurrentSearchParameters />
+        </>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("32 doctors found");
+    expect(screen.getAllByRole("button", { name: /^Page \d+$/ })).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("button", { name: "Page 2" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByLabelText("Current search parameters").textContent).toBe("?page=2");
   });
 
   it("opens an accessible filter dialog, closes on Escape, and restores focus", async () => {
@@ -158,12 +195,12 @@ describe("doctor discovery and cards", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("applies specialty and availability filters as removable chips in the filter row", async () => {
+  it("applies supported drawer filters and removes them as chips", async () => {
     vi.mocked(api).mockImplementation((path) => Promise.resolve(
       (path === "/categories"
         ? { categories: [{ id: "category-1", name: "Cardiology" }] }
         : path === "/doctors/locations"
-          ? { locations: [doctor.office] }
+          ? { cities: ["Almaty", "Astana"] }
           : { doctors: [doctor] }) as never,
     ));
 
@@ -174,43 +211,37 @@ describe("doctor discovery and cards", () => {
     );
 
     await screen.findByText("1 doctor found");
-    expect(screen.getByRole("button", { name: "Price filter, not available yet" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("button", { name: "Rating filter, not available yet" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("button", { name: "Online filter, not available yet" }).hasAttribute("disabled")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Specialty" }));
-    fireEvent.click(await screen.findByRole("radio", { name: "Cardiology" }));
-    expect(await screen.findByRole("button", { name: "Remove Cardiology filter" })).not.toBeNull();
+    const filtersButton = screen.getByRole("button", { name: "Filters (0)" });
+    expect(filtersButton.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(filtersButton);
+    expect(screen.getByRole("button", { name: "Filters (0)" }).getAttribute("aria-expanded")).toBe("true");
+    await screen.findByRole("dialog", { name: "Filters" });
+    fireEvent.click(screen.getByRole("radio", { name: "Cardiology" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Today" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Filters" }));
+    expect(screen.getByRole("button", { name: "Filters (2)" }).getAttribute("aria-expanded")).toBe("false");
+    expect(await screen.findByRole("button", { name: "Remove filter: Cardiology" })).not.toBeNull();
     await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) =>
       String(path).includes("category=Cardiology"),
     )).toBe(true));
 
-    fireEvent.click(screen.getByRole("button", { name: "Availability" }));
-    fireEvent.click(await screen.findByRole("radio", { name: "Today" }));
-    expect(await screen.findByRole("button", { name: "Remove Today filter" })).not.toBeNull();
+    expect(await screen.findByRole("button", { name: "Remove filter: Available today" })).not.toBeNull();
     expect(await screen.findByRole("button", { name: "Clear all" })).not.toBeNull();
     await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) =>
       String(path).includes("availability=today"),
     )).toBe(true));
 
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
-    expect(await screen.findByRole("button", { name: "Specialty" })).not.toBeNull();
-    expect(await screen.findByRole("button", { name: "Availability" })).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Remove Cardiology filter" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Remove Today filter" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Specialty" }));
-    fireEvent.click(await screen.findByRole("radio", { name: "Cardiology" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove Cardiology filter" }));
-    expect(await screen.findByRole("button", { name: "Specialty" })).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Remove Cardiology filter" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove filter: Cardiology" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove filter: Available today" })).toBeNull();
   });
 
-  it("applies location through the drawer and combines it with other filters", async () => {
+  it("combines directory location from search with drawer filters", async () => {
     vi.mocked(api).mockImplementation((path) => Promise.resolve(
       (path === "/categories"
         ? { categories: [{ id: "category-1", name: "Cardiology" }] }
         : path === "/doctors/locations"
-          ? { locations: [doctor.office, "Office 101", "Office 102", "Office 205", "Office 230"] }
+          ? { cities: ["Almaty", "Astana", "Shymkent"] }
           : { doctors: [doctor] }) as never,
     ));
 
@@ -221,49 +252,32 @@ describe("doctor discovery and cards", () => {
     );
 
     await screen.findByText("1 doctor found");
-    fireEvent.click(screen.getByRole("button", { name: "All filters" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Any location" }));
-    expect(screen.getByText("Astana")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Office 101" })).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Floor 2/ }));
-    expect(screen.getByRole("button", { name: "Office 205" })).not.toBeNull();
-    const locationSearch = screen.getByRole("searchbox", { name: "Search office or location" });
-    fireEvent.change(locationSearch, {
-      target: { value: "205" },
-    });
-    expect(screen.getByRole("button", { name: "Office 205" })).not.toBeNull();
-    fireEvent.change(locationSearch, { target: { value: "not-a-location" } });
-    expect(screen.getByText("No results found")).not.toBeNull();
-    fireEvent.change(locationSearch, {
-      target: { value: "Cardio" },
-    });
-    const locationOption = await screen.findByRole("button", { name: "Cardio Clinic" });
-    fireEvent.click(locationOption);
-    await screen.findByRole("button", { name: "Remove Cardio Clinic location filter" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "All filters" }));
+    await screen.findByRole("option", { name: "Almaty" });
+    expect(screen.queryByRole("option", { name: "Office 101" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Location"), { target: { value: "Almaty" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByRole("button", { name: "Remove filter: Almaty" });
     await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) =>
-      String(path).includes("office=Cardio+Clinic"),
+      String(path).includes("city=Almaty"),
     )).toBe(true));
 
-    fireEvent.click(screen.getByRole("button", { name: "Specialty" }));
-    fireEvent.click(await screen.findByRole("radio", { name: "Cardiology" }));
-    fireEvent.click(screen.getByRole("button", { name: "Availability" }));
-    fireEvent.click(await screen.findByRole("radio", { name: "Today" }));
-    expect(await screen.findByRole("button", { name: "Remove Cardiology filter" })).not.toBeNull();
-    expect(await screen.findByRole("button", { name: "Remove Today filter" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Filters (1)" }));
+    await screen.findByRole("dialog", { name: "Filters" });
+    fireEvent.click(screen.getByRole("radio", { name: "Cardiology" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Today" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Filters" }));
+    expect(await screen.findByRole("button", { name: "Remove filter: Cardiology" })).not.toBeNull();
+    expect(await screen.findByRole("button", { name: "Remove filter: Available today" })).not.toBeNull();
     expect(await screen.findByRole("button", { name: "Clear all" })).not.toBeNull();
     await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) => {
       const request = new URL(String(path), "http://localhost");
       return request.searchParams.get("category") === "Cardiology"
-        && request.searchParams.get("office") === "Cardio Clinic"
+        && request.searchParams.get("city") === "Almaty"
         && request.searchParams.get("availability") === "today";
     })).toBe(true));
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove Cardio Clinic location filter" }));
-    expect(screen.queryByRole("button", { name: "Remove Cardio Clinic location filter" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Remove Cardiology filter" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Remove Today filter" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "All filters" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove filter: Almaty" }));
+    expect(screen.getByRole("button", { name: "Remove filter: Cardiology" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Remove filter: Available today" })).not.toBeNull();
   });
 });

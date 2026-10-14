@@ -179,10 +179,17 @@ export function Register() {
   const [success, setSuccess] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [consentError, setConsentError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setFields({});
+    if (!consentAccepted) {
+      setConsentError("You must agree to the terms and privacy policy before creating an account.");
+      return;
+    }
+    setConsentError("");
     setBusy(true);
     const data = new FormData(event.currentTarget);
     const values = Object.fromEntries(data);
@@ -243,7 +250,20 @@ export function Register() {
           <Field label="Email address" name="email" type="email" autoComplete="email" error={fields.email} />
           <Field label="Phone number" name="phone" required={false} autoComplete="tel" error={fields.phone} />
           <PasswordField label="Password" name="password" error={fields.password} />
-          <label className="checkbox terms"><input type="checkbox" required /> I agree to the terms and privacy policy</label>
+          <label className="checkbox terms">
+            <input
+              type="checkbox"
+              checked={consentAccepted}
+              aria-invalid={Boolean(consentError)}
+              aria-describedby={consentError ? "registration-consent-error" : undefined}
+              onChange={(event) => {
+                setConsentAccepted(event.target.checked);
+                if (event.target.checked) setConsentError("");
+              }}
+            />
+            I agree to the terms and privacy policy
+          </label>
+          {consentError && <p id="registration-consent-error" className="field-error" role="alert">{consentError}</p>}
           <button className="button full" disabled={busy}>{busy ? "Creating your account…" : "Create account"}</button>
         </form>
       )}
