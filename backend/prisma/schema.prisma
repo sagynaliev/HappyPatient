@@ -11,6 +11,7 @@ enum Role {
   PATIENT
   DOCTOR
   ADMIN
+  FRONT_DESK
 }
 
 enum SlotStatus {
@@ -34,6 +35,11 @@ model User {
   doctor      Doctor?
   resetTokens ResetToken[]
   bookedSlots ScheduleSlot[] @relation("BookedSlots")
+  notifications Notification[]
+  receipts      Receipt[]
+  checkInsPerformed ScheduleSlot[] @relation("CheckInsPerformed")
+  cancelledVisits   CancelledAppointment[] @relation("CancelledVisits")
+  cancellationsMade CancelledAppointment[] @relation("CancellationsMade")
 }
 
 model Doctor {
@@ -52,6 +58,7 @@ model Doctor {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   category      Category       @relation(fields: [categoryId], references: [id])
   scheduleSlots ScheduleSlot[]
+  cancellations CancelledAppointment[]
 }
 
 model Category {
@@ -84,13 +91,80 @@ model ScheduleSlot {
   endAt        DateTime
   status       SlotStatus @default(FREE)
   visitPurpose String?    @db.VarChar(300)
+  checkedInAt  DateTime?
+  checkedInById String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   doctor  Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   patient User?  @relation("BookedSlots", fields: [patientId], references: [id], onDelete: SetNull)
+  checkedInBy User? @relation("CheckInsPerformed", fields: [checkedInById], references: [id], onDelete: SetNull)
+  notifications Notification[]
+  receipt       Receipt?
+  cancellations CancelledAppointment[]
 
   @@unique([doctorId, startAt])
   @@index([doctorId, startAt])
   @@index([patientId])
+  @@index([checkedInById])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  eventKey    String   @unique
+  userId      String
+  slotId      String?
+  type        String
+  channel     String
+  status      String
+  subject     String
+  message     String
+  error       String?
+  createdAt   DateTime @default(now())
+  deliveredAt DateTime?
+  readAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot ScheduleSlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([slotId])
+}
+
+model Receipt {
+  id          String   @id @default(cuid())
+  slotId      String   @unique
+  patientId   String
+  reference   String   @unique
+  status      String   @default("READY")
+  createdAt   DateTime @default(now())
+  printedAt   DateTime?
+
+  slot    ScheduleSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  patient User         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+/// A booked visit that was cancelled. The slot itself is freed for other patients,
+/// so the visit details and the reason are kept here for both sides' history.
+model CancelledAppointment {
+  id              String   @id @default(cuid())
+  slotId          String?
+  patientId       String
+  doctorId        String
+  startAt         DateTime
+  endAt           DateTime
+  visitPurpose    String?  @db.VarChar(300)
+  reason          String   @db.VarChar(300)
+  cancelledById   String?
+  cancelledByRole Role
+  createdAt       DateTime @default(now())
+
+  slot        ScheduleSlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  patient     User          @relation("CancelledVisits", fields: [patientId], references: [id], onDelete: Cascade)
+  doctor      Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  cancelledBy User?         @relation("CancellationsMade", fields: [cancelledById], references: [id], onDelete: SetNull)
+
+  @@index([patientId, createdAt])
+  @@index([doctorId, createdAt])
 }

@@ -211,7 +211,7 @@ export default function Search() {
     return filtered;
   }, [doctors, maximumPrice, sort]);
 
-  const pageSize = 4;
+  const pageSize = 12;
   const pageCount = Math.max(1, Math.ceil(filteredDoctors.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pageStart = (currentPage - 1) * pageSize;

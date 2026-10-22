@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
+import { AppNotification, DoctorCancellation, DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
+import { onNotificationsChanged } from "../lib/notificationEvents";
 import "../styles/doctorDashboard.css";
 
 type BookingTab = "today" | "upcoming" | "past" | "all";
@@ -33,6 +34,8 @@ export default function DoctorDashboard() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<BookingTab>("today");
   const [page, setPage] = useState(1);
+  const [notes, setNotes] = useState<AppNotification[]>([]);
+  const [cancellations, setCancellations] = useState<DoctorCancellation[]>([]);
   const request = useRef(0);
   const today = localDate(new Date());
   const weekStart = new Date(`${today}T00:00:00Z`);
@@ -67,6 +70,20 @@ export default function DoctorDashboard() {
     void load();
     return () => { request.current += 1; };
   }, [load]);
+
+  useEffect(() => {
+    const fetchNotes = () => {
+      const call = authApi.notifications?.();
+      if (call) call.then((result) => setNotes(result.notifications.slice(0, 4))).catch(() => setNotes([]));
+    };
+    const fetchCancellations = () => {
+      const call = authApi.doctorCancellations?.();
+      if (call) call.then((result) => setCancellations(result.cancellations.slice(0, 5))).catch(() => setCancellations([]));
+    };
+    fetchNotes();
+    fetchCancellations();
+    return onNotificationsChanged(() => { fetchNotes(); fetchCancellations(); });
+  }, []);
 
   const booked = useMemo(() => slots.filter((slot) => slot.status === "BOOKED"), [slots]);
   const todaySlots = useMemo(() => slots.filter((slot) => localDate(slot.startAt) === today), [slots, today]);
@@ -127,7 +144,8 @@ export default function DoctorDashboard() {
 
         <aside className="pd-side-stack">
           <section className="pd-card pd-actions"><h2>Quick actions</h2><Link className="pd-button pd-button-primary" to="/doctor/schedule?addAvailability=1">+ Add availability</Link><Link className="pd-button pd-button-outline" to="/doctor/appointments">Review bookings</Link><Link className="pd-button pd-button-outline" to="/profile">Edit my profile</Link></section>
-          <section className="pd-card pd-notifications"><h2>Notifications</h2><div className="pd-notification-empty"><span aria-hidden="true">♧</span><p>No provider notification data is available.</p></div></section>
+          <section className="pd-card dd-cancellations"><h2>Recent cancellations</h2>{cancellations.length === 0 ? <p className="dd-muted">No cancelled visits.</p> : <ul className="dd-notes">{cancellations.map((item) => <li key={item.id}><strong>{item.patientName} · {formatDate(item.startAt)}, {localTime(item.startAt)}</strong><span>{item.cancelledBy === "PATIENT" ? "Cancelled by the patient" : "Cancelled by you"}: {item.reason}</span></li>)}</ul>}</section>
+          <section className="pd-card pd-notifications"><h2>Notifications</h2>{notes.length === 0 ? <div className="pd-notification-empty"><span aria-hidden="true">♧</span><p>No notifications yet. New bookings, cancellations and arrivals will appear here.</p></div> : <ul className="dd-notes">{notes.map((note) => <li key={note.id} className={note.readAt ? "" : "is-unread"}><strong>{note.subject}</strong><span>{note.message}</span><small>{new Intl.DateTimeFormat("en-GB", { timeZone: ZONE, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(note.createdAt))}</small></li>)}</ul>}</section>
         </aside>
       </section>
 

@@ -21,7 +21,7 @@
 
 .patient-appointments-heading h1 {
   margin: 0;
-  font-family: Manrope, sans-serif;
+  font-family: Onest, sans-serif;
   font-size: clamp(28px, 3vw, 36px);
   line-height: 1.2;
 }
@@ -78,7 +78,7 @@
   place-items: center;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgb(11 107 99 / 9%);
+  background: rgb(43 99 246 / 9%);
   font-size: 12px;
 }
 
@@ -94,7 +94,7 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: 0 2px 8px rgb(23 43 50 / 4%);
+  box-shadow: 0 2px 8px rgb(16 27 59 / 4%);
 }
 
 .patient-appointment-card-heading {
@@ -123,7 +123,7 @@
   padding: 5px 10px;
   border-radius: 7px;
   background: #e9f6ef;
-  color: #176b4e;
+  color: #0f8a63;
   font-size: 12px;
   font-weight: 700;
 }
@@ -229,7 +229,7 @@
 .patient-appointment-skeleton span {
   height: 16px;
   border-radius: 8px;
-  background: linear-gradient(90deg, #edf4f6 25%, #f8fbfc 50%, #edf4f6 75%);
+  background: linear-gradient(90deg, #eef2fb 25%, #f8faff 50%, #eef2fb 75%);
   background-size: 200% 100%;
   animation: patient-appointment-shimmer 1.5s infinite linear;
 }
@@ -254,7 +254,7 @@
   padding: 20px;
   border: 1px solid #b9d8ea;
   border-radius: 14px;
-  background: #eff7fb;
+  background: #eef2fc;
   color: #315469;
 }
 
@@ -372,3 +372,6 @@
     animation: none;
   }
 }
+
+.patient-appointment-hint { color: #64748b; font-size: 0.85rem; align-self: center; }
+.patient-receipt-dialog { max-height: calc(100vh - 32px); overflow-y: auto; background: #f2f5fc; }

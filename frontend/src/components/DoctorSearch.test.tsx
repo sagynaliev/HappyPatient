@@ -115,7 +115,7 @@ describe("doctor discovery and cards", () => {
   });
 
   it("keeps pagination compact for large doctor directories", async () => {
-    const doctors = Array.from({ length: 32 }, (_, index) => ({
+    const doctors = Array.from({ length: 72 }, (_, index) => ({
       ...doctor,
       id: `doctor-${index + 1}`,
       user: { ...doctor.user, firstName: `Ayan${index + 1}` },
@@ -137,7 +137,7 @@ describe("doctor discovery and cards", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("32 doctors found");
+    await screen.findByText("72 doctors found");
     expect(screen.getAllByRole("button", { name: /^Page \d+$/ })).toHaveLength(5);
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("button", { name: "Page 2" }).getAttribute("aria-current")).toBe("page");

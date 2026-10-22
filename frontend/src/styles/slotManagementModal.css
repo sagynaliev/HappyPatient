@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgb(23 43 50 / 48%);
+  background: rgb(16 27 59 / 48%);
   backdrop-filter: blur(2px);
 }
 
@@ -18,7 +18,7 @@
   border-radius: 16px;
   background: var(--surface);
   color: var(--text-primary);
-  box-shadow: 0 20px 56px rgb(23 43 50 / 22%);
+  box-shadow: 0 20px 56px rgb(16 27 59 / 22%);
 }
 
 .slot-modal-header {

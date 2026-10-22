@@ -6,6 +6,7 @@ import DoctorLocation from "../components/DoctorLocation";
 import ScheduleMatrix from "../components/ScheduleMatrix";
 import { SlotManagementModal } from "../components/SlotManagementModal";
 import { DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
+import { notifyNotificationsChanged } from "../lib/notificationEvents";
 import { AddAvailabilityModal } from "../components/AddAvailabilityModal";
 import "../styles/providerAvailabilityDialog.css";
 
@@ -304,6 +305,7 @@ export default function Schedule() {
     setBusy(true);
     try {
       const result = await authApi.bookSlot(doctorId, selected.id, visitPurpose);
+      notifyNotificationsChanged();
       setSlots((current) => current.map((slot) => slot.id === selected.id ? { ...slot, ...result.slot } : slot));
       const chosenTime = `${displayTime(selected.startAt)} – ${displayTime(selected.endAt)}`;
       setBookingSuccess({
@@ -329,7 +331,7 @@ export default function Schedule() {
     }
   }
 
-  async function updateSlot(slot: ScheduleSlot, status: ScheduleSlot["status"], releaseBooking = false) {
+  async function updateSlot(slot: ScheduleSlot, status: ScheduleSlot["status"], releaseBooking = false, cancellationReason?: string) {
     if (busy) return;
     setSlotError("");
     setSlotMessage("");
@@ -338,7 +340,7 @@ export default function Schedule() {
       const result = await authApi.updateSlot(slot.id, {
         status,
         ...(status === "BOOKED" ? { patientId, visitPurpose } : {}),
-        ...(releaseBooking ? { releaseBooking: true } : {}),
+        ...(releaseBooking ? { releaseBooking: true, cancellationReason } : {}),
       });
       setSlots((current) => current.map((item) => item.id === slot.id ? { ...item, ...result.slot } : item));
       if (selected?.id === slot.id) setSelected({ ...selected, ...result.slot });
@@ -774,7 +776,7 @@ export default function Schedule() {
           onClose={closeSlotModal}
           onPatientIdChange={setPatientId}
           onVisitPurposeChange={setVisitPurpose}
-          onUpdate={(status, releaseBooking) => void updateSlot(selected, status, releaseBooking)}
+          onUpdate={(status, releaseBooking, reason) => void updateSlot(selected, status, releaseBooking, reason)}
           onConfirmRelease={() => setConfirmingRelease((current) => !current)}
         />
       )}

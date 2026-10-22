@@ -29,7 +29,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return data as T;
 }
 
-export type Role = 'PATIENT' | 'DOCTOR' | 'ADMIN';
+export type Role = 'PATIENT' | 'DOCTOR' | 'ADMIN' | 'FRONT_DESK';
 export type User = {
   id: string;
   email: string;
@@ -78,6 +78,42 @@ export type PatientAppointment = {
   status: 'FREE' | 'BOOKED' | 'OCCUPIED';
   visitPurpose?: string | null;
   doctor: { name: string; specialty: string; office: string | null; consultationFee: number };
+  reference?: string;
+  checkedInAt?: string | null;
+};
+export type CancelledAppointment = {
+  id: string;
+  startAt: string;
+  endAt: string;
+  visitPurpose?: string | null;
+  reason: string;
+  cancelledBy: 'PATIENT' | 'CLINIC';
+  createdAt: string;
+  reference?: string;
+  doctor: { name: string; specialty: string; office: string | null; consultationFee: number };
+};
+export type DoctorCancellation = { id: string; startAt: string; endAt: string; visitPurpose?: string | null; reason: string; cancelledBy: 'PATIENT' | 'CLINIC'; createdAt: string; patientName: string };
+export type AvailabilityDoctor = { id: string; name: string; specialty: string; office: string | null; consultationFee: number; slots: Array<{ id: string; startAt: string; endAt: string }> };
+export type FrontDeskAppointment = { id: string; startAt: string; endAt: string; status: ScheduleSlot['status']; visitPurpose?: string | null; checkedInAt?: string | null; reference: string; patient: { id: string; name: string; email: string; phone: string | null } | null; doctor: { name: string; specialty: string; office: string | null } };
+export type AppNotification = { id: string; type: string; channel: string; status: string; subject: string; message: string; createdAt: string; readAt?: string | null };
+export type Receipt = {
+  id: string;
+  reference: string;
+  status: string;
+  createdAt?: string;
+  patientDisplayName: string;
+  patientMaskedIin?: string | null;
+  doctor: string;
+  specialty?: string;
+  consultationFee?: number;
+  clinic?: string | null;
+  address?: string | null;
+  office?: string | null;
+  visitPurpose?: string | null;
+  startAt: string;
+  endAt: string;
+  checkedInAt?: string | null;
+  checkedInBy?: string | null;
 };
 export type DoctorProfileDraft = {
   firstName?: string;
@@ -154,12 +190,24 @@ export const authApi = {
   getSchedule: (doctorId: string, date?: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule${date ? `?date=${encodeURIComponent(date)}` : ""}`),
   bookSlot: (doctorId: string, slotId: string, visitPurpose: string) =>
     api<{ slot: ScheduleSlot }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose }) }),
-  updateSlot: (slotId: string, body: { status: ScheduleSlot['status']; patientId?: string; visitPurpose?: string; releaseBooking?: boolean }) =>
+  updateSlot: (slotId: string, body: { status: ScheduleSlot['status']; patientId?: string; visitPurpose?: string; releaseBooking?: boolean; cancellationReason?: string }) =>
     api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   slotDetails: (slotId: string) => api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`),
   me: () => api<{ user: ProfileUser }>('/me'),
   updateProfile: (body: ProfileUpdate) => api<{ user: ProfileUser }>('/me', { method: 'PATCH', body: JSON.stringify(body) }),
-  myAppointments: () => api<{ appointments: PatientAppointment[] }>('/me/appointments'),
+  myAppointments: () => api<{ appointments: PatientAppointment[]; cancelled?: CancelledAppointment[] }>('/me/appointments'),
+  doctorCancellations: () => api<{ cancellations: DoctorCancellation[] }>('/doctors/me/cancellations'),
+  cancelAppointment: (slotId: string, reason: string) => api<{ cancelled: boolean; reference: string }>(`/appointments/${slotId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  checkInAppointment: (slotId: string) => api<{ checkedIn: boolean; reference: string; receipt: { id: string } }>(`/appointments/${slotId}/check-in`, { method: 'POST' }),
+  receipt: (slotId: string) => api<{ receipt: Receipt }>(`/appointments/${encodeURIComponent(slotId)}/receipt`),
+  notifications: () => api<{ notifications: AppNotification[]; unreadCount: number }>('/notifications'),
+  markNotificationsRead: () => api<{ updated: number }>('/notifications/read-all', { method: 'POST' }),
+  frontDeskLookup: (iin: string) => api<{ patient: { id: string; firstName: string; lastName: string; email: string; phone: string | null; iin: string } }>(`/front-desk/patients/lookup?iin=${encodeURIComponent(iin)}`),
+  frontDeskAppointments: (query = '') => api<{ appointments: FrontDeskAppointment[] }>(`/front-desk/appointments${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+  frontDeskAvailability: (params: { date: string; category?: string; q?: string }) =>
+    api<{ date: string; doctors: AvailabilityDoctor[] }>(`/front-desk/availability?${new URLSearchParams({ date: params.date, ...(params.category ? { category: params.category } : {}), ...(params.q ? { q: params.q } : {}) }).toString()}`),
+  frontDeskSchedule: (doctorId: string, date: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule?date=${encodeURIComponent(date)}`),
+  frontDeskWalkIn: (body: { firstName: string; lastName: string; iin: string; email?: string; phone?: string; doctorId: string; slotId: string; visitPurpose: string }) => api<{ patient: { id: string; firstName: string; lastName: string }; slot: { id: string; status: ScheduleSlot['status'] }; reference: string }>('/front-desk/walk-ins', { method: 'POST', body: JSON.stringify(body) }),
   updateDoctorProfile: (body: DoctorProfileDraft) =>
     api<{ doctor: DoctorProfile }>('/doctors/me/profile', {
       method: 'PUT',

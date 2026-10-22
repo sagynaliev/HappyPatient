@@ -161,7 +161,7 @@ async function main() {
   const report = await prisma.$transaction(async (tx) => {
     // Preserve patients and all patient-owned data. Doctor schedules cascade from doctors.
     await tx.doctor.deleteMany({});
-    await tx.user.deleteMany({ where: { role: { in: [Role.DOCTOR, Role.ADMIN] } } });
+    await tx.user.deleteMany({ where: { role: { in: [Role.DOCTOR, Role.ADMIN, Role.FRONT_DESK] } } });
     await tx.category.deleteMany({});
 
     await tx.category.createMany({ data: CATEGORY_NAMES.map((name) => ({ name })) });
@@ -184,6 +184,15 @@ async function main() {
         firstName: 'System',
         lastName: 'Administrator',
         role: Role.ADMIN
+      }
+    });
+    await tx.user.create({
+      data: {
+        email: 'frontdesk@happypatient.kz',
+        passwordHash,
+        firstName: 'Front',
+        lastName: 'Desk',
+        role: Role.FRONT_DESK
       }
     });
 

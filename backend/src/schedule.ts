@@ -1,11 +1,20 @@
 import { scheduleSchema } from './validation';
 
-export function generateScheduleSlots(input: unknown) {
+/** All schedule times entered by doctors and shown in the app are clinic-local (Kazakhstan, UTC+5). */
+export const CLINIC_TIME_ZONE = 'Asia/Almaty';
+
+/** Converts a clinic-local calendar date and HH:MM time into the matching UTC instant. */
+export function clinicTimeToUtc(date: string, time: string, timeZone = CLINIC_TIME_ZONE) {
+  const [hour, minute] = time.split(':').map(Number);
+  return new Date(localTimeToUtc(date, hour, timeZone).getTime() + minute * 60_000);
+}
+
+export function generateScheduleSlots(input: unknown, timeZone = CLINIC_TIME_ZONE) {
   const { date, startTime, endTime } = scheduleSchema.parse(input);
   const [startHour, startMinute] = startTime.split(':').map(Number);
   const [endHour, endMinute] = endTime.split(':').map(Number);
-  const start = Date.parse(`${date}T${startTime}:00.000Z`);
-  const end = Date.parse(`${date}T${endTime}:00.000Z`);
+  const start = clinicTimeToUtc(date, startTime, timeZone).getTime();
+  const end = clinicTimeToUtc(date, endTime, timeZone).getTime();
   const slots: Array<{ startAt: Date; endAt: Date }> = [];
 
   for (let cursor = start; cursor + 30 * 60_000 <= end; cursor += 30 * 60_000) {
@@ -21,6 +30,13 @@ export function generateScheduleSlots(input: unknown) {
 export function utcDateBounds(date: string) {
   const start = new Date(`${date}T00:00:00.000Z`);
   return { start, end: new Date(start.getTime() + 24 * 60 * 60_000) };
+}
+
+/** UTC range covering one clinic-local calendar day. */
+export function clinicDateBounds(date: string, timeZone = CLINIC_TIME_ZONE) {
+  const next = new Date(`${date}T00:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return { start: localTimeToUtc(date, 0, timeZone), end: localTimeToUtc(next.toISOString().slice(0, 10), 0, timeZone) };
 }
 
 export function localDateAt(value: Date, timeZone: string) {

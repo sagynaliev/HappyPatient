@@ -71,13 +71,24 @@ describe("patient appointments dashboard", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("does not invent cancelled appointment history or offer unsupported mutations", async () => {
+  it("shows cancelled visits with who cancelled and the reason", async () => {
+    vi.mocked(authApi.myAppointments).mockResolvedValue({
+      appointments,
+      cancelled: [{ id: "c1", startAt: "2099-06-01T09:00:00.000Z", endAt: "2099-06-01T09:30:00.000Z", reason: "Doctor is unavailable", cancelledBy: "CLINIC", createdAt: "2099-05-20T09:00:00.000Z", doctor: { name: "Dr. Gone Doctor", specialty: "Neurology", office: null, consultationFee: 9000 } }],
+    });
     renderPage();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Cancelled" }));
-    expect(await screen.findByText("Cancellation history unavailable")).toBeTruthy();
-    expect(screen.getByText(/does not store cancelled appointments/i)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /cancel|reschedule/i })).toBeNull();
+    fireEvent.click(await screen.findByRole("tab", { name: "Cancelled 1" }));
+    expect(await screen.findByText("Dr. Gone Doctor")).toBeTruthy();
+    expect(screen.getByText("Cancelled by the clinic")).toBeTruthy();
+    expect(screen.getByText("Doctor is unavailable")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^cancel$|reschedule/i })).toBeNull();
+  });
+
+  it("shows an empty cancelled tab when nothing was cancelled", async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("tab", { name: "Cancelled 0" }));
+    expect(await screen.findByText("No cancelled appointments")).toBeTruthy();
   });
 
   it("shows an empty state when there are no appointments", async () => {

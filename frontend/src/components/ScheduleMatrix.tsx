@@ -90,8 +90,11 @@ export default function ScheduleMatrix({
               <th scope="col">Time</th>
               {dates.map((day) => (
                 <th className={day === today ? "is-today" : ""} scope="col" key={day}>
-                  <strong>{weekDateLabel(day)}</strong>
-                  {day === today && <span className="schedule-matrix-today">Today</span>}
+                  <span className="sr-only">{weekDateLabel(day)}{day === today ? ", today" : ""}</span>
+                  <span className="schedule-matrix-day" aria-hidden="true">
+                    <span className="schedule-matrix-dow">{weekDateLabel(day).split(" ")[0]}</span>
+                    <span className="schedule-matrix-daynum">{weekDateLabel(day).split(" ")[1]}</span>
+                  </span>
                 </th>
               ))}
             </tr></thead>
@@ -116,8 +119,9 @@ export default function ScheduleMatrix({
                         aria-pressed={selected}
                         onClick={() => onSelectSlot(slot)}
                       >
-                        <strong>{statusName}</strong>
-                        <span>{detail}</span>
+                        <strong>{slot.status === "FREE" ? statusName : patientName || statusName}</strong>
+                        <span className="schedule-matrix-slot-time">{time}–{almatyTime(slot.endAt)}</span>
+                        <span className="schedule-matrix-slot-tag">{slot.status === "FREE" ? detail : slot.status === "BOOKED" ? (slot.visitPurpose || "Booked") : "Checked in"}</span>
                       </button>
                     </td>
                   );

@@ -1,19 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AdminMetrics, authApi } from "../lib/api";
+import { AdminDoctorRecord, AdminMetrics, authApi } from "../lib/api";
+import { Icon, IconName } from "../components/Icons";
 
-const chartDays = [
-  { label: "Mon", value: 12 },
-  { label: "Tue", value: 16 },
-  { label: "Wed", value: 10 },
-  { label: "Thu", value: 18 },
-  { label: "Fri", value: 14 },
-  { label: "Sat", value: 9 },
-  { label: "Sun", value: 13 },
-];
+type AdminAppointment = { id: string; patient: string; doctor: string; specialty: string; date: string; status: string; purpose?: string | null };
+
+const TZ = "Asia/Almaty";
+const dateLong = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: TZ });
+const dayShort = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: TZ });
+const timeShort = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
+const weekdayOf = (value: string) => new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: TZ }).format(new Date(value));
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const initials = (name: string) => name.replace(/^Dr\.\s*/, "").split(" ").map((part) => part[0] ?? "").join("").slice(0, 2).toUpperCase();
+
+function Stat({ icon, tone, label, value, note }: { icon: IconName; tone: string; label: string; value: string | number; note: string }) {
+  return (
+    <article className="admin-metric-card ad-stat">
+      <span className={`ad-stat-icon ${tone}`}><Icon name={icon} /></span>
+      <span className="ad-stat-label">{label}</span>
+      <strong>{value}</strong>
+      <small>{note}</small>
+    </article>
+  );
+}
 
 export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
+  const [doctors, setDoctors] = useState<AdminDoctorRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -22,8 +36,14 @@ export default function AdminDashboard() {
       try {
         setLoading(true);
         setError("");
-        const result = await authApi.adminMetrics();
-        setMetrics(result);
+        const [metricResult, appointmentResult, doctorResult] = await Promise.all([
+          authApi.adminMetrics(),
+          authApi.adminAppointments().catch(() => ({ appointments: [] })),
+          authApi.adminDoctors().catch(() => ({ doctors: [] })),
+        ]);
+        setMetrics(metricResult);
+        setAppointments(appointmentResult.appointments);
+        setDoctors(doctorResult.doctors);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Unable to load platform metrics.");
       } finally {
@@ -32,99 +52,97 @@ export default function AdminDashboard() {
     })();
   }, []);
 
+  const perWeekday = useMemo(() => {
+    const counts = new Map(WEEKDAYS.map((day) => [day, 0]));
+    appointments.forEach((item) => counts.set(weekdayOf(item.date), (counts.get(weekdayOf(item.date)) ?? 0) + 1));
+    return WEEKDAYS.map((day) => ({ day, value: counts.get(day) ?? 0 }));
+  }, [appointments]);
+  const maxPerDay = Math.max(1, ...perWeekday.map((item) => item.value));
+  const todayLabel = weekdayOf(new Date().toISOString());
+  const verifiedDoctors = doctors.filter((doctor) => doctor.status === "verified").length;
+
   return (
-    <div className="admin-page">
-      <header className="admin-header-panel">
+    <div className="admin-page ad-page">
+      <header className="ad-head">
         <div>
-          <p className="admin-eyebrow">Platform overview</p>
-          <h1>Admin Dashboard</h1>
+          <h1>Dashboard</h1>
+          <p>{dateLong.format(new Date())} · here is what is happening in the clinic.</p>
         </div>
-        <p className="admin-subtitle">Thursday, 22 October 2026</p>
+        <div className="ad-head-actions">
+          <Link className="ad-button ad-button-outline" to="/admin/appointments"><Icon name="calendar" size={18} /> Appointments</Link>
+          <Link className="ad-button" to="/front-desk"><Icon name="user" size={18} /> Register patient</Link>
+        </div>
       </header>
 
-      <section className="admin-metrics-grid" aria-label="Platform metrics">
-        <article className="admin-metric-card">
-          <span>Total Users</span>
-          <strong>{loading ? "—" : metrics?.totalUsers ?? 0}</strong>
-          <small>{metrics ? `${metrics.patients} patients · ${metrics.doctors} doctors · ${metrics.admins} admins` : "Loading user totals…"}</small>
-        </article>
-        <article className="admin-metric-card">
-          <span>Patients</span>
-          <strong>{loading ? "—" : metrics?.patients ?? 0}</strong>
-          <small>Patient accounts</small>
-        </article>
-        <article className="admin-metric-card">
-          <span>Doctors</span>
-          <strong>{loading ? "—" : metrics?.doctors ?? 0}</strong>
-          <small>{metrics ? `${metrics.pendingReviews} pending review` : "Waiting on review"}</small>
-        </article>
-        <article className="admin-metric-card">
-          <span>Appointments</span>
-          <strong>{loading ? "—" : metrics?.appointments ?? 0}</strong>
-          <small>All-time scheduled visits</small>
-        </article>
+      <section className="admin-metrics-grid ad-stats" aria-label="Platform metrics">
+        <Stat icon="users" tone="is-blue" label="Total users" value={loading ? "—" : metrics?.totalUsers ?? 0} note={metrics ? `${metrics.patients} patients · ${metrics.admins} admins` : "Loading user totals…"} />
+        <Stat icon="user" tone="is-violet" label="Patients" value={loading ? "—" : metrics?.patients ?? 0} note="Patient accounts" />
+        <Stat icon="stethoscope" tone="is-green" label="Doctors" value={loading ? "—" : metrics?.doctors ?? 0} note={`${verifiedDoctors} with an office listed`} />
+        <Stat icon="calendar" tone="is-pink" label="Booked visits" value={loading ? "—" : metrics?.appointments ?? 0} note="Currently booked appointments" />
       </section>
 
       {error && <div className="admin-alert" role="alert">{error}</div>}
 
-      <section className="admin-content-grid">
-        <article className="admin-panel admin-chart-panel">
+      <section className="ad-grid">
+        <article className="admin-panel ad-panel ad-appointments">
           <div className="admin-panel-header">
-            <h2>Appointment activity</h2>
+            <div><h2>Upcoming appointments</h2><p className="ad-muted">Next booked visits across all doctors</p></div>
+            <Link to="/admin/appointments">View all</Link>
           </div>
-          <div className="admin-chart" aria-label="Weekly appointment activity chart">
-            {chartDays.map((day) => (
-              <div key={day.label} className="admin-chart-bar-wrap">
-                <span className="admin-chart-bar" style={{ height: `${(day.value / 18) * 100}%` }} data-active={day.label === "Thu"} />
-                <small>{day.label}</small>
+          {appointments.length === 0 ? (
+            <p className="ad-empty">{loading ? "Loading appointments…" : "No booked appointments yet."}</p>
+          ) : (
+            <ul className="ad-appointment-list">
+              {appointments.slice(0, 6).map((item) => (
+                <li key={item.id}>
+                  <span className="ad-avatar" aria-hidden="true">{initials(item.patient)}</span>
+                  <div><strong>{item.patient}</strong><small>{item.doctor} · {item.specialty}</small></div>
+                  <span className="ad-time"><Icon name="clock" size={15} /> {dayShort.format(new Date(item.date))}, {timeShort.format(new Date(item.date))}</span>
+                  <span className="admin-status admin-status-active">Booked</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+
+        <article className="admin-panel ad-panel">
+          <div className="admin-panel-header"><div><h2>Bookings by weekday</h2><p className="ad-muted">Upcoming booked visits</p></div></div>
+          <div className="admin-chart ad-chart" role="img" aria-label={`Booked visits per weekday: ${perWeekday.map((item) => `${item.day} ${item.value}`).join(", ")}`}>
+            {perWeekday.map((item) => (
+              <div key={item.day} className="admin-chart-bar-wrap">
+                <span className="ad-bar-value">{item.value}</span>
+                <span className="admin-chart-bar" style={{ height: `${Math.max(4, (item.value / maxPerDay) * 100)}%` }} data-active={item.day === todayLabel} />
+                <small>{item.day}</small>
               </div>
             ))}
           </div>
-          <p className="admin-caption">8 pending · 54 confirmed · 26 completed · 4 cancelled</p>
-        </article>
-
-        <article className="admin-panel">
-          <div className="admin-panel-header">
-            <h2>Recent activity</h2>
-          </div>
-          <ul className="admin-feed">
-            <li><span>10:12</span><strong>Appointment confirmed</strong><em>HP-261022-1042</em></li>
-            <li><span>09:48</span><strong>Doctor review submitted</strong><em>Dr. Timur Akhmetov</em></li>
-            <li><span>09:15</span><strong>Patient account created</strong><em>Ayana A.</em></li>
-          </ul>
         </article>
       </section>
 
-      <section className="admin-content-grid lower-grid">
-        <article className="admin-panel">
-          <div className="admin-panel-header">
-            <h2>Users summary</h2>
-            <Link to="/admin/users">View all users</Link>
-          </div>
+      <section className="ad-grid ad-grid-even">
+        <article className="admin-panel ad-panel">
+          <div className="admin-panel-header"><h2>New users</h2><Link to="/admin/users">View all users</Link></div>
           <ul className="admin-list">
-            {metrics?.recentUsers.map((user) => (
+            {metrics?.recentUsers.length ? metrics.recentUsers.map((user) => (
               <li key={user.id}>
-                <div>
-                  <strong>{user.firstName} {user.lastName}</strong>
-                  <small>{user.email}</small>
-                </div>
-                <span className="admin-status admin-status-active">{user.role}</span>
+                <span className="ad-avatar" aria-hidden="true">{`${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase()}</span>
+                <div><strong>{user.firstName} {user.lastName}</strong><small>{user.email}</small></div>
+                <span className="admin-status admin-status-muted">{user.role.replace("_", " ").toLowerCase()}</span>
               </li>
-            )) ?? [
-              <li key="empty"><div><strong>No users</strong><small>No recent user activity</small></div></li>,
-            ]}
+            )) : <li><div><strong>No users yet</strong><small>New accounts will appear here.</small></div></li>}
           </ul>
         </article>
 
-        <article className="admin-panel">
-          <div className="admin-panel-header">
-            <h2>Doctors summary</h2>
-            <Link to="/admin/doctors">Review doctors</Link>
-          </div>
+        <article className="admin-panel ad-panel">
+          <div className="admin-panel-header"><h2>Doctors</h2><Link to="/admin/doctors">Review doctors</Link></div>
           <ul className="admin-list">
-            <li><div><strong>Dr. Timur Akhmetov</strong><small>Cardiologist · Almaty</small></div><span className="admin-status admin-status-pending">Pending</span></li>
-            <li><div><strong>Dr. Anna Zhumabekova</strong><small>Neurologist · Astana</small></div><span className="admin-status admin-status-verified">Verified</span></li>
-            <li><div><strong>Dr. Farid Tulegen</strong><small>Orthodontist · Almaty</small></div><span className="admin-status admin-status-amber">Needs info</span></li>
+            {doctors.length ? doctors.slice(0, 5).map((doctor) => (
+              <li key={doctor.id}>
+                <span className="ad-avatar" aria-hidden="true">{initials(doctor.name)}</span>
+                <div><strong>{doctor.name}</strong><small>{doctor.specialty}{doctor.office ? ` · ${doctor.office}` : ""}</small></div>
+                <span className={`admin-status ${doctor.status === "verified" ? "admin-status-active" : "admin-status-pending"}`}>{doctor.status === "verified" ? "Office listed" : "No office"}</span>
+              </li>
+            )) : <li><div><strong>{loading ? "Loading doctors…" : "No doctors yet"}</strong><small>Doctor accounts will appear here.</small></div></li>}
           </ul>
         </article>
       </section>

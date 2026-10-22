@@ -3,7 +3,7 @@
 }
 
 .find-directory-shell {
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: Onest, sans-serif;
 }
 
 .fd-page {
@@ -12,7 +12,7 @@
   padding: 36px 24px 48px;
   color: var(--text-primary);
   background: var(--page-background);
-  font-family: Inter, "DM Sans", Arial, sans-serif;
+  font-family: Onest, sans-serif;
 }
 
 .fd-container {
@@ -32,7 +32,7 @@
 .fd-page h2,
 .fd-page h3 {
   color: var(--text-primary);
-  font-family: Manrope, sans-serif;
+  font-family: Onest, sans-serif;
 }
 
 .fd-title-block h1 {
@@ -55,7 +55,7 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(23, 43, 50, .04);
+  box-shadow: 0 1px 2px rgba(16, 27, 59, .04);
 }
 
 .fd-search {
@@ -130,7 +130,7 @@
   background: transparent;
   box-shadow: none;
   color: var(--text-primary);
-  font: 400 15px/1.4 "DM Sans", sans-serif;
+  font: 400 15px/1.4 Onest, sans-serif;
 }
 
 .fd-search .doctor-search-input-wrap > input::placeholder {
@@ -202,7 +202,7 @@
   border-radius: 8px;
   color: var(--text-primary);
   background: var(--surface);
-  font: 400 14px/1.4 "DM Sans", sans-serif;
+  font: 400 14px/1.4 Onest, sans-serif;
 }
 
 .fd-search .doctor-search-submit {
@@ -218,7 +218,7 @@
   border-radius: 9px;
   color: var(--surface);
   background: var(--primary);
-  font: 700 14px/1 "DM Sans", sans-serif;
+  font: 700 14px/1 Onest, sans-serif;
   cursor: pointer;
 }
 
@@ -243,7 +243,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 4px 12px rgba(23, 43, 50, .04);
+  box-shadow: 0 4px 12px rgba(16, 27, 59, .04);
 }
 
 .fd-search .suggestion-group + .suggestion-group {
@@ -253,7 +253,7 @@
 .fd-search .suggestion-group h2 {
   margin: 6px 8px;
   color: var(--text-secondary);
-  font: 600 12px/1.4 "DM Sans", sans-serif;
+  font: 600 12px/1.4 Onest, sans-serif;
 }
 
 .fd-search .suggestion-option,
@@ -264,7 +264,7 @@
   border-radius: 6px;
   color: var(--text-primary);
   background: var(--surface);
-  font: 400 14px/1.4 "DM Sans", sans-serif;
+  font: 400 14px/1.4 Onest, sans-serif;
   text-align: left;
   cursor: pointer;
 }
@@ -286,7 +286,7 @@
   border: 0;
   color: var(--primary);
   background: transparent;
-  font: 600 13px "DM Sans", sans-serif;
+  font: 600 13px Onest, sans-serif;
   cursor: pointer;
 }
 
@@ -304,7 +304,7 @@
 
 .fd-results-toolbar h2 {
   margin: 0;
-  font: 700 16px/1.4 Inter, "DM Sans", sans-serif;
+  font: 700 16px/1.4 Onest, sans-serif;
 }
 
 .fd-toolbar-actions {
@@ -326,7 +326,7 @@
   border-radius: 8px;
   color: var(--text-primary);
   background: var(--surface);
-  font: 600 14px "DM Sans", sans-serif;
+  font: 600 14px Onest, sans-serif;
 }
 
 .fd-toolbar-button {
@@ -379,13 +379,13 @@
   border: 0;
   color: inherit;
   background: transparent;
-  font: 600 16px/1 "DM Sans", sans-serif;
+  font: 600 16px/1 Onest, sans-serif;
   cursor: pointer;
 }
 
 .fd-active-filters .clear-filters-link {
   color: var(--primary);
-  font: 600 13px "DM Sans", sans-serif;
+  font: 600 13px Onest, sans-serif;
 }
 
 .fd-alert,
@@ -497,7 +497,7 @@
 .fd-card-identity h2 {
   margin: 0;
   overflow-wrap: anywhere;
-  font: 700 18px/1.3 Inter, "DM Sans", sans-serif;
+  font: 700 18px/1.3 Onest, sans-serif;
 }
 
 .fd-specialty {
@@ -540,22 +540,22 @@
 
 .fd-status-success {
   color: var(--status-success);
-  background: #E4F6EF;
+  background: #e9efff;
 }
 
 .fd-status-neutral {
   color: var(--text-secondary);
-  background: #eef3f3;
+  background: #eef2fb;
 }
 
 .fd-price {
   margin: 16px 0 0;
   color: var(--text-primary);
-  font: 800 20px/1.3 Manrope, sans-serif;
+  font: 800 20px/1.3 Onest, sans-serif;
 }
 
 .fd-price span {
-  font: 500 13px/1.4 "DM Sans", sans-serif;
+  font: 500 13px/1.4 Onest, sans-serif;
 }
 
 .fd-next-slot {
@@ -592,7 +592,7 @@
 
 .fd-time-chip-disabled {
   color: var(--text-secondary);
-  background: #eef3f3;
+  background: #eef2fb;
 }
 
 .fd-card-actions {
@@ -612,7 +612,7 @@
   padding: 0 14px;
   border: 1px solid var(--selected-border);
   border-radius: 8px;
-  font: 700 14px "DM Sans", sans-serif;
+  font: 700 14px Onest, sans-serif;
   text-align: center;
 }
 
@@ -640,7 +640,7 @@
 .fd-primary-button:disabled:hover {
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  background: #eef3f3;
+  background: #eef2fb;
   opacity: 1;
   cursor: not-allowed;
   box-shadow: none;
@@ -735,7 +735,7 @@
   border-radius: 8px;
   color: var(--primary);
   background: var(--surface);
-  font: 600 13px "DM Sans", sans-serif;
+  font: 600 13px Onest, sans-serif;
   cursor: pointer;
 }
 
@@ -747,7 +747,7 @@
 
 .fd-pagination-buttons button:disabled {
   color: var(--text-secondary);
-  background: #eef3f3;
+  background: #eef2fb;
   cursor: not-allowed;
 }
 
@@ -776,7 +776,7 @@
   border-radius: 8px;
   color: var(--text-primary);
   background: var(--surface);
-  font: 400 14px "DM Sans", sans-serif;
+  font: 400 14px Onest, sans-serif;
 }
 
 
@@ -877,7 +877,7 @@
 
 .dp-price {
   margin: 20px 0 4px;
-  font: 800 24px/1.2 Manrope, sans-serif;
+  font: 800 24px/1.2 Onest, sans-serif;
 }
 
 .dp-clinic {
@@ -979,7 +979,7 @@
   border-radius: 8px;
   color: #fff;
   background: var(--primary);
-  font: 700 14px "DM Sans", sans-serif;
+  font: 700 14px Onest, sans-serif;
   cursor: pointer;
   transition: background .18s ease, border-color .18s ease;
   margin-top: 20px;

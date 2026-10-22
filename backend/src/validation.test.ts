@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookingSchema, doctorLocationSchema, officeSchema, registrationSchema, scheduleBatchSchema, scheduleSchema, slotUpdateSchema, verificationCodeSchema } from './validation';
+import { bookingSchema, doctorLocationSchema, officeSchema, registrationSchema, scheduleBatchSchema, scheduleSchema, slotUpdateSchema, verificationCodeSchema, walkInRegistrationSchema } from './validation';
 
 describe('registration validation', () => {
   it('normalizes email', () => expect(registrationSchema.parse({ email: 'USER@Example.COM', password: 'password123', firstName: 'A', lastName: 'B', iin: '123456789012' }).email).toBe('user@example.com'));
@@ -85,5 +85,19 @@ describe('schedule validation', () => {
     expect(bookingSchema.parse({ visitPurpose: 'Consultation' }).visitPurpose).toBe('Consultation');
     expect(() => bookingSchema.parse({ visitPurpose: ' ' })).toThrow();
     expect(() => bookingSchema.parse({ visitPurpose: 'x'.repeat(301) })).toThrow();
+  });
+
+  it('validates walk-in registration identity and booking fields', () => {
+    expect(walkInRegistrationSchema.parse({
+      firstName: 'Amina',
+      lastName: 'Patient',
+      iin: '123456789012',
+      doctorId: 'doctor-1',
+      slotId: 'slot-1',
+      visitPurpose: 'Walk-in consultation',
+    }).iin).toBe('123456789012');
+    expect(() => walkInRegistrationSchema.parse({
+      firstName: 'Amina', lastName: 'Patient', iin: '123', doctorId: 'doctor-1', slotId: 'slot-1', visitPurpose: 'Visit',
+    })).toThrow();
   });
 });

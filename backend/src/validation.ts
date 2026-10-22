@@ -55,12 +55,29 @@ export const scheduleBatchSchema = z.object({
   }
 });
 export const bookingSchema = z.object({ visitPurpose: z.string().trim().min(1).max(300) });
+export const cancellationReasonSchema = z.string().trim().min(3, 'Please tell us why the appointment is being cancelled.').max(300);
+export const cancelSchema = z.object({ reason: cancellationReasonSchema });
+export const walkInLookupSchema = z.object({ iin: z.string().regex(/^\d{12}$/, 'IIN must contain exactly 12 digits.') });
+export const walkInRegistrationSchema = z.object({
+  email: z.string().trim().email().transform(v => v.toLowerCase()).optional().or(z.literal('')),
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  phone: z.string().trim().max(30).optional().or(z.literal('')),
+  iin: z.string().regex(/^\d{12}$/, 'IIN must contain exactly 12 digits.'),
+  doctorId: z.string().min(1),
+  slotId: z.string().min(1),
+  visitPurpose: z.string().trim().min(1).max(300),
+});
 export const slotUpdateSchema = z.object({
   status: z.enum(['FREE', 'BOOKED', 'OCCUPIED']),
   patientId: z.string().min(1).optional(),
   visitPurpose: z.string().trim().min(1).max(300).optional(),
   releaseBooking: z.boolean().optional(),
+  cancellationReason: cancellationReasonSchema.optional(),
 }).superRefine((slot, context) => {
+  if (slot.releaseBooking && !slot.cancellationReason) {
+    context.addIssue({ code: 'custom', path: ['cancellationReason'], message: 'Please give the patient a reason for cancelling.' });
+  }
   if (slot.status === 'BOOKED' && (!slot.patientId || !slot.visitPurpose)) {
     context.addIssue({ code: 'custom', path: ['patientId'], message: 'A booked slot requires a patient and visit purpose.' });
   }

@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useRef } from "react";
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { ScheduleSlot } from "../lib/api";
 import "../styles/slotManagementModal.css";
 
@@ -14,7 +14,7 @@ type SlotManagementModalProps = {
   onClose: () => void;
   onPatientIdChange: (value: string) => void;
   onVisitPurposeChange: (value: string) => void;
-  onUpdate: (status: ScheduleSlot["status"], releaseBooking?: boolean) => void;
+  onUpdate: (status: ScheduleSlot["status"], releaseBooking?: boolean, cancellationReason?: string) => void;
   onConfirmRelease: () => void;
 };
 
@@ -166,16 +166,35 @@ export function SlotManagementModal({
             </button>
           )}
           {!loading && !error && slot.status === "BOOKED" && confirmingRelease && (
-            <div className="slot-modal-confirm-release" role="group" aria-label="Confirm appointment release">
-              <p>This will cancel the booked visit and make the time available again.</p>
-              <button className="button button-outline" type="button" disabled={busy} onClick={onConfirmRelease}>Keep appointment</button>
-              <button className="button slot-modal-release" type="button" disabled={busy} onClick={() => onUpdate("FREE", true)}>
-                {busy ? "Releasing…" : "Confirm release"}
-              </button>
-            </div>
+            <ReleaseConfirmation busy={busy} onKeep={onConfirmRelease} onRelease={(reason) => onUpdate("FREE", true, reason)} />
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+const RELEASE_REASONS = ["Doctor is unavailable", "Emergency at the clinic", "Schedule changed"];
+
+function ReleaseConfirmation({ busy, onKeep, onRelease }: { busy: boolean; onKeep: () => void; onRelease: (reason: string) => void }) {
+  const [reason, setReason] = useState("");
+  const trimmed = reason.trim();
+  return (
+    <div className="slot-modal-confirm-release" role="group" aria-label="Confirm appointment release">
+      <p>This will cancel the booked visit and make the time available again. The patient will see your reason.</p>
+      <div className="slot-modal-reason-chips">
+        {RELEASE_REASONS.map((option) => (
+          <button key={option} type="button" className={`slot-modal-chip${reason === option ? " is-selected" : ""}`} onClick={() => setReason(option)} disabled={busy}>{option}</button>
+        ))}
+      </div>
+      <label className="slot-modal-reason">
+        <span>Reason for cancelling</span>
+        <textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={300} rows={2} placeholder="Choose above or write your own reason" disabled={busy} />
+      </label>
+      <button className="button button-outline" type="button" disabled={busy} onClick={onKeep}>Keep appointment</button>
+      <button className="button slot-modal-release" type="button" disabled={busy || trimmed.length < 3} onClick={() => onRelease(trimmed)}>
+        {busy ? "Releasing…" : "Confirm release"}
+      </button>
     </div>
   );
 }

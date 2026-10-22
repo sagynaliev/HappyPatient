@@ -1,216 +1,223 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, roleLabel } from "../context/AuthContext";
 import { authApi, PatientAppointment } from "../lib/api";
+import { Icon } from "../components/Icons";
 import DoctorDashboard from "./DoctorDashboard";
+import "../styles/patientDashboard.css";
 
-const appointmentDate = (value: string) => new Intl.DateTimeFormat("en-GB", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Asia/Almaty",
-}).format(new Date(value));
+const TZ = "Asia/Almaty";
+const fmt = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { timeZone: TZ, ...options });
+const longDate = fmt({ weekday: "long", day: "numeric", month: "long" });
+const shortDate = fmt({ weekday: "short", day: "numeric", month: "short" });
+const clock = fmt({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const dayKey = (value: string | Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(value));
+
+function greeting(now = new Date()) {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: TZ }).format(now));
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function daysUntil(value: string) {
+  const diff = Math.round((Date.parse(`${dayKey(value)}T00:00:00Z`) - Date.parse(`${dayKey(new Date())}T00:00:00Z`)) / 86_400_000);
+  if (diff <= 0) return "today";
+  if (diff === 1) return "tomorrow";
+  return `in ${diff} days`;
+}
+
+function MiniCalendar({ marked }: { marked: Set<string> }) {
+  const today = dayKey(new Date());
+  const [cursor, setCursor] = useState(() => { const [y, m] = today.split("-").map(Number); return { y, m }; });
+  const first = new Date(Date.UTC(cursor.y, cursor.m - 1, 1));
+  const daysInMonth = new Date(Date.UTC(cursor.y, cursor.m, 0)).getUTCDate();
+  const offset = (first.getUTCDay() + 6) % 7; // Monday first
+  const cells = Array.from({ length: offset + daysInMonth }, (_, index) => (index < offset ? null : index - offset + 1));
+  const label = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(first);
+  const move = (delta: number) => setCursor(({ y, m }) => { const d = new Date(Date.UTC(y, m - 1 + delta, 1)); return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1 }; });
+  const monthVisits = [...marked].filter((key) => key.startsWith(`${cursor.y}-${String(cursor.m).padStart(2, "0")}`)).length;
+
+  return (
+    <section className="pt-card pt-calendar" aria-label="Visit calendar">
+      <header className="pt-calendar-head">
+        <h2>{label}</h2>
+        <div>
+          <button type="button" className="pt-round" aria-label="Previous month" onClick={() => move(-1)}>‹</button>
+          <button type="button" className="pt-round" aria-label="Next month" onClick={() => move(1)}>›</button>
+        </div>
+      </header>
+      <div className="pt-calendar-grid" role="grid">
+        {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => <span className="pt-dow" key={d} role="columnheader">{d}</span>)}
+        {cells.map((day, index) => {
+          if (!day) return <span key={`e${index}`} />;
+          const key = `${cursor.y}-${String(cursor.m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const classes = ["pt-day", key === today ? "is-today" : "", marked.has(key) ? "has-visit" : ""].filter(Boolean).join(" ");
+          return <span key={key} className={classes} role="gridcell" aria-label={marked.has(key) ? `${day}, visit booked` : undefined}>{day}</span>;
+        })}
+      </div>
+      <p className="pt-calendar-foot"><span className="pt-dot" aria-hidden="true" /> {monthVisits ? `${monthVisits} visit day${monthVisits > 1 ? "s" : ""} this month` : "No visits this month"}</p>
+    </section>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
-  const [appointmentsLoading, setAppointmentsLoading] = useState(false);
-  const [appointmentsError, setAppointmentsError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (user?.role !== "PATIENT") return;
-    let active = true;
-    setAppointmentsLoading(true);
-    setAppointmentsError("");
+  const load = useCallback(() => {
+    setLoading(true); setError("");
     authApi.myAppointments()
-      .then(({ appointments: result }) => {
-        if (active) setAppointments(result);
-      })
-      .catch((error: unknown) => {
-        if (active) setAppointmentsError(error instanceof Error ? error.message : "Unable to load your appointments.");
-      })
-      .finally(() => {
-        if (active) setAppointmentsLoading(false);
-      });
-    return () => { active = false; };
-  }, [user?.role]);
+      .then(({ appointments: result }) => setAppointments(result))
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Unable to load your appointments."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { if (user?.role === "PATIENT") load(); }, [user?.role, load]);
+
+  const { upcoming, past, marked } = useMemo(() => {
+    const now = Date.now();
+    const active = appointments.filter((item) => item.status === "BOOKED" || item.status === "OCCUPIED");
+    return {
+      upcoming: active.filter((item) => Date.parse(item.endAt) > now).sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt)),
+      past: active.filter((item) => Date.parse(item.endAt) <= now),
+      marked: new Set(active.map((item) => dayKey(item.startAt))),
+    };
+  }, [appointments]);
 
   if (!user) return null;
   if (user.role === "DOCTOR") return <DoctorDashboard />;
 
-  const initials = `${user.firstName[0] || ""}${user.lastName[0] || ""}`.toUpperCase();
-  const isPatient = user.role === "PATIENT";
-  const now = Date.now();
-  const upcomingAppointment = appointments.find((appointment) => appointment.status === "BOOKED" && new Date(appointment.startAt).getTime() > now);
-  const pastAppointments = appointments.filter((appointment) => appointment.status === "BOOKED" && new Date(appointment.startAt).getTime() <= now);
+  if (user.role !== "PATIENT") {
+    return (
+      <div className="pt-page" aria-label={`${roleLabel(user.role)} dashboard`}>
+        <section className="pt-banner">
+          <div className="pt-banner-copy">
+            <span className="pt-date-chip"><Icon name="calendar" size={16} /> {longDate.format(new Date())}</span>
+            <h1>{greeting()}, {user.firstName}!</h1>
+            <p>Use the menu to manage the clinic.</p>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  const next = upcoming[0];
+  const later = upcoming.slice(1, 4);
 
   return (
-    <div className="page dashboard-page" aria-label={`${roleLabel(user.role)} dashboard`}>
-      <div className="dashboard-hero">
-        <div>
-          <p className="eyebrow">Your dashboard</p>
-          <h1>Good to see you, {user.firstName}.</h1>
-          <p className="lead">
-            {isPatient
-                ? "Your care journey is in one place — find care, book visits, and stay on top of follow-ups." 
-                : "Monitor the platform and keep operations running smoothly."}
-          </p>
-        </div>
-        <div className="profile-pill">
-          <div className="profile-avatar">{initials}</div>
-          <div>
-            <strong>{user.firstName} {user.lastName}</strong>
-            <span>{roleLabel(user.role)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="stat-grid">
-        <div className="stat">
-          <span>Account type</span>
-          <strong>{roleLabel(user.role)}</strong>
-          <small>Active profile</small>
-        </div>
-        <div className="stat">
-          <span>Next step</span>
-              <strong>{isPatient ? "Find a doctor" : "Review overview"}</strong>
-          <small>{isPatient ? "Discover the right specialist" : "Platform overview"}</small>
-        </div>
-        <div className="stat">
-          <span>Support</span>
-          <strong>{user.email}</strong>
-          <small>{user.phone || "Add a phone number to your profile"}</small>
-        </div>
-      </div>
-
-      <div className="dashboard-grid">
-        <section className="panel panel-feature">
-          <div className="panel-title">
-            <h2>{isPatient ? "Upcoming appointment" : "Operational snapshot"}</h2>
-            <span>{isPatient ? "✓" : "◎"}</span>
-          </div>
-
-          {isPatient && appointmentsLoading ? (
-            <div className="appointment-card empty-appointment-card" role="status">Loading your appointments…</div>
-          ) : isPatient && appointmentsError ? (
-            <div className="appointment-card empty-appointment-card" role="alert">
-              <p>{appointmentsError}</p>
-              <button className="button button-outline small" type="button" onClick={() => {
-                setAppointmentsError("");
-                setAppointmentsLoading(true);
-                authApi.myAppointments()
-                  .then(({ appointments: result }) => setAppointments(result))
-                  .catch((error: unknown) => setAppointmentsError(error instanceof Error ? error.message : "Unable to load your appointments."))
-                  .finally(() => setAppointmentsLoading(false));
-              }}>Try again</button>
+    <div className="pt-page" aria-label={`${roleLabel(user.role)} dashboard`}>
+      <div className="pt-layout">
+        <div className="pt-main">
+          <section className="pt-banner">
+            <div className="pt-banner-copy">
+              <span className="pt-date-chip"><Icon name="calendar" size={16} /> {longDate.format(new Date())}</span>
+              <h1>{greeting()}, {user.firstName}!</h1>
+              <p>{next ? `Your next visit is ${daysUntil(next.startAt)}, ${shortDate.format(new Date(next.startAt))} at ${clock.format(new Date(next.startAt))}.` : "You have no visits planned. Find a doctor and book a time that suits you."}</p>
+              <Link className="pt-banner-button" to="/search"><Icon name="search" size={18} /> Book a visit</Link>
             </div>
-          ) : upcomingAppointment ? (
-            <div className="appointment-card">
-              <div className="appointment-meta">
-                <span className="status-pill success">Booked</span>
-                <span>{upcomingAppointment.doctor.specialty}</span>
-              </div>
-              <h3>{upcomingAppointment.doctor.name}</h3>
-              <p>{appointmentDate(upcomingAppointment.startAt)} – {new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Almaty" }).format(new Date(upcomingAppointment.endAt))} · UTC+5</p>
-              <div className="appointment-footer">
-                <span>Upcoming appointment</span>
-              </div>
-            </div>
-          ) : (
-          <div className="appointment-card empty-appointment-card">
-            <div className="appointment-meta">
-              <span className="status-pill success">
-                {isPatient ? "No upcoming visit" : "Stable"}
-              </span>
-              <span>{isPatient ? "Care plan" : "System view"}</span>
-            </div>
-            <h3>{isPatient ? "No upcoming visit yet" : "Operations are running normally"}</h3>
-            <p>
-              {isPatient
-                  ? "Your care plan will appear here once you book an appointment."
-                  : "No platform alerts require attention right now."}
-            </p>
-            <div className="appointment-footer">
-              <span>
-                {isPatient ? "Find a doctor to get started" : "Platform overview"}
-              </span>
-              {isPatient && <Link className="button button-outline small" to="/search">Find care</Link>}
-            </div>
-          </div>
-          )}
-        </section>
-
-        <div className="sidebar-stack">
-          <section className="panel soft">
-            <div className="panel-title">
-              <h2>Quick actions</h2>
-              <span>↗</span>
-            </div>
-            <div className="action-list">
-              {isPatient ? (
-                <>
-                  <Link className="action-item" to="/search"><span>Find a doctor</span><b>→</b></Link>
-                  <Link className="action-item" to="/search"><span>Book a visit</span><b>→</b></Link>
-                  <Link className="action-item" to="/appointments"><span>Manage appointments</span><b>→</b></Link>
-                  <Link className="action-item" to="/profile"><span>Review profile</span><b>→</b></Link>
-                </>
-              ) : (
-                <>
-                  <Link className="action-item" to="/admin/doctors"><span>Review doctors</span><b>→</b></Link>
-                  <Link className="action-item" to="/admin/appointments"><span>Review appointments</span><b>→</b></Link>
-                  <Link className="action-item" to="/admin/users"><span>Manage users</span><b>→</b></Link>
-                </>
-              )}
+            <div className="pt-banner-art" aria-hidden="true">
+              <span className="pt-orb pt-orb-1" />
+              <span className="pt-orb pt-orb-2" />
+              <span className="pt-art-card"><Icon name="stethoscope" size={54} /></span>
+              <span className="pt-art-pill pt-art-pill-1"><Icon name="check" size={14} /> Online booking</span>
+              <span className="pt-art-pill pt-art-pill-2"><Icon name="shield" size={14} /> Verified doctors</span>
             </div>
           </section>
 
-          <section className="panel">
-            <div className="panel-title">
-              <h2>Profile details</h2>
-              <span>◎</span>
+          <div className="pt-stats">
+            <div className="pt-card pt-stat">
+              <span className="pt-stat-icon is-blue"><Icon name="calendar" /></span>
+              <div><strong>{loading ? "–" : upcoming.length}</strong><span>Upcoming visits</span></div>
             </div>
-            <p>
-              {`${user.email} · ${user.phone || "Add a phone number to your profile"}`}
-            </p>
-            <Link className="button button-outline" to="/profile">
-              Edit profile
-            </Link>
+            <div className="pt-card pt-stat">
+              <span className="pt-stat-icon is-green"><Icon name="check" /></span>
+              <div><strong>{loading ? "–" : past.length}</strong><span>Completed visits</span></div>
+            </div>
+            <div className="pt-card pt-stat">
+              <span className="pt-stat-icon is-violet"><Icon name="clock" /></span>
+              <div><strong>{next ? daysUntil(next.startAt) : "—"}</strong><span>Until next visit</span></div>
+            </div>
+          </div>
+
+          <section className="pt-card pt-next" aria-labelledby="pt-next-title">
+            <header className="pt-section-head">
+              <h2 id="pt-next-title">Upcoming appointment</h2>
+              <Link to="/appointments" className="pt-link">All appointments</Link>
+            </header>
+            {loading ? (
+              <div className="pt-empty" role="status">Loading your appointments…</div>
+            ) : error ? (
+              <div className="pt-empty" role="alert">
+                <p>{error}</p>
+                <button className="button button-outline small" type="button" onClick={load}>Try again</button>
+              </div>
+            ) : next ? (
+              <article className="pt-visit">
+                <div className="pt-visit-date">
+                  <span>{fmt({ month: "short" }).format(new Date(next.startAt))}</span>
+                  <strong>{fmt({ day: "numeric" }).format(new Date(next.startAt))}</strong>
+                </div>
+                <div className="pt-visit-body">
+                  <h3>{next.doctor.name}</h3>
+                  <p className="pt-visit-specialty">{next.doctor.specialty}</p>
+                  <ul className="pt-visit-meta">
+                    <li><Icon name="clock" size={16} /> {clock.format(new Date(next.startAt))}–{clock.format(new Date(next.endAt))}</li>
+                    {next.doctor.office && <li><Icon name="pin" size={16} /> {next.doctor.office}</li>}
+                  </ul>
+                </div>
+                <span className={`pt-pill ${next.status === "OCCUPIED" ? "is-blue" : "is-green"}`}>{next.status === "OCCUPIED" ? "Checked in" : "Booked"}</span>
+              </article>
+            ) : (
+              <div className="pt-empty">
+                <span className="pt-empty-icon"><Icon name="calendar" size={26} /></span>
+                <h3>No upcoming visit yet</h3>
+                <p>Your next appointment will appear here once you book it.</p>
+                <Link className="button small" to="/search">Find a doctor</Link>
+              </div>
+            )}
+            {later.length > 0 && (
+              <ul className="pt-later">
+                {later.map((item) => (
+                  <li key={item.id}>
+                    <span className="pt-later-time">{shortDate.format(new Date(item.startAt))} · {clock.format(new Date(item.startAt))}</span>
+                    <strong>{item.doctor.name}</strong>
+                    <span className="pt-later-spec">{item.doctor.specialty}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="pt-quick" aria-label="Quick actions">
+            <Link className="pt-card pt-quick-item" to="/search"><span className="pt-stat-icon is-blue"><Icon name="search" /></span><span><strong>Find a doctor</strong><small>Search by name or specialty</small></span></Link>
+            <Link className="pt-card pt-quick-item" to="/appointments"><span className="pt-stat-icon is-violet"><Icon name="calendar" /></span><span><strong>Manage visits</strong><small>Cancel, check in, receipts</small></span></Link>
+            <Link className="pt-card pt-quick-item" to="/profile"><span className="pt-stat-icon is-green"><Icon name="user" /></span><span><strong>My profile</strong><small>Contact details and IIN</small></span></Link>
           </section>
         </div>
-      </div>
 
-      {isPatient && pastAppointments.length > 0 && (
-        <section className="panel" aria-labelledby="past-appointments-heading">
-          <div className="panel-title"><h2 id="past-appointments-heading">Past appointments</h2></div>
-          <ul className="dashboard-appointment-list">
-            {pastAppointments.map((appointment) => (
-              <li key={appointment.id}>
-                <strong>{appointment.doctor.name}</strong>
-                <span>{appointment.doctor.specialty} · {appointmentDate(appointment.startAt)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <div className="metric-row">
-        <div className="metric-card">
-          <span>Care access</span>
-            <strong>{isPatient ? "Ready" : "Active"}</strong>
-            <small>{isPatient ? "Booking ready" : "Operations status"}</small>
-        </div>
-        <div className="metric-card">
-          <span>Care team</span>
-            <strong>{isPatient ? "Available" : "Healthy"}</strong>
-            <small>{isPatient ? "Doctors available" : "Platform steady"}</small>
-        </div>
-        <div className="metric-card">
-          <span>Health record</span>
-            <strong>{isPatient ? "Secure" : "Tracked"}</strong>
-            <small>{isPatient ? "Your records stay private" : "Data under review"}</small>
-        </div>
+        <aside className="pt-side">
+          <section className="pt-card pt-profile">
+            <header className="pt-profile-head">
+              <h2>My profile</h2>
+              <Link to="/profile" className="pt-round" aria-label="Edit profile"><Icon name="file" size={16} /></Link>
+            </header>
+            <div className="pt-profile-body">
+              <span className="pt-avatar">{`${user.firstName[0] || ""}${user.lastName[0] || ""}`.toUpperCase()}</span>
+              <div>
+                <strong>{user.firstName} {user.lastName}</strong>
+                <span>{roleLabel(user.role)}</span>
+              </div>
+            </div>
+            <dl className="pt-profile-facts">
+              <div><dt>Email</dt><dd>{user.email}</dd></div>
+              <div><dt>Phone</dt><dd>{user.phone || "Not added"}</dd></div>
+            </dl>
+          </section>
+          <MiniCalendar marked={marked} />
+        </aside>
       </div>
     </div>
   );

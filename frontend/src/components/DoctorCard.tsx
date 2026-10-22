@@ -86,14 +86,12 @@ export default function DoctorCard({ doctor, canBook, checkingAccess, role, quer
     window.localStorage.setItem("hp_favorite_doctors", [...favorites].join(","));
   }, [doctor.id, favorite]);
 
+  const tone = (doctor.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % 4) + 1;
+
   return (
     <article className="fd-card">
-      <div className="fd-card-top">
+      <div className={`fd-card-cover fd-tone-${tone}`}>
         <div className="fd-avatar" aria-hidden="true">{initialsFor(doctor)}</div>
-        <div className="fd-card-identity">
-          <h2>{doctorName}</h2>
-          <p className="fd-specialty">{doctor.category.name}</p>
-        </div>
         <button
           className={`favorite-button${favorite ? " is-favorite" : ""}`}
           type="button"
@@ -103,6 +101,13 @@ export default function DoctorCard({ doctor, canBook, checkingAccess, role, quer
         >
           {favorite ? "♥" : "♡"}
         </button>
+      </div>
+
+      <div className="fd-card-top">
+        <div className="fd-card-identity">
+          <h2>{doctorName}</h2>
+          <p className="fd-specialty">{doctor.category.name}</p>
+        </div>
       </div>
 
       <div className="fd-card-meta">
@@ -120,7 +125,7 @@ export default function DoctorCard({ doctor, canBook, checkingAccess, role, quer
       )}
 
       <p className="fd-next-slot">
-        Next: {nextLabel ? `${nextLabel.day} · ${nextLabel.time} · UTC+5` : "No upcoming slots listed · UTC+5"}
+        {nextLabel ? `Next: ${nextLabel.day} · ${nextLabel.time} · UTC+5` : "No free time slots yet"}
       </p>
 
       {appointmentSlots.length > 0 && (

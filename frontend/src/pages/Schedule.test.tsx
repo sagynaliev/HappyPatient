@@ -275,10 +275,13 @@ describe("doctor weekly schedule setup", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Mon 11, .*Booked/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Release appointment…" }));
     expect(authApi.updateSlot).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Confirm release" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Doctor is unavailable" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm release" }));
     await waitFor(() => expect(authApi.updateSlot).toHaveBeenCalledWith("booked-slot", {
       status: "FREE",
       releaseBooking: true,
+      cancellationReason: "Doctor is unavailable",
     }));
     expect(await screen.findByText("Appointment released. The slot is now available.")).toBeTruthy();
   });

@@ -20,7 +20,9 @@ import DoctorProfilePage from "./pages/DoctorProfilePage";
 import ProfilePage from "./pages/ProfilePage";
 import DoctorAppointments from "./pages/DoctorAppointments";
 import DoctorDashboard from "./pages/DoctorDashboard";
+import FrontDeskPage from "./pages/FrontDeskPage";
 import "./styles/global.css";
+import "./styles/redesign.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
@@ -62,6 +64,10 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
               <Route path="/doctor/appointments" element={<DoctorAppointments />} />
               <Route path="/doctor/schedule" element={<Schedule />} />
+            </Route>
+            <Route element={<ProtectedRoute roles={["FRONT_DESK", "ADMIN"]} />}>
+              <Route path="/front-desk" element={<FrontDeskPage />} />
+              <Route path="/front-desk/walk-in" element={<FrontDeskPage view="walk-in" />} />
             </Route>
           </Routes>
         </Layout>

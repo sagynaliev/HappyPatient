@@ -176,9 +176,7 @@ export default function PatientBookingFlow({
           }}>
             ← {step === 1 ? "Back to doctor profile" : "Previous step"}
           </Link>
-        ) : (
-          <Link className="bk-back" to={`/doctors/${doctor?.id ?? ""}`}>← Back to doctor profile</Link>
-        )}
+        ) : null}
         <header className="bk-page-heading">
           <h1>{step === 5 ? "Appointment Confirmed!" : "Book your appointment"}</h1>
           <p>{step === 5
@@ -196,7 +194,7 @@ export default function PatientBookingFlow({
             return (
               <li className={`bk-step bk-step--${status}`} key={label} aria-current={status === "current" ? "step" : undefined}>
                 <span className="bk-step-bar" aria-hidden="true" />
-                <span className="bk-step-label">{number}. {label}</span>
+                <span className="bk-step-label">{status === "completed" ? <span className="bk-step-check" aria-hidden="true">✓</span> : `${number}. `}{label}</span>
                 <span className="sr-only">{status}</span>
               </li>
             );
@@ -215,19 +213,17 @@ export default function PatientBookingFlow({
               <div><dt>Appointment</dt><dd>{formatFullDate(slotDateInAlmaty(bookingSuccess.slot.startAt))}</dd></div>
               <div><dt>Time</dt><dd>{formatTimeInAlmaty(bookingSuccess.slot.startAt)}–{formatTimeInAlmaty(bookingSuccess.slot.endAt)} · UTC+5</dd></div>
               {office && doctor && <div><dt>Location</dt><dd><DoctorLocation {...doctor} /></dd></div>}
+              {bookingSuccess.purpose && <div><dt>Reason for visit</dt><dd>{bookingSuccess.purpose}</dd></div>}
               {fee && <div><dt>Consultation fee</dt><dd>{fee}</dd></div>}
             </dl>
-            <p className="bk-info bk-info--success">Your appointment is confirmed and attached to your patient account.</p>
+            <p className="bk-info bk-info--success">Your appointment is confirmed and attached to your patient account. A confirmation is waiting under the bell.</p>
             <div className="bk-confirm-actions">
+              <Link className="button" to="/appointments">View my appointments</Link>
               <button className="button button-outline" type="button" onClick={() => downloadCalendarEvent(bookingSuccess.doctorName, bookingSuccess.slot, office)}>
-                Add to Calendar
+                Add to calendar
               </button>
-              <Link className="button" to="/dashboard">View my dashboard</Link>
             </div>
-            {bookingSuccess.purpose && (
-              <p className="bk-confirm-reason"><strong>Reason for visit:</strong> {bookingSuccess.purpose}</p>
-            )}
-            <Link className="bk-home-link" to="/search">Return to doctor search</Link>
+            <Link className="bk-home-link" to="/search">Book another doctor</Link>
           </section>
         ) : doctor ? (
           <div className="bk-layout">

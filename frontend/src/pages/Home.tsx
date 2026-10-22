@@ -1,26 +1,38 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DoctorSearchForm from "../components/DoctorSearchForm";
+import { Icon, IconName } from "../components/Icons";
+import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
+import "../styles/home.css";
 
-const specialtyStyles = [
-  { icon: "◒", tone: "mint" },
-  { icon: "♡", tone: "lavender" },
-  { icon: "✦", tone: "peach" },
-  { icon: "⌁", tone: "blue" },
+const HERO_PHOTO = "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=900&q=85";
+
+const specialtyIcons: IconName[] = ["heart", "stethoscope", "user", "shield", "spark", "file"];
+
+const steps = [
+  { title: "Find a doctor", text: "Search by name, specialty or city and compare consultation fees." },
+  { title: "Pick a time", text: "Choose a free 30-minute slot that fits your day." },
+  { title: "Get confirmation", text: "Your booking and every change appear under the bell." },
+  { title: "Check in on arrival", text: "Confirm you are here from your phone or at the front desk." },
 ];
 
 export default function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [office, setOffice] = useState("");
   const [specialties, setSpecialties] = useState<{ id: string; name: string }[]>([]);
+  const [doctorCount, setDoctorCount] = useState<number | null>(null);
 
   useEffect(() => {
     api<{ categories: { id: string; name: string }[] }>("/categories")
       .then((result) => setSpecialties(result.categories || []))
       .catch(() => setSpecialties([]));
+    api<{ doctors: unknown[] }>("/doctors")
+      .then((result) => setDoctorCount(result.doctors?.length ?? null))
+      .catch(() => setDoctorCount(null));
   }, []);
 
   function navigateToSearch(searchQuery: string, searchCategory: string, searchOffice: string) {
@@ -39,80 +51,100 @@ export default function Home() {
 
   function selectSuggestion(suggestion: { kind: "specialty" | "doctor" | "clinic"; label: string }) {
     if (suggestion.kind === "specialty") navigateToSearch("", suggestion.label, "");
-    else if (suggestion.kind === "clinic") navigateToSearch(suggestion.label, "", "");
     else navigateToSearch(suggestion.label, "", "");
   }
 
   return (
-    <div className="home">
-      <section className="hero-premium home-hero">
-        <div className="hero-glow hero-glow-one" aria-hidden="true" />
-        <div className="hero-glow hero-glow-two" aria-hidden="true" />
-        <div className="hero-premium-layout">
-          <div className="hero-copy">
-            <p className="eyebrow eyebrow-light">HappyPatient care directory</p>
-            <h1><span>Find care that</span><em>fits your needs.</em></h1>
-            <p className="lead">Search doctors by name, specialty, or location, then review available appointment times.</p>
-            <div className="homepage-search">
-              <div className="homepage-search-title">
-                <strong>Find a doctor</strong>
-                <span>Search the doctor directory</span>
-              </div>
-              <DoctorSearchForm
-                query={query}
-                category={category}
-                office={office}
-                categories={specialties}
-                onQueryChange={setQuery}
-                onCategoryChange={setCategory}
-                onOfficeChange={setOffice}
-                onSubmit={search}
-                onSuggestionSelect={selectSuggestion}
-                doctorFieldLabel="Doctor name, specialty, or location"
-                bare
-              />
-            </div>
-            <p className="home-search-hint">You can refine your search by specialty, location, and availability.</p>
+    <div className="hm">
+      <section className="hm-hero" aria-labelledby="hm-title">
+        <div className="hm-hero-copy">
+          <h1 id="hm-title">Your doctor, <span>a few clicks away</span></h1>
+          <p className="hm-lead">Find a specialist in Almaty, book a free time slot and check in when you arrive — without queues at the front desk.</p>
+          <div className="hm-search">
+            <DoctorSearchForm
+              query={query}
+              category={category}
+              office={office}
+              categories={specialties}
+              onQueryChange={setQuery}
+              onCategoryChange={setCategory}
+              onOfficeChange={setOffice}
+              onSubmit={search}
+              onSuggestionSelect={selectSuggestion}
+              doctorFieldLabel="Doctor name, specialty, or location"
+              buttonLabel="Find a doctor"
+              showSubmit
+              bare
+            />
           </div>
-          <div className="home-search-panel" aria-label="Search tips">
-            <span className="home-search-panel-icon" aria-hidden="true">⌕</span>
-            <p className="eyebrow">Start with a search</p>
-            <h2>Choose what matters to you.</h2>
-            <ul>
-              <li>Search by a doctor’s name</li>
-              <li>Browse available specialties</li>
-              <li>Filter by listed office location</li>
-            </ul>
-            <Link className="text-link" to="/search">Open doctor directory <span aria-hidden="true">→</span></Link>
+          <dl className="hm-stats">
+            <div><dt>Doctors</dt><dd>{doctorCount ?? "—"}</dd></div>
+            <div><dt>Specialties</dt><dd>{specialties.length || "—"}</dd></div>
+            <div><dt>Visit length</dt><dd>30<small> min</small></dd></div>
+          </dl>
+        </div>
+
+        <div className="hm-hero-visual">
+          <span className="hm-location"><Icon name="pin" size={16} /> Almaty, Kazakhstan</span>
+          <img src={HERO_PHOTO} alt="" loading="eager" />
+          <span className="hm-tag hm-tag-1"><Icon name="shield" size={15} /> Verified doctors</span>
+          <span className="hm-tag hm-tag-2"><Icon name="calendar" size={15} /> Online booking</span>
+          <span className="hm-tag hm-tag-3"><Icon name="check" size={15} /> 1-tap check-in</span>
+          <div className="hm-visual-note">
+            <strong>Booking takes about a minute</strong>
+            <span>Pick a doctor, choose a slot, confirm.</span>
           </div>
         </div>
       </section>
 
-      <section className="home-section specialties-section" id="specialties" aria-labelledby="specialties-heading">
-        <div className="section-heading">
-          <div><p className="eyebrow">Browse the directory</p><h2 id="specialties-heading">Search by specialty</h2></div>
-          <Link className="text-link" to="/search">View all doctors <span aria-hidden="true">↗</span></Link>
-        </div>
+      <section className="hm-section" id="specialties" aria-labelledby="specialties-heading">
+        <header className="hm-section-head">
+          <h2 id="specialties-heading">Our medical services</h2>
+          <p>Choose a specialty to see the doctors who practise it and their next free times.</p>
+          <Link className="hm-link" to="/search">See all doctors</Link>
+        </header>
         {specialties.length ? (
-          <div className="specialty-grid">
-            {specialties.map((specialty, index) => {
-              const style = specialtyStyles[index % specialtyStyles.length];
-              return (
-                <Link className={`specialty-tile ${style.tone}`} to={`/search?category=${encodeURIComponent(specialty.name)}`} key={specialty.id}>
-                  <span className="tile-icon" aria-hidden="true">{style.icon}</span>
-                  <span><strong>{specialty.name}</strong><small>View doctors in this specialty</small></span>
-                  <b aria-hidden="true">↗</b>
-                </Link>
-              );
-            })}
+          <div className="hm-services">
+            {specialties.slice(0, 7).map((specialty, index) => (
+              <Link className="hm-service" to={`/search?category=${encodeURIComponent(specialty.name)}`} key={specialty.id}>
+                <span className="hm-service-icon"><Icon name={specialtyIcons[index % specialtyIcons.length]} size={22} /></span>
+                <strong>{specialty.name}</strong>
+                <span className="hm-service-cta">Make an appointment <Icon name="arrow-right" size={16} /></span>
+              </Link>
+            ))}
+            <Link className="hm-service hm-service-feature" to="/search">
+              <strong>{specialties.length > 7 ? `+${specialties.length - 7} more specialties` : "All specialties"}</strong>
+              <span>Browse the full doctor directory with filters for city, price and availability.</span>
+              <span className="hm-service-cta">Open directory <Icon name="arrow-right" size={16} /></span>
+            </Link>
           </div>
         ) : (
-          <p className="muted">Specialties will appear here when the directory is available.</p>
+          <p className="hm-muted">Specialties will appear here when the directory is available.</p>
         )}
       </section>
-      <section className="home-directory-cta">
-        <div><p className="eyebrow">Ready to continue?</p><h2>Explore the doctor directory.</h2></div>
-        <Link className="button" to="/search">Find a doctor <span aria-hidden="true">→</span></Link>
+
+      <section className="hm-section hm-steps-section" aria-labelledby="steps-heading">
+        <header className="hm-section-head">
+          <h2 id="steps-heading">How a visit works</h2>
+          <p>From search to the doctor’s office in four steps.</p>
+        </header>
+        <ol className="hm-steps">
+          {steps.map((step, index) => (
+            <li key={step.title}>
+              <span className="hm-step-number">{index + 1}</span>
+              <strong>{step.title}</strong>
+              <p>{step.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="hm-cta">
+        <div>
+          <h2>Ready to book your visit?</h2>
+          <p>{user ? "Find a doctor and pick a free time." : "Create a free account to book and manage your visits."}</p>
+        </div>
+        <Link className="hm-cta-button" to={user ? "/search" : "/register"}>{user ? "Find a doctor" : "Create account"}</Link>
       </section>
     </div>
   );

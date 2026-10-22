@@ -33,7 +33,7 @@
 .profile-heading h1 {
   margin: 0;
   color: var(--text-primary);
-  font: 800 clamp(28px, 3vw, 36px)/1.2 Manrope, sans-serif;
+  font: 800 clamp(28px, 3vw, 36px)/1.2 Onest, sans-serif;
   letter-spacing: -.7px;
 }
 
@@ -66,7 +66,7 @@
 .bk-load-state h1 {
   margin: 12px 0 6px;
   color: var(--text-primary);
-  font: 700 22px/1.3 Manrope, sans-serif;
+  font: 700 22px/1.3 Onest, sans-serif;
 }
 
 .bk-load-state p {
@@ -144,7 +144,7 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: 0 4px 18px #193b4a08;
+  box-shadow: 0 4px 18px #101b3b08;
 }
 
 .bk-card-heading {
@@ -156,7 +156,7 @@
 .profile-card h2 {
   margin: 0;
   color: var(--text-primary);
-  font: 700 20px/1.3 Manrope, sans-serif;
+  font: 700 20px/1.3 Onest, sans-serif;
 }
 
 .bk-card-heading p {
@@ -260,7 +260,7 @@
 .bk-calendar-header h3 {
   margin: 0;
   color: var(--text-primary);
-  font: 700 15px Manrope, sans-serif;
+  font: 700 15px Onest, sans-serif;
 }
 
 .bk-calendar-header button {
@@ -321,7 +321,7 @@
   border-radius: 50%;
   color: var(--text-secondary);
   background: transparent;
-  font: 500 13px "DM Sans", sans-serif;
+  font: 500 13px Onest, sans-serif;
 }
 
 .bk-calendar-day.is-available {
@@ -359,7 +359,7 @@
 .bk-date-time > h3 {
   margin: 0;
   color: var(--text-primary);
-  font: 700 16px Manrope, sans-serif;
+  font: 700 16px Onest, sans-serif;
 }
 
 .bk-slot-grid {
@@ -375,7 +375,7 @@
   border-radius: 8px;
   color: var(--primary);
   background: var(--surface);
-  font: 600 13px "DM Sans", sans-serif;
+  font: 600 13px Onest, sans-serif;
   cursor: pointer;
 }
 
@@ -450,7 +450,7 @@
   border-radius: 8px;
   color: var(--text-primary);
   background: var(--surface);
-  font: 400 14px "DM Sans", sans-serif;
+  font: 400 14px Onest, sans-serif;
 }
 
 .bk-field input[readonly],
@@ -682,7 +682,7 @@
 .bk-confirmation h2 {
   margin: 16px 0 5px;
   color: var(--text-primary);
-  font: 800 24px/1.25 Manrope, sans-serif;
+  font: 800 24px/1.25 Onest, sans-serif;
 }
 
 .bk-confirm-meta {
@@ -909,7 +909,7 @@
     z-index: 2;
     margin: 0 -2px;
     padding: 10px;
-    box-shadow: 0 -5px 18px #193b4a0a;
+    box-shadow: 0 -5px 18px #101b3b0a;
   }
 
   .bk-action-bar > span {
