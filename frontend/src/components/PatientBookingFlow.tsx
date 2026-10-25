@@ -205,6 +205,7 @@ export default function PatientBookingFlow({
         </header>
 
         {step === 5 && bookingSuccess ? (
+          <div className="bk-done">
           <section className="bk-confirmation bk-card" aria-labelledby="bk-confirmation-title">
             <div className="bk-confirm-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="20" rx="3" /><path d="M10 4v6m12-6v6M5 13h22m-16 7 3 3 7-7" /></svg>
@@ -228,6 +229,38 @@ export default function PatientBookingFlow({
             </div>
             <Link className="bk-home-link" to="/search">Book another doctor</Link>
           </section>
+            <aside className="bk-next" aria-label="What happens next">
+              <section className="bk-card bk-next-card">
+                <h2>What happens next</h2>
+                <ol className="bk-next-steps">
+                  <li>
+                    <span className="bk-next-icon" aria-hidden="true"><Icon name="check" size={18} /></span>
+                    <div><strong>Booking saved</strong><span>You’ll find it under the bell and in My appointments.</span></div>
+                  </li>
+                  <li>
+                    <span className="bk-next-icon" aria-hidden="true"><Icon name="clock" size={18} /></span>
+                    <div><strong>Arrive 10 minutes early</strong><span>{formatDateInAlmaty(slotDateInAlmaty(bookingSuccess.slot.startAt), { weekday: "short", day: "numeric", month: "short" })} · {formatTimeInAlmaty(bookingSuccess.slot.startAt)}{office ? ` · ${office}` : ""}</span></div>
+                  </li>
+                  <li>
+                    <span className="bk-next-icon" aria-hidden="true"><Icon name="desk" size={18} /></span>
+                    <div><strong>Check in at the front desk</strong><span>Check-in opens at {formatTimeInAlmaty(new Date(Date.parse(bookingSuccess.slot.startAt) - 30 * 60_000).toISOString())}. Give your name or IIN.</span></div>
+                  </li>
+                  <li>
+                    <span className="bk-next-icon" aria-hidden="true"><Icon name="file" size={18} /></span>
+                    <div><strong>Get your receipt</strong><span>After check-in you can download or print it.</span></div>
+                  </li>
+                </ol>
+              </section>
+              <section className="bk-card bk-next-change">
+                <span className="bk-next-icon" aria-hidden="true"><Icon name="calendar" size={18} /></span>
+                <div>
+                  <strong>Plans changed?</strong>
+                  <span>Cancel from My appointments so the time goes back to other patients.</span>
+                </div>
+                <Link className="button button-outline" to="/appointments">Manage</Link>
+              </section>
+            </aside>
+          </div>
         ) : doctor ? (
           <div className="bk-layout">
             <div className="bk-main">

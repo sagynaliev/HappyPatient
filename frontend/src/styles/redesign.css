@@ -685,3 +685,33 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 .wi-empty strong { color: var(--text-primary); font-size: 16px; font-weight: 600; }
 .wi-empty-icon { display: grid; width: 56px; height: 56px; margin-bottom: 4px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--primary); }
 .wi-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+
+/* Specialty search: one field with the icon inside (beats the generic form label/input rules) */
+.sms-popover label.sms-search { display: flex; flex-direction: row; align-items: center; gap: 8px; height: 42px; margin: 0; padding: 0 12px; border: 1px solid transparent; border-radius: 12px; background: #f4f6fb; color: var(--text-secondary); font-size: 14px; font-weight: 400; transition: border-color .15s ease, background .15s ease; }
+.sms-popover label.sms-search:focus-within { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgb(43 99 246 / 12%); }
+.sms-popover label.sms-search svg { flex: 0 0 auto; }
+.sms-popover label.sms-search input,
+.sms-popover label.sms-search input:focus { flex: 1; width: auto; height: 100%; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; outline: none; background: transparent; box-shadow: none; color: var(--text-primary); font: inherit; }
+
+/* ---------- Booking confirmation: card + "what happens next" side by side ---------- */
+.bk-done { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); align-items: start; gap: 24px; }
+.bk-done .bk-confirmation { width: 100%; margin: 0; }
+.bk-next { display: grid; gap: 16px; }
+.bk-next-card { padding: 24px; }
+.bk-next-card h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+.bk-next-steps { position: relative; display: grid; gap: 18px; margin: 10px 0 0; padding: 0; list-style: none; }
+.bk-next-steps::before { content: ""; position: absolute; top: 18px; bottom: 18px; left: 17px; width: 2px; border-radius: 2px; background: #eef2fb; }
+.bk-next-steps li { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; align-items: start; }
+.bk-next-steps li:first-child .bk-next-icon { background: #e3f7ee; color: #0f8a63; }
+.bk-next-steps strong, .bk-next-change strong { display: block; font-size: 14.5px; font-weight: 600; }
+.bk-next-steps span:not(.bk-next-icon), .bk-next-change span:not(.bk-next-icon) { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 13.5px; line-height: 1.45; }
+.bk-next-icon { position: relative; z-index: 1; display: grid; width: 36px; height: 36px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--primary); }
+.bk-next-change { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 18px 20px; }
+.bk-next-change .button { min-height: 40px; padding: 0 16px; }
+@media (max-width: 1000px) { .bk-done { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 1001px) {
+  .bk-done { align-items: stretch; }
+  .bk-next { grid-template-rows: 1fr auto; }
+  .bk-next-card { display: flex; flex-direction: column; }
+  .bk-next-steps { flex: 1; align-content: space-evenly; }
+}
