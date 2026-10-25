@@ -86,7 +86,7 @@ function ReceiptSlip({ receipt }: { receipt: Receipt }) {
   );
 }
 
-export function ReceiptView({ receipt, onClose }: { receipt: Receipt; onClose?: () => void }) {
+export function ReceiptView({ receipt }: { receipt: Receipt }) {
   useEffect(() => {
     const cleanup = () => document.body.classList.remove("hp-printing-receipt");
     window.addEventListener("afterprint", cleanup);
@@ -112,14 +112,36 @@ export function ReceiptView({ receipt, onClose }: { receipt: Receipt; onClose?: 
     <>
       <section className="receipt-view" aria-label="Registration receipt">
         <ReceiptSlip receipt={receipt} />
-        <div className="receipt-actions">
-          <button className="button" type="button" disabled={downloading} onClick={() => void download()}>{downloading ? "Preparing PDF…" : "Download PDF"}</button>
-          <button className="button button-outline" type="button" onClick={print}>Print receipt</button>
-          {onClose && <button className="button button-outline" type="button" onClick={onClose}>Close</button>}
+        {/* Actions float over the bottom of the receipt so they are reachable without scrolling. */}
+        <div className="receipt-actions" role="toolbar" aria-label="Receipt actions">
+          <button className="receipt-action is-primary" type="button" disabled={downloading} onClick={() => void download()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" /></svg>
+            {downloading ? "Preparing PDF…" : "Download PDF"}
+          </button>
+          <button className="receipt-action" type="button" onClick={print}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M7 14h10v6H7z" /></svg>
+            Print receipt
+          </button>
         </div>
         {downloadError && <p className="receipt-error" role="alert">{downloadError}</p>}
       </section>
       {createPortal(<div className="receipt-print-portal"><ReceiptSlip receipt={receipt} /></div>, document.body)}
     </>
+  );
+}
+
+/** Receipt in a dialog: the receipt scrolls inside, the action bar stays on top of it. */
+export function ReceiptDialog({ receipt, onClose }: { receipt: Receipt; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="receipt-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="receipt-modal" role="dialog" aria-modal="true" aria-label={`Receipt ${receipt.reference}`}>
+        <ReceiptView receipt={receipt} />
+      </div>
+    </div>
   );
 }

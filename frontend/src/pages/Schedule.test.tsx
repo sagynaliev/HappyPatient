@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Schedule from "./Schedule";
 import { authApi } from "../lib/api";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const authState = vi.hoisted(() => ({
   user: {
@@ -127,6 +130,9 @@ describe("doctor weekly schedule setup", () => {
   });
 
   it("validates the time range and keeps the dialog open after a save error", async () => {
+    // Pin "today" to a Monday so the current week always has future working days.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-19T08:00:00+05:00"));
     vi.mocked(authApi.createWorkingDays).mockRejectedValueOnce(new Error("This schedule overlaps an existing slot."));
     render(
       <MemoryRouter initialEntries={["/schedule?addAvailability=1"]}>

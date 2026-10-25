@@ -1,3 +1,4 @@
+import { BreadcrumbLabel } from "../lib/breadcrumbStore";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import AvailabilityCalendar, { slotDateInAlmaty } from "../components/AvailabilityCalendar";
@@ -146,6 +147,7 @@ export default function DoctorProfilePage() {
   return (
     <div className="dp-page">
       <div className="dp-container">
+        <BreadcrumbLabel id="doctor" label={doctorName} />
         <Link className="dp-back" to={backPath} aria-label="Back to doctor results">← Back to doctor results</Link>
         <div className="dp-layout">
           <div className="dp-main">

@@ -188,16 +188,18 @@ describe('front-desk availability picker', () => {
     const later = new Date(Date.now() + 3 * 60 * 60_000);
     const sooner = new Date(Date.now() + 60 * 60_000);
     const doctorA = { id: 'doc-a', office: 'Office 1', officeNumber: null, clinicName: null, consultationFee: 10000, category: { name: 'Cardiology' }, user: { firstName: 'Ann', lastName: 'Heart' } };
+    prismaMock.scheduleSlot.findMany.mockResolvedValueOnce([{ doctor: { category: { name: 'Cardiology' } } }, { doctor: { category: { name: 'Neurology' } } }]);
     prismaMock.scheduleSlot.findMany.mockResolvedValueOnce([
       { id: 's1', startAt: sooner, endAt: new Date(sooner.getTime() + 30 * 60_000), doctor: doctorA },
       { id: 's2', startAt: later, endAt: new Date(later.getTime() + 30 * 60_000), doctor: doctorA },
     ]);
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date());
-    const response = await request(app).get(`/api/front-desk/availability?date=${today}&category=Cardiology`).set('Authorization', bearer(Role.FRONT_DESK, 'desk-user')).expect(200);
+    const response = await request(app).get(`/api/front-desk/availability?date=${today}&category=Cardiology,Neurology`).set('Authorization', bearer(Role.FRONT_DESK, 'desk-user')).expect(200);
+    expect(response.body.specialtyCounts).toEqual({ Cardiology: 1, Neurology: 1 });
     expect(response.body.doctors).toHaveLength(1);
     expect(response.body.doctors[0]).toMatchObject({ id: 'doc-a', name: 'Dr. Ann Heart', specialty: 'Cardiology' });
     expect(response.body.doctors[0].slots.map((slot: { id: string }) => slot.id)).toEqual(['s1', 's2']);
-    expect(prismaMock.scheduleSlot.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ status: SlotStatus.FREE, doctor: { category: { name: 'Cardiology' } } }) }));
+    expect(prismaMock.scheduleSlot.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ status: SlotStatus.FREE, doctor: { category: { name: { in: ['Cardiology', 'Neurology'] } } } }) }));
   });
 
   it('is only available to front-desk staff and admins', async () => {

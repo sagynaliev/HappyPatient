@@ -5,6 +5,8 @@ import { Role } from "../lib/api";
 import { formatUserDisplayName, getUserInitials } from "../lib/userDisplay";
 import { NotificationBell } from "./NotificationBell";
 import { Icon, IconName } from "./Icons";
+import { Breadcrumbs } from "./Breadcrumbs";
+import { SidebarCard } from "./SidebarCard";
 import "../styles/appShell.css";
 
 const COMPACT_HEADER_QUERY = "(max-width: 1100px)";
@@ -26,12 +28,12 @@ type NavItem = { to: string; label: string; icon: IconName; end?: boolean };
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   PATIENT: [
-    { to: "/dashboard", label: "Dashboard", icon: "home" },
+    { to: "/dashboard", label: "Dashboard", icon: "grid" },
     { to: "/search", label: "Find a Doctor", icon: "search" },
     { to: "/appointments", label: "Appointments", icon: "calendar" },
   ],
   DOCTOR: [
-    { to: "/doctor/dashboard", label: "Dashboard", icon: "home" },
+    { to: "/doctor/dashboard", label: "Dashboard", icon: "grid" },
     { to: "/doctor/appointments", label: "Appointments", icon: "calendar" },
     { to: "/doctor/schedule", label: "My Schedule", icon: "clock" },
   ],
@@ -41,7 +43,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: "/search", label: "Find a Doctor", icon: "search" },
   ],
   ADMIN: [
-    { to: "/admin/dashboard", label: "Dashboard", icon: "home" },
+    { to: "/admin/dashboard", label: "Dashboard", icon: "grid" },
     { to: "/admin/users", label: "Users", icon: "users" },
     { to: "/admin/doctors", label: "Doctors", icon: "stethoscope" },
     { to: "/admin/appointments", label: "Appointments", icon: "calendar" },
@@ -63,49 +65,74 @@ function BrandMark() {
   );
 }
 
+const COLLAPSE_KEY = "hp_sidebar_collapsed";
+
+function readCollapsed() {
+  try { return window.localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
+}
+
 function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
   const close = () => setOpen(false);
   useEffect(close, [location.pathname]);
   if (!user) return null;
   const items = NAV_BY_ROLE[user.role] ?? [];
   const displayName = formatUserDisplayName(user.firstName, user.lastName);
 
+  function toggleCollapsed() {
+    setCollapsed((value) => {
+      const next = !value;
+      try { window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0"); } catch { /* the choice just is not remembered */ }
+      return next;
+    });
+  }
+
   return (
-    <div className={`hp-shell${open ? " is-nav-open" : ""}`}>
+    <div className={`hp-shell${open ? " is-nav-open" : ""}${collapsed ? " is-collapsed" : ""}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="hp-sidebar" id="primary-navigation" aria-label="Main navigation">
+        <button className="hp-collapse" type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"} /></svg>
+        </button>
         <div className="hp-sidebar-top">
-          <Link className="hp-brand" to="/" onClick={close}>
+          <Link className="hp-brand" to="/" onClick={close} aria-label="HappyPatient home">
             <BrandMark />
-            <span>Happy<b>Patient</b></span>
+            <span className="hp-hide-collapsed">Happy<b>Patient</b></span>
           </Link>
           <button className="hp-icon-button hp-sidebar-close" type="button" aria-label="Close navigation menu" onClick={close}><Icon name="close" /></button>
         </div>
-        <nav className="hp-nav">
-          <NavLink to="/" end onClick={close} className="hp-nav-link"><Icon name="spark" /><span>Home</span></NavLink>
-          {items.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} onClick={close} className="hp-nav-link">
-              <Icon name={item.icon} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-        <div className="hp-sidebar-bottom">
-          <NavLink className="fd-profile-link hp-profile" to="/profile" onClick={close} aria-label={`Profile: ${displayName}`}>
+        <div className="hp-nav-group">
+          <p className="hp-nav-label hp-hide-collapsed">Menu</p>
+          <nav className="hp-nav">
+            <NavLink to="/" end onClick={close} className="hp-nav-link" data-tooltip="Home"><Icon name="home" /><span className="hp-hide-collapsed">Home</span></NavLink>
+            {items.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.end} onClick={close} className="hp-nav-link" data-tooltip={item.label}>
+                <Icon name={item.icon} />
+                <span className="hp-hide-collapsed">{item.label}</span>
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+        <div className="hp-nav-group">
+          <p className="hp-nav-label hp-hide-collapsed">Account</p>
+          <NavLink className="fd-profile-link hp-profile" to="/profile" onClick={close} aria-label={`Profile: ${displayName}`} data-tooltip="Profile">
             <span className="user-chip" aria-hidden="true">{getUserInitials(user.firstName, user.lastName)}</span>
-            <span className="hp-profile-text">
+            <span className="hp-profile-text hp-hide-collapsed">
               <span className="fd-user-name">{displayName}</span>
               <small aria-hidden="true">View profile</small>
             </span>
           </NavLink>
-          <button className="hp-signout" type="button" onClick={() => { logout(); navigate("/login"); }}>
-            <Icon name="logout" size={18} />
-            <span>Sign out</span>
+          <button className="hp-signout" type="button" onClick={() => { logout(); navigate("/login"); }} data-tooltip="Sign out">
+            <Icon name="logout" size={20} />
+            <span className="hp-hide-collapsed">Sign out</span>
           </button>
+        </div>
+        <div className="hp-sidebar-foot">
+          <SidebarCard role={user.role} collapsed={collapsed} />
         </div>
       </aside>
       <button className="hp-scrim" type="button" tabIndex={-1} aria-hidden="true" onClick={close} />
@@ -113,10 +140,11 @@ function AppShell({ children }: { children: ReactNode }) {
       <div className="hp-main">
         <header className="hp-topbar">
           <div className="hp-topbar-inner">
-          <button className="hp-icon-button hp-menu-button" type="button" onClick={() => setOpen(true)} aria-label="Open navigation menu" aria-controls="primary-navigation" aria-expanded={open}><Icon name="menu" /></button>
-          <div className="hp-top-actions">
-            <NotificationBell />
-          </div>
+            <button className="hp-icon-button hp-menu-button" type="button" onClick={() => setOpen(true)} aria-label="Open navigation menu" aria-controls="primary-navigation" aria-expanded={open}><Icon name="menu" /></button>
+            <Breadcrumbs />
+            <div className="hp-top-actions">
+              <NotificationBell />
+            </div>
           </div>
         </header>
         <main id="main-content" tabIndex={-1} className="hp-content">{children}</main>
@@ -180,6 +208,7 @@ function PublicLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
+      {!isAuthRoute && location.pathname !== "/" && <div className="public-crumbs"><Breadcrumbs /></div>}
       <main id="main-content" tabIndex={-1}>{children}</main>
 
       {!isAuthRoute && (
