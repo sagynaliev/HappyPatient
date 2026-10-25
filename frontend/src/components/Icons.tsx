@@ -1,8 +1,9 @@
 /* Small stroke icon set shared by the app shell and pages. */
 import type { ReactNode } from "react";
-type IconName = "home" | "search" | "calendar" | "clock" | "user" | "users" | "chart" | "stethoscope" | "logout" | "desk" | "menu" | "close" | "file" | "pin" | "heart" | "arrow-right" | "check" | "shield" | "spark";
+type IconName = "grid" | "home" | "search" | "calendar" | "clock" | "user" | "users" | "chart" | "stethoscope" | "logout" | "desk" | "menu" | "close" | "file" | "pin" | "heart" | "arrow-right" | "check" | "shield" | "spark";
 
 const paths: Record<IconName, ReactNode> = {
+  grid: <><rect x="3" y="3" width="7.5" height="7.5" rx="2" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="2" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="2" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" /></>,
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M16 3v4M8 3v4M3 10h18" /></>,

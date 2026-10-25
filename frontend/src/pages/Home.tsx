@@ -60,7 +60,7 @@ export default function Home() {
         <div className="hm-hero-copy">
           <h1 id="hm-title">Your doctor, <span>a few clicks away</span></h1>
           <p className="hm-lead">Find a specialist in Almaty, book a free time slot and check in when you arrive — without queues at the front desk.</p>
-          <div className="hm-search">
+          <div className="hm-search" id="hm-search">
             <DoctorSearchForm
               query={query}
               category={category}
@@ -97,6 +97,25 @@ export default function Home() {
         </div>
       </section>
 
+      <nav className="hm-jump" aria-label="On this page">
+        <span className="hm-jump-title">On this page</span>
+        {[
+          { id: "hm-search", label: "Search a doctor", icon: "search" as const },
+          { id: "specialties", label: "Medical services", icon: "stethoscope" as const },
+          { id: "how-it-works", label: "How a visit works", icon: "clock" as const },
+        ].map((item) => (
+          <a key={item.id} className="hm-jump-link" href={`#${item.id}`} onClick={(event) => {
+            const target = document.getElementById(item.id);
+            if (!target) return;
+            event.preventDefault();
+            target.scrollIntoView({ behavior: "smooth", block: item.id === "hm-search" ? "center" : "start" });
+            if (item.id === "hm-search") target.querySelector<HTMLInputElement>("input")?.focus({ preventScroll: true });
+          }}>
+            <Icon name={item.icon} size={16} /> {item.label}
+          </a>
+        ))}
+      </nav>
+
       <section className="hm-section" id="specialties" aria-labelledby="specialties-heading">
         <header className="hm-section-head">
           <h2 id="specialties-heading">Our medical services</h2>
@@ -123,10 +142,11 @@ export default function Home() {
         )}
       </section>
 
-      <section className="hm-section hm-steps-section" aria-labelledby="steps-heading">
+      <section className="hm-section hm-steps-section" id="how-it-works" aria-labelledby="steps-heading">
         <header className="hm-section-head">
           <h2 id="steps-heading">How a visit works</h2>
           <p>From search to the doctor’s office in four steps.</p>
+          <Link className="hm-link" to={user ? "/search" : "/register"}>{user ? "Find a doctor" : "Create a free account"}</Link>
         </header>
         <ol className="hm-steps">
           {steps.map((step, index) => (
@@ -139,13 +159,6 @@ export default function Home() {
         </ol>
       </section>
 
-      <section className="hm-cta">
-        <div>
-          <h2>Ready to book your visit?</h2>
-          <p>{user ? "Find a doctor and pick a free time." : "Create a free account to book and manage your visits."}</p>
-        </div>
-        <Link className="hm-cta-button" to={user ? "/search" : "/register"}>{user ? "Find a doctor" : "Create account"}</Link>
-      </section>
     </div>
   );
 }

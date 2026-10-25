@@ -1,0 +1,14 @@
+.hp-breadcrumbs { min-width: 0; }
+.hp-breadcrumbs ol { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; margin: 0; padding: 5px; overflow: hidden; border-radius: 12px; background: #eef2fa; list-style: none; }
+.hp-breadcrumbs li { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.hp-breadcrumbs a, .hp-breadcrumbs .hp-crumb-plain, .hp-breadcrumbs [aria-current="page"] { overflow: hidden; padding: 5px 9px; border-radius: 8px; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.hp-breadcrumbs a { color: var(--text-secondary); transition: background .15s ease, color .15s ease; }
+.hp-breadcrumbs a:hover { background: #fff; color: var(--primary-deep); }
+.hp-breadcrumbs .hp-crumb-plain { color: var(--text-secondary); }
+.hp-breadcrumbs [aria-current="page"] { color: var(--text-primary); font-weight: 600; }
+.hp-crumb-sep { flex: 0 0 auto; width: 14px; height: 14px; fill: none; stroke: #9aa4bd; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 600px) {
+  .hp-breadcrumbs li:not(:nth-last-child(-n+2)) { display: none; }
+  .hp-breadcrumbs a, .hp-breadcrumbs [aria-current="page"] { font-size: 13px; padding: 4px 7px; }
+}
+.public-crumbs { width: min(100% - 32px, 1280px); margin: 4px auto 12px; }

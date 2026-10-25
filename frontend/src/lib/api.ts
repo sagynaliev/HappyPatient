@@ -204,8 +204,8 @@ export const authApi = {
   markNotificationsRead: () => api<{ updated: number }>('/notifications/read-all', { method: 'POST' }),
   frontDeskLookup: (iin: string) => api<{ patient: { id: string; firstName: string; lastName: string; email: string; phone: string | null; iin: string } }>(`/front-desk/patients/lookup?iin=${encodeURIComponent(iin)}`),
   frontDeskAppointments: (query = '') => api<{ appointments: FrontDeskAppointment[] }>(`/front-desk/appointments${query ? `?q=${encodeURIComponent(query)}` : ''}`),
-  frontDeskAvailability: (params: { date: string; category?: string; q?: string }) =>
-    api<{ date: string; doctors: AvailabilityDoctor[] }>(`/front-desk/availability?${new URLSearchParams({ date: params.date, ...(params.category ? { category: params.category } : {}), ...(params.q ? { q: params.q } : {}) }).toString()}`),
+  frontDeskAvailability: (params: { date: string; categories?: string[]; q?: string }) =>
+    api<{ date: string; doctors: AvailabilityDoctor[]; specialtyCounts?: Record<string, number> }>(`/front-desk/availability?${new URLSearchParams({ date: params.date, ...(params.categories?.length ? { category: params.categories.join(",") } : {}), ...(params.q ? { q: params.q } : {}) }).toString()}`),
   frontDeskSchedule: (doctorId: string, date: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule?date=${encodeURIComponent(date)}`),
   frontDeskWalkIn: (body: { firstName: string; lastName: string; iin: string; email?: string; phone?: string; doctorId: string; slotId: string; visitPurpose: string }) => api<{ patient: { id: string; firstName: string; lastName: string }; slot: { id: string; status: ScheduleSlot['status'] }; reference: string }>('/front-desk/walk-ins', { method: 'POST', body: JSON.stringify(body) }),
   updateDoctorProfile: (body: DoctorProfileDraft) =>

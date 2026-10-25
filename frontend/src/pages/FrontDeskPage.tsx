@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { authApi, FrontDeskAppointment, Receipt } from "../lib/api";
 import WalkInSlotPicker, { PickedSlot } from "../components/WalkInSlotPicker";
 import "../styles/frontDesk.css";
-import { ReceiptView } from "../components/ReceiptView";
+import { ReceiptDialog } from "../components/ReceiptView";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty" }).format(new Date());
 const dateText = (value: string) => new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "Asia/Almaty" }).format(new Date(value));
@@ -68,6 +68,12 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
     finally { setBusy(false); }
   }
 
+  async function openReceipt(appointment: FrontDeskAppointment) {
+    setError("");
+    try { setReceipt((await authApi.receipt(appointment.id)).receipt); }
+    catch (cause: unknown) { setError(cause instanceof Error ? cause.message : "Receipt is not available."); }
+  }
+
   return <main className="front-desk-page">
     <header className="front-desk-heading fdk-banner">
       <div className="fdk-banner-copy">{view === "walk-in" ? <><h1>Walk-in registration</h1><p>Register a patient who arrived without a booking and give them the next free time.</p></> : <><h1>Front desk</h1><p>Find appointments and confirm arrivals.</p></>}</div>
@@ -81,6 +87,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
     {error && <div className="front-desk-alert error" role="alert">{error}</div>}
     <div className={view === "walk-in" ? "fdk-walkin-layout" : "fdk-appointments-layout"}>
       {view === "appointments" && <section className="front-desk-card"><div className="fdk-section-head"><h2>Appointments</h2><Link className="fdk-walkin-link" to="/front-desk/walk-in">+ Walk-in</Link></div><p className="front-desk-muted">Booked and checked-in visits, soonest first.</p><form className="front-desk-search" onSubmit={(event) => { event.preventDefault(); void loadAppointments(); }}><input aria-label="Search appointments" placeholder="Patient, reference, or IIN" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="button" type="submit">Search</button></form>
+        {appointments.length > 0 && <div className="fdk-list-head" aria-hidden="true"><span /><span>Patient</span><span>Doctor</span><span>Date &amp; time</span><span>Reference</span><span>Status</span></div>}
         <div className="front-desk-list">{appointments.length ? appointments.map((appointment) => <article className={`front-desk-appointment${selected?.id === appointment.id ? " selected" : ""}`} key={appointment.id} onClick={() => setSelected(appointment)}>
           <span className="fdk-avatar" aria-hidden="true">{(appointment.patient?.name ?? "?").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
           <div className="fdk-info">
@@ -91,6 +98,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
           </div>
           <div className="fdk-actions">
             <b className={`front-desk-status ${appointment.status.toLowerCase()}`}>{appointment.status === "OCCUPIED" ? "Checked in" : appointment.status === "BOOKED" ? "Booked" : appointment.status}</b>
+            {appointment.status === "OCCUPIED" && <button className="fdk-receipt-btn" type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); void openReceipt(appointment); }}>Receipt</button>}
             {appointment.status === "BOOKED" && (checkInOpen(appointment)
               ? <button className="fdk-checkin" type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); void checkIn(appointment); }}>Check in</button>
               : Date.parse(appointment.endAt) <= Date.now()
@@ -129,6 +137,6 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
           </fieldset>
         </form></section>}
     </div>
-    {receipt && <div className="front-desk-receipt-wrap"><ReceiptView receipt={receipt} onClose={() => setReceipt(null)} /></div>}
+    {receipt && <ReceiptDialog receipt={receipt} onClose={() => setReceipt(null)} />}
   </main>;
 }

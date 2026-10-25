@@ -598,21 +598,27 @@ router.get('/front-desk/appointments', requireAuth, requireRole(Role.FRONT_DESK,
 
 router.get('/front-desk/availability', requireAuth, requireRole(Role.FRONT_DESK, Role.ADMIN), async (req, res) => {
   const date = scheduleDateSchema.parse(typeof req.query.date === 'string' ? req.query.date : localDateAt(new Date(), 'Asia/Almaty'));
-  const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
+  // ?category=Cardiology&category=Neurology or ?category=Cardiology,Neurology
+  const rawCategories = ([] as unknown[]).concat(req.query.category ?? []).flatMap((value) => typeof value === 'string' ? value.split(',') : []);
+  const categories = Array.from(new Set(rawCategories.map((value) => value.trim()).filter(Boolean)));
   const q = typeof req.query.q === 'string' ? req.query.q.trim().replace(/^(?:dr\.?|doctor)\s+/i, '') : '';
   const bounds = clinicDateBounds(date);
   const now = new Date();
+  const dayWindow = { status: SlotStatus.FREE, startAt: { gte: bounds.start > now ? bounds.start : now, lt: bounds.end } };
+  // How many doctors have free time that day, per specialty (shown next to each option in the picker).
+  const freeDoctors = await prisma.scheduleSlot.findMany({ where: dayWindow, distinct: ['doctorId'], select: { doctor: { select: { category: { select: { name: true } } } } } });
+  const specialtyCounts: Record<string, number> = {};
+  for (const row of freeDoctors ?? []) specialtyCounts[row.doctor.category.name] = (specialtyCounts[row.doctor.category.name] ?? 0) + 1;
   const slots = await prisma.scheduleSlot.findMany({
     where: {
-      status: SlotStatus.FREE,
-      startAt: { gte: bounds.start > now ? bounds.start : now, lt: bounds.end },
+      ...dayWindow,
       doctor: {
-        ...(category ? { category: { name: category } } : {}),
+        ...(categories.length ? { category: { name: { in: categories } } } : {}),
         ...(q ? { user: { AND: q.split(/\s+/).map((term) => ({ OR: [{ firstName: { contains: term, mode: 'insensitive' as const } }, { lastName: { contains: term, mode: 'insensitive' as const } }] })) } } : {}),
       },
     },
     orderBy: { startAt: 'asc' },
-    take: 600,
+    take: 2000,
     select: {
       id: true, startAt: true, endAt: true,
       doctor: { select: { id: true, office: true, officeNumber: true, clinicName: true, consultationFee: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
@@ -627,7 +633,7 @@ router.get('/front-desk/availability', requireAuth, requireRole(Role.FRONT_DESK,
     byDoctor.get(doctor.id)!.slots.push({ id: slot.id, startAt: slot.startAt, endAt: slot.endAt });
   }
   // Insertion order already follows the earliest free slot, so the soonest doctors come first.
-  res.json({ date, doctors: Array.from(byDoctor.values()) });
+  res.json({ date, specialtyCounts, doctors: Array.from(byDoctor.values()) });
 });
 
 router.get('/front-desk/patients/lookup', requireAuth, requireRole(Role.FRONT_DESK, Role.ADMIN), async (req, res) => {

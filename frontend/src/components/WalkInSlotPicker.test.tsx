@@ -31,9 +31,15 @@ describe("walk-in doctor and time picker", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ doctorId: "doc-1", slotId: "s2", doctorName: "Dr. Ann Heart" }));
   });
 
-  it("filters by specialty", async () => {
+  it("filters by one or more specialties picked from the checklist", async () => {
+    vi.mocked(authApi.frontDeskAvailability).mockResolvedValue({ date: "2099-05-10", doctors: [doctor], specialtyCounts: { Cardiology: 1, Dentistry: 0 } });
     render(<WalkInSlotPicker value={null} onChange={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Dentistry" }));
-    await waitFor(() => expect(authApi.frontDeskAvailability).toHaveBeenLastCalledWith(expect.objectContaining({ category: "Dentistry" })));
+    await screen.findByRole("button", { name: "Dr. Ann Heart, 14:30" });
+    fireEvent.click(screen.getByRole("button", { name: "Specialties" }));
+    fireEvent.click(await screen.findByLabelText("Dentistry"));
+    await waitFor(() => expect(authApi.frontDeskAvailability).toHaveBeenLastCalledWith(expect.objectContaining({ categories: ["Dentistry"] })));
+    fireEvent.click(screen.getByLabelText("Cardiology"));
+    await waitFor(() => expect(authApi.frontDeskAvailability).toHaveBeenLastCalledWith(expect.objectContaining({ categories: ["Dentistry", "Cardiology"] })));
+    expect(screen.getByRole("button", { name: "Remove Dentistry" })).toBeInTheDocument();
   });
 });

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { authApi, CancelledAppointment, PatientAppointment, Receipt } from "../lib/api";
+import { api, authApi, CancelledAppointment, PatientAppointment, Receipt } from "../lib/api";
 import { notifyNotificationsChanged } from "../lib/notificationEvents";
-import { ReceiptView } from "../components/ReceiptView";
+import { ReceiptDialog } from "../components/ReceiptView";
+import { MiniCalendar } from "../components/MiniCalendar";
+import { Icon } from "../components/Icons";
 import "../styles/patientAppointments.css";
 
 type AppointmentTab = "upcoming" | "past" | "cancelled";
@@ -184,6 +186,7 @@ export default function PatientAppointments() {
   const [actionMessage, setActionMessage] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [cancelled, setCancelled] = useState<CancelledAppointment[]>([]);
+  const [specialties, setSpecialties] = useState<string[]>([]);
   const [cancelTarget, setCancelTarget] = useState<PatientAppointment | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelChoice, setCancelChoice] = useState("");
@@ -205,6 +208,12 @@ export default function PatientAppointments() {
   useEffect(() => {
     void loadAppointments();
   }, [loadAppointments]);
+
+  useEffect(() => {
+    api<{ categories: Array<{ name: string }> }>("/categories")
+      .then((result) => setSpecialties((result?.categories ?? []).map((item) => item.name).slice(0, 8)))
+      .catch(() => setSpecialties([]));
+  }, []);
 
   const { upcoming, past } = useMemo(() => {
     const now = Date.now();
@@ -274,6 +283,8 @@ export default function PatientAppointments() {
           <Link className="button" to="/search">Find a doctor</Link>
         </header>
 
+        <div className="pa-layout">
+        <div className="pa-main">
         <div className="patient-appointment-tabs" role="tablist" aria-label="Filter appointments">
           <button
             id="appointments-tab-upcoming"
@@ -337,17 +348,48 @@ export default function PatientAppointments() {
                 ? "Visits you or the clinic cancel will appear here with the reason."
                 : "When you book an appointment, it will appear here."}</p>
               {activeTab !== "cancelled" && <Link className="button button-outline" to="/search">Find a doctor</Link>}
+              {specialties.length > 0 && (
+                <div className="pa-empty-specialties">
+                  <p>Or start from a specialty</p>
+                  <div>
+                    {specialties.map((name) => <Link key={name} to={`/search?category=${encodeURIComponent(name)}`}>{name}</Link>)}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        <aside className="patient-appointments-policy">
-          <span aria-hidden="true">ⓘ</span>
-          <div>
-            <h2>Need to make a change?</h2>
-            <p>You can cancel an upcoming booked visit or check in when you arrive. Confirmations appear under the bell icon at the top of the page.</p>
-          </div>
+        </div>
+
+        <aside className="pa-side" aria-label="Visit overview">
+          <section className="pa-next">
+            <p className="pa-side-label">Next visit</p>
+            {upcoming[0] ? (
+              <>
+                <strong>{formatDate(upcoming[0].startAt)}</strong>
+                <span className="pa-next-time"><Icon name="clock" size={15} /> {formatTime(upcoming[0].startAt)}–{formatTime(upcoming[0].endAt)}</span>
+                <span className="pa-next-doctor">{upcoming[0].doctor.name} · {upcoming[0].doctor.specialty}</span>
+              </>
+            ) : (
+              <>
+                <strong>Nothing planned yet</strong>
+                <span className="pa-next-doctor">Pick a doctor and a free time — it takes about a minute.</span>
+                <Link className="pa-next-action" to="/search">Book a visit</Link>
+              </>
+            )}
+          </section>
+          <MiniCalendar marked={new Set(appointments.filter((item) => item.status !== "FREE").map((item) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty" }).format(new Date(item.startAt))))} />
+          <section className="pa-help">
+            <h2><Icon name="shield" size={18} /> Need to make a change?</h2>
+            <ul>
+              <li><Icon name="calendar" size={16} /> Cancel a booked visit and tell the doctor why.</li>
+              <li><Icon name="check" size={16} /> Check in from 30 minutes before your visit.</li>
+              <li><Icon name="file" size={16} /> Get your receipt after check-in.</li>
+            </ul>
+          </section>
         </aside>
+        </div>
       </div>
 
       {cancelTarget && (
@@ -382,16 +424,7 @@ export default function PatientAppointments() {
         </div>
       )}
 
-      {receipt && (
-        <div className="patient-appointment-dialog-backdrop" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setReceipt(null);
-        }}>
-          <section className="patient-appointment-dialog patient-receipt-dialog" role="dialog" aria-modal="true" aria-label={`Receipt ${receipt.reference}`}>
-            <button className="patient-appointment-dialog-close" type="button" aria-label="Close receipt" onClick={() => setReceipt(null)}>×</button>
-            <ReceiptView receipt={receipt} />
-          </section>
-        </div>
-      )}
+      {receipt && <ReceiptDialog receipt={receipt} onClose={() => setReceipt(null)} />}
 
       {selectedAppointment && (
         <div className="patient-appointment-dialog-backdrop" onMouseDown={(event) => {

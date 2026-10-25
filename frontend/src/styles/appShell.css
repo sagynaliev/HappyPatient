@@ -61,3 +61,55 @@
 .hp-footer .footer-links { display: flex; gap: 24px; }
 .hp-footer a:hover { color: var(--primary); }
 .topbar-inner .fd-heart-logo { color: var(--primary); }
+
+/* ===== Collapsible sidebar (expanded: icon + label, collapsed: icons with tooltips) ===== */
+.hp-shell { transition: grid-template-columns .2s ease; }
+.hp-sidebar { gap: 22px; overflow: visible; }
+.hp-collapse {
+  position: absolute; top: 30px; right: -14px; z-index: 2; display: grid; width: 28px; height: 28px; place-items: center; padding: 0;
+  border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--text-secondary); cursor: pointer;
+  box-shadow: 0 2px 6px rgb(16 27 59 / 10%);
+}
+.hp-collapse:hover { border-color: var(--primary); color: var(--primary); }
+.hp-collapse svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hp-nav-group { display: grid; gap: 4px; }
+.hp-nav-group + .hp-nav-group { padding-top: 14px; border-top: 1px solid var(--border); }
+.hp-nav-label { margin: 0 0 4px; padding: 0 14px; color: #9aa4bd; font-size: 12.5px; font-weight: 500; }
+.hp-signout { gap: 12px; min-height: 46px; font-size: 15px; font-weight: 500; }
+.hp-sidebar-foot { margin-top: auto; }
+.hp-sidebar-bottom { display: none; }
+
+/* role card at the foot of the sidebar */
+.hp-side-card { position: relative; display: grid; gap: 10px; overflow: hidden; padding: 16px; border-radius: 20px; background: linear-gradient(160deg, #6e95ff 0%, var(--primary) 45%, var(--primary-deep) 100%); color: #fff; }
+.hp-side-card::before { content: ""; position: absolute; right: -40px; top: -40px; width: 120px; height: 120px; border-radius: 50%; background: rgb(255 255 255 / 12%); }
+.hp-side-card-head { position: relative; display: flex; align-items: center; gap: 10px; }
+.hp-side-card-icon { display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; border: 1px solid rgb(255 255 255 / 45%); border-radius: 50%; }
+.hp-side-card small { display: block; color: rgb(255 255 255 / 80%); font-size: 12px; }
+.hp-side-card strong { display: block; font-size: 16px; font-weight: 600; line-height: 1.2; }
+.hp-side-card p { position: relative; margin: 0; color: rgb(255 255 255 / 85%); font-size: 13px; line-height: 1.4; }
+.hp-side-card-action { position: relative; display: grid; height: 40px; place-items: center; border-radius: 999px; background: #fff; color: var(--primary-deep); font-size: 14px; font-weight: 600; }
+.hp-side-card-action:hover { background: var(--accent); }
+.hp-side-card.is-collapsed { display: grid; width: 48px; height: 48px; margin: 0 auto; padding: 0; place-items: center; border-radius: 16px; }
+
+/* collapsed state (desktop only) */
+@media (min-width: 1101px) {
+  .hp-shell.is-collapsed { grid-template-columns: 88px minmax(0, 1fr); }
+  .is-collapsed .hp-sidebar { padding-left: 14px; padding-right: 14px; }
+  .is-collapsed .hp-hide-collapsed { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .is-collapsed .hp-sidebar-top { justify-content: center; padding: 0; }
+  .is-collapsed .hp-nav-link, .is-collapsed .hp-signout, .is-collapsed .hp-profile { justify-content: center; padding: 0; }
+  .is-collapsed .hp-nav-label { display: none; }
+  .is-collapsed [data-tooltip] { position: relative; }
+  .is-collapsed [data-tooltip]:hover::after, .is-collapsed [data-tooltip]:focus-visible::after {
+    content: attr(data-tooltip); position: absolute; left: calc(100% + 12px); top: 50%; z-index: 50; padding: 6px 10px; border-radius: 8px;
+    background: var(--text-primary); color: #fff; font-size: 13px; font-weight: 500; white-space: nowrap; transform: translateY(-50%); pointer-events: none;
+  }
+}
+@media (max-width: 1100px) { .hp-collapse { display: none; } }
+@media (prefers-reduced-motion: reduce) { .hp-shell { transition: none; } }
+
+/* breadcrumbs sit in the top bar, bell stays on the right */
+.hp-topbar-inner .hp-breadcrumbs { flex: 1 1 auto; }
+/* Account group sits at the bottom of the sidebar, right above the role card */
+.hp-nav-group + .hp-nav-group { margin-top: auto; }
+.hp-sidebar-foot { margin-top: 0; }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, authApi, AvailabilityDoctor } from "../lib/api";
 import { Icon } from "./Icons";
+import SpecialtyMultiSelect from "./SpecialtyMultiSelect";
 
 const TZ = "Asia/Almaty";
 const dayKey = (offset = 0) => {
@@ -26,7 +27,8 @@ type Props = {
  */
 export default function WalkInSlotPicker({ value, onChange, refreshKey = 0, disabled = false }: Props) {
   const [day, setDay] = useState(dayKey());
-  const [category, setCategory] = useState("");
+  const [specialties, setSpecialties] = useState<string[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
@@ -49,12 +51,12 @@ export default function WalkInSlotPicker({ value, onChange, refreshKey = 0, disa
   useEffect(() => {
     let active = true;
     setLoading(true); setError("");
-    authApi.frontDeskAvailability({ date: day, category, q: debouncedQuery })
-      .then((result) => { if (active) setDoctors(result.doctors); })
+    authApi.frontDeskAvailability({ date: day, categories: specialties, q: debouncedQuery })
+      .then((result) => { if (active) { setDoctors(result.doctors); setCounts(result.specialtyCounts ?? {}); } })
       .catch((cause: unknown) => { if (active) { setDoctors([]); setError(cause instanceof Error ? cause.message : "Free times could not be loaded."); } })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [day, category, debouncedQuery, refreshKey]);
+  }, [day, specialties, debouncedQuery, refreshKey]);
 
   // Drop a selection that is no longer offered (taken, or filtered away).
   useEffect(() => {
@@ -85,13 +87,7 @@ export default function WalkInSlotPicker({ value, onChange, refreshKey = 0, disa
         </label>
       </div>
 
-      <div className="wi-chips" role="group" aria-label="Specialty">
-        {["", ...categories].map((name) => (
-          <button key={name || "all"} type="button" className={category === name ? "is-active" : ""} aria-pressed={category === name} onClick={() => setCategory(name)} disabled={disabled}>
-            {name || "All specialties"}
-          </button>
-        ))}
-      </div>
+      <SpecialtyMultiSelect options={categories} value={specialties} onChange={setSpecialties} counts={counts} disabled={disabled} />
 
       <div className="wi-results" aria-live="polite" aria-busy={loading}>
         <p className="wi-count">
@@ -137,6 +133,21 @@ export default function WalkInSlotPicker({ value, onChange, refreshKey = 0, disa
             );
           })}
         </ul>
+        {!loading && !error && doctors.length === 0 && (
+          <div className="wi-empty">
+            <span className="wi-empty-icon" aria-hidden="true"><Icon name="calendar" size={26} /></span>
+            <strong>No free times on this day</strong>
+            <span>Doctors may not have opened their schedule yet. Try the next day{specialties.length ? " or show all specialties" : ""}.</span>
+            <div className="wi-empty-actions">
+              <button type="button" className="button" disabled={disabled} onClick={() => {
+                const next = new Date(`${day}T00:00:00Z`);
+                next.setUTCDate(next.getUTCDate() + 1);
+                setDay(next.toISOString().slice(0, 10));
+              }}>Next day</button>
+              {specialties.length > 0 && <button type="button" className="button button-outline" disabled={disabled} onClick={() => setSpecialties([])}>All specialties</button>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

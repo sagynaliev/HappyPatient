@@ -9,6 +9,8 @@ import AvailabilityCalendar, {
 import { DoctorProfile, ScheduleSlot, User } from "../lib/api";
 import DoctorLocation from "./DoctorLocation";
 import { doctorLocationText } from "../lib/doctorLocation";
+import { Icon } from "./Icons";
+import { BreadcrumbLabel } from "../lib/breadcrumbStore";
 
 type BookingSuccess = {
   doctorName: string;
@@ -41,6 +43,7 @@ type PatientBookingFlowProps = {
 };
 
 const steps = ["Consultation Type", "Date & Time", "Patient Details", "Review", "Confirmed"] as const;
+const stepIcons = ["stethoscope", "calendar", "user", "file"] as const;
 
 function initials(firstName?: string, lastName?: string) {
   return `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toLocaleUpperCase();
@@ -162,6 +165,24 @@ export default function PatientBookingFlow({
     ? `${formatTimeInAlmaty(selectedSlot.startAt)}–${formatTimeInAlmaty(selectedSlot.endAt)}`
     : "";
 
+  // Small progress dots inside the current step of the vertical stepper.
+  const subSteps: Record<number, { label: string; done: boolean }[]> = {
+    1: [{ label: "Consultation type", done: Boolean(consultationType) }],
+    2: [{ label: "Date", done: Boolean(date) }, { label: "Time", done: Boolean(selectedSlot) }],
+    3: [
+      { label: "Contact details", done: emailValid },
+      { label: "Reason for visit", done: Boolean(visitPurpose.trim()) },
+      { label: "Details confirmed", done: detailsConfirmed },
+    ],
+    4: [{ label: "Details checked", done: true }, { label: "Appointment confirmed", done: false }],
+  };
+  const stepHints = [
+    "In-person visit",
+    selectedSlot ? selectedTime : "Pick a day and time",
+    "Contact and reason",
+    "Check and confirm",
+  ];
+
   function goBack() {
     goToStep(Math.max(1, step - 1) as BookingStep);
   }
@@ -169,6 +190,7 @@ export default function PatientBookingFlow({
   return (
     <div className="bk-page">
       <div className="bk-container">
+        <BreadcrumbLabel id="doctor" label={doctor ? doctorName : undefined} />
         {step < 5 ? (
           <Link className="bk-back" to={step === 1 ? `/doctors/${doctor?.id ?? ""}` : "#"} onClick={step === 1 ? undefined : (event) => {
             event.preventDefault();
@@ -179,29 +201,11 @@ export default function PatientBookingFlow({
         ) : null}
         <header className="bk-page-heading">
           <h1>{step === 5 ? "Appointment Confirmed!" : "Book your appointment"}</h1>
-          <p>{step === 5
-            ? "Your appointment is confirmed. Keep these details handy."
-            : `A few simple steps to arrange your visit with ${doctorName}.`}</p>
+          {step === 5 && <p>Your appointment is confirmed. Keep these details handy.</p>}
         </header>
 
-        <div className="bk-step-progress" role="progressbar" aria-label="Booking progress" aria-valuemin={1} aria-valuemax={5} aria-valuenow={step}>
-          <span>Step {step} of 5</span>
-        </div>
-        <ol className="bk-stepper" aria-label="Booking steps">
-          {steps.map((label, index) => {
-            const number = index + 1;
-            const status = step === 5 || number < step ? "completed" : number === step ? "current" : "upcoming";
-            return (
-              <li className={`bk-step bk-step--${status}`} key={label} aria-current={status === "current" ? "step" : undefined}>
-                <span className="bk-step-bar" aria-hidden="true" />
-                <span className="bk-step-label">{status === "completed" ? <span className="bk-step-check" aria-hidden="true">✓</span> : `${number}. `}{label}</span>
-                <span className="sr-only">{status}</span>
-              </li>
-            );
-          })}
-        </ol>
-
         {step === 5 && bookingSuccess ? (
+          <div className="bk-done">
           <section className="bk-confirmation bk-card" aria-labelledby="bk-confirmation-title">
             <div className="bk-confirm-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="20" rx="3" /><path d="M10 4v6m12-6v6M5 13h22m-16 7 3 3 7-7" /></svg>
@@ -225,6 +229,38 @@ export default function PatientBookingFlow({
             </div>
             <Link className="bk-home-link" to="/search">Book another doctor</Link>
           </section>
+            <aside className="bk-next" aria-label="What happens next">
+              <section className="bk-card bk-next-card">
+                <h2>What happens next</h2>
+                <ol className="bk-next-steps">
+                  <li>
+                    <span className="bk-next-icon" aria-hidden="true"><Icon name="check" size={18} /></span>
+                    <div><strong>Booking saved</strong><span>You’ll find it under the bell and in My appointments.</span></div>
+                  </li>
+                  <li>
+                    <span className="bk-next-icon" aria-hidden="true"><Icon name="clock" size={18} /></span>
+                    <div><strong>Arrive 10 minutes early</strong><span>{formatDateInAlmaty(slotDateInAlmaty(bookingSuccess.slot.startAt), { weekday: "short", day: "numeric", month: "short" })} · {formatTimeInAlmaty(bookingSuccess.slot.startAt)}{office ? ` · ${office}` : ""}</span></div>
+                  </li>
+                  <li>
+                    <span className="bk-next-icon" aria-hidden="true"><Icon name="desk" size={18} /></span>
+                    <div><strong>Check in at the front desk</strong><span>Check-in opens at {formatTimeInAlmaty(new Date(Date.parse(bookingSuccess.slot.startAt) - 30 * 60_000).toISOString())}. Give your name or IIN.</span></div>
+                  </li>
+                  <li>
+                    <span className="bk-next-icon" aria-hidden="true"><Icon name="file" size={18} /></span>
+                    <div><strong>Get your receipt</strong><span>After check-in you can download or print it.</span></div>
+                  </li>
+                </ol>
+              </section>
+              <section className="bk-card bk-next-change">
+                <span className="bk-next-icon" aria-hidden="true"><Icon name="calendar" size={18} /></span>
+                <div>
+                  <strong>Plans changed?</strong>
+                  <span>Cancel from My appointments so the time goes back to other patients.</span>
+                </div>
+                <Link className="button button-outline" to="/appointments">Manage</Link>
+              </section>
+            </aside>
+          </div>
         ) : doctor ? (
           <div className="bk-layout">
             <div className="bk-main">
@@ -270,9 +306,12 @@ export default function PatientBookingFlow({
 
                 {step === 2 && (
                   <div className="bk-date-time">
-                    <AvailabilityCalendar slots={slots} selectedDate={date} onDateChange={(nextDate) => {
-                      onDateChange(nextDate);
-                    }} />
+                    <div className="bk-dt-calendar">
+                      <AvailabilityCalendar slots={slots} selectedDate={date} onDateChange={(nextDate) => {
+                        onDateChange(nextDate);
+                      }} />
+                    </div>
+                    <div className="bk-dt-times">
                     {refreshing && <p className="bk-info" role="status">Refreshing appointment availability…</p>}
                     <p className="bk-selected-line">
                       {selectedDate
@@ -285,6 +324,7 @@ export default function PatientBookingFlow({
                       All times use Asia/Almaty (UTC+5). {selectedTime ? `Selected: ${selectedTime}. ` : ""}
                       Your appointment is not booked until you confirm the review step.
                     </p>
+                    </div>
                   </div>
                 )}
 
@@ -294,6 +334,7 @@ export default function PatientBookingFlow({
                       <label className="bk-field"><span>First Name *</span><input value={patient?.firstName ?? ""} readOnly aria-required="true" /></label>
                       <label className="bk-field"><span>Last Name *</span><input value={patient?.lastName ?? ""} readOnly aria-required="true" /></label>
                     </div>
+                    <div className="bk-grid-2">
                     <label className="bk-field">
                       <span>Email Address *</span>
                       <input value={patient?.email ?? ""} readOnly aria-required="true" aria-invalid={!emailValid} aria-describedby={!emailValid ? "bk-email-error" : undefined} />
@@ -303,6 +344,8 @@ export default function PatientBookingFlow({
                       <span>Phone Number</span>
                       <input value={patient?.phone ?? "Not provided"} readOnly />
                     </label>
+                    </div>
+                    <div className="bk-grid-2">
                     <div className="bk-field">
                       <label htmlFor="bk-visit-purpose">Reason for visit *</label>
                       <input id="bk-visit-purpose" value={visitPurpose} onChange={(event) => onVisitPurposeChange(event.target.value)} maxLength={300} required aria-required="true" aria-describedby="bk-reason-hint" />
@@ -313,6 +356,7 @@ export default function PatientBookingFlow({
                       <textarea disabled aria-describedby="bk-notes-hint" placeholder="Additional notes are not supported by the booking service." />
                       <small className="bk-field-hint" id="bk-notes-hint">Additional notes are not sent or stored by the existing booking service.</small>
                     </label>
+                    </div>
                     <label className="bk-confirm-checkbox">
                       <input type="checkbox" checked={detailsConfirmed} onChange={(event) => setDetailsConfirmed(event.target.checked)} />
                       <span>These details are correct for my appointment.</span>
@@ -378,6 +422,46 @@ export default function PatientBookingFlow({
             </div>
 
             <aside className="bk-side">
+              <nav className="bk-vsteps" aria-label="Booking steps">
+                <div className="bk-vsteps-head" role="progressbar" aria-label="Booking progress" aria-valuemin={1} aria-valuemax={4} aria-valuenow={step}>
+                  <span>Your progress</span>
+                  <strong>Step {step} of 4</strong>
+                </div>
+                <ol>
+                  {steps.slice(0, 4).map((label, index) => {
+                    const number = (index + 1) as BookingStep;
+                    const status = number < step ? "completed" : number === step ? "current" : "upcoming";
+                    const content = (
+                      <>
+                        <span className="bk-vstep-icon" aria-hidden="true">
+                          <Icon name={status === "completed" ? "check" : stepIcons[index]} size={18} />
+                        </span>
+                        <span className="bk-vstep-copy">
+                          <span className="bk-vstep-label">{label}</span>
+                          <span className="bk-vstep-hint">{status === "upcoming" ? `Step ${number}` : stepHints[index]}</span>
+                          {status === "current" && (
+                            <span className="bk-vstep-dots" aria-label={`${subSteps[number].filter((item) => item.done).length} of ${subSteps[number].length} done`}>
+                              {subSteps[number].map((item) => (
+                                <span key={item.label} className={item.done ? "is-done" : ""} title={item.label} />
+                              ))}
+                            </span>
+                          )}
+                        </span>
+                        <span className="sr-only">{status}</span>
+                      </>
+                    );
+                    return (
+                      <li key={label} className={`bk-vstep is-${status}`} aria-current={status === "current" ? "step" : undefined}>
+                        {status === "completed" ? (
+                          <button type="button" className="bk-vstep-row" onClick={() => goToStep(number)} title={`Go back to ${label}`}>{content}</button>
+                        ) : (
+                          <div className="bk-vstep-row">{content}</div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </nav>
               <section className="bk-summary bk-card" aria-label="Your appointment">
                 <h2>Your appointment</h2>
                 <div className="bk-summary-doctor">
@@ -394,7 +478,6 @@ export default function PatientBookingFlow({
                 {fee && <p className="bk-summary-price">{fee}</p>}
                 <p className="bk-summary-footnote">Not confirmed yet. Review and confirm in step 4.</p>
               </section>
-              <p className="bk-info bk-side-info">Your booking is saved on your patient account after confirmation.</p>
             </aside>
           </div>
         ) : null}
