@@ -4,8 +4,6 @@ import type { Receipt } from "./api";
 const TZ = "Asia/Almaty";
 const date = (value: string) => new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ }).format(new Date(value));
 const time = (value: string) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: TZ }).format(new Date(value));
-// Built-in PDF fonts have no ₸ glyph, so the PDF uses the currency code.
-const money = (value: number) => `${new Intl.NumberFormat("en-US").format(value).replace(/,/g, " ")} KZT`;
 
 const WIDTH = 80; // mm, standard thermal receipt roll
 const MARGIN = 6;
@@ -17,12 +15,11 @@ export function receiptFileName(receipt: Receipt) {
 
 /** Draws the receipt and returns the y position where content ended. */
 function draw(doc: JsPdf, receipt: Receipt): number {
-  const issued = receipt.checkedInAt ?? receipt.createdAt ?? new Date().toISOString();
-  const fee = receipt.consultationFee ?? 0;
+  const issued = receipt.checkedInAt ?? receipt.createdAt;
   let y = MARGIN + 2;
 
   const center = (text: string, size: number, style: "normal" | "bold" = "normal", gap = 4.2) => {
-    doc.setFont("courier", style).setFontSize(size);
+    doc.setFont("NotoSans", style).setFontSize(size);
     for (const line of doc.splitTextToSize(text, INNER) as string[]) {
       doc.text(line, WIDTH / 2, y, { align: "center" });
       y += gap;
@@ -34,7 +31,7 @@ function draw(doc: JsPdf, receipt: Receipt): number {
   };
   const solid = (width = 0.5) => { doc.setLineWidth(width).line(MARGIN, y - 1.5, WIDTH - MARGIN, y - 1.5); y += 2.5; };
   const row = (label: string, value: string, bold = false, size = 8.5) => {
-    doc.setFont("courier", bold ? "bold" : "normal").setFontSize(size);
+    doc.setFont("NotoSans", bold ? "bold" : "normal").setFontSize(size);
     const labelWidth = doc.getTextWidth(`${label} `);
     const lines = doc.splitTextToSize(value, INNER - labelWidth) as string[];
     doc.text(label, MARGIN, y);
@@ -44,19 +41,19 @@ function draw(doc: JsPdf, receipt: Receipt): number {
 
   // logo
   doc.setLineWidth(0.5).circle(WIDTH / 2, y + 2, 3.2);
-  doc.setFont("helvetica", "bold").setFontSize(12).text("+", WIDTH / 2, y + 3.6, { align: "center" });
+  doc.setFont("NotoSans", "bold").setFontSize(12).text("+", WIDTH / 2, y + 3.6, { align: "center" });
   y += 9;
-  center("HappyPatient Medical Center", 10, "bold", 4.6);
+  center("HappyPatient", 10, "bold", 4.6);
   center(receipt.address ?? receipt.clinic ?? "Almaty, Kazakhstan", 7.5, "normal", 3.4);
-  center("Front desk: +7 727 000 00 00", 7.5, "normal", 3.4);
   y += 2;
 
   solid();
   center("VISIT REGISTRATION RECEIPT", 9, "bold", 3.6);
   solid();
 
-  row("Receipt No.", receipt.reference, true);
-  row("Issued", `${date(issued)} ${time(issued)}`);
+  row("Receipt ID", receipt.id, true);
+  row("Booking ID", receipt.reference);
+  row("Issued", issued ? `${date(issued)} ${time(issued)} (Asia/Almaty)` : "Unavailable");
   dashed();
 
   row("Patient", receipt.patientDisplayName);
@@ -65,25 +62,10 @@ function draw(doc: JsPdf, receipt: Receipt): number {
   if (receipt.specialty) row("Specialty", receipt.specialty);
   if (receipt.office) row("Office", receipt.office);
   row("Appointment", `${date(receipt.startAt)} ${time(receipt.startAt)}-${time(receipt.endAt)}`);
-  if (receipt.checkedInAt) row("Arrived", time(receipt.checkedInAt));
+  if (receipt.checkedInAt) row("Arrived", `${date(receipt.checkedInAt)} ${time(receipt.checkedInAt)} (Asia/Almaty)`);
   if (receipt.checkedInBy) row("Checked in by", receipt.checkedInBy);
-  if (receipt.visitPurpose) row("Purpose", receipt.visitPurpose);
   dashed();
 
-  doc.setFont("courier", "normal").setFontSize(7.5);
-  doc.text("Service", MARGIN, y); doc.text("Qty", WIDTH - MARGIN - 24, y, { align: "center" }); doc.text("Amount", WIDTH - MARGIN, y, { align: "right" });
-  y += 3.2; dashed();
-  doc.setFontSize(8.5);
-  const service = doc.splitTextToSize(`Consultation${receipt.specialty ? ` - ${receipt.specialty}` : ""}`, INNER - 32) as string[];
-  service.forEach((line, index) => doc.text(line, MARGIN, y + index * 3.8));
-  doc.text("1", WIDTH - MARGIN - 24, y, { align: "center" });
-  doc.text(money(fee), WIDTH - MARGIN, y, { align: "right" });
-  y += service.length * 3.8 + 1.5;
-  dashed();
-
-  row("TOTAL", money(fee), true, 11);
-  y += 0.8;
-  row("Payment", "At reception");
   row("Status", receipt.status === "OCCUPIED" ? "Checked in" : receipt.status);
   y += 3;
 
@@ -108,17 +90,31 @@ function draw(doc: JsPdf, receipt: Receipt): number {
   y += 1;
   center("Thank you for choosing HappyPatient!", 8.5, "bold", 5);
   doc.setTextColor(120);
-  center("Alpha version - sample receipt - not a fiscal document", 6.5, "normal", 3);
+  center("Registration completed successfully. Not a fiscal or payment receipt.", 6.5, "normal", 3);
   doc.setTextColor(0);
   return y;
 }
 
 export async function buildReceiptPdf(receipt: Receipt) {
   const { jsPDF } = await import("jspdf");
+  const response = await fetch("/fonts/NotoSans-Regular.ttf");
+  if (!response.ok) throw new Error("Receipt font unavailable");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  const font = btoa(binary);
+  const addFont = (doc: JsPdf) => {
+    doc.addFileToVFS("NotoSans.ttf", font);
+    doc.addFont("NotoSans.ttf", "NotoSans", "normal");
+    doc.addFont("NotoSans.ttf", "NotoSans", "bold");
+    doc.setTextColor("#111D40").setDrawColor("#2D5FF5");
+  };
   // first pass measures the content height, second pass draws on a page of exactly that height
   const measure = new jsPDF({ unit: "mm", format: [WIDTH, 400] });
+  addFont(measure);
   const height = Math.ceil(draw(measure, receipt) + MARGIN);
   const doc = new jsPDF({ unit: "mm", format: [WIDTH, height] });
+  addFont(doc);
   doc.setProperties({ title: `Receipt ${receipt.reference}`, author: "HappyPatient", subject: "Visit registration receipt" });
   draw(doc, receipt);
   return doc;

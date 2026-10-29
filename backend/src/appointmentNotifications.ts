@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { Resend } from 'resend';
 import { prisma } from './prisma';
 import { config } from './config';
+import { brandedEmail } from './email/layout';
+import { appointmentEmail } from './email/appointment';
+import { registrationReceiptPdf, RegistrationReceiptData } from './registrationReceipt';
 
 export type AppointmentEvent = 'BOOKED' | 'CANCELLED' | 'CHECKED_IN';
 export type SystemEvent = 'WELCOME' | 'PROFILE_UPDATED' | 'PASSWORD_CHANGED' | 'SCHEDULE_CREATED' | 'APPOINTMENT_RELEASED';
@@ -22,9 +25,13 @@ export async function notifyUser(input: {
   message: string;
   slotId?: string;
   email?: string | null;
+  eventKey?: string;
+  html?: string;
+  text?: string;
+  receipt?: RegistrationReceiptData;
 }) {
   const base = {
-    eventKey: `${input.type.toLowerCase()}:${input.userId}:${randomUUID()}`,
+    eventKey: input.eventKey ?? `${input.type.toLowerCase()}:${input.userId}:${randomUUID()}`,
     userId: input.userId,
     slotId: input.slotId,
     type: input.type,
@@ -35,15 +42,23 @@ export async function notifyUser(input: {
     if (!input.email || !config.RESEND_API_KEY) {
       return await prisma.notification.create({ data: { ...base, channel: 'in-app', status: 'RECORDED' } });
     }
+    // Claim the unique event before contacting the provider. A racing worker cannot send it twice.
+    const notification = await prisma.notification.create({ data: { ...base, channel: 'email', status: 'PENDING' } });
+    let outcome: { status: string; error?: string; deliveredAt?: Date };
     try {
-      const result = await new Resend(config.RESEND_API_KEY).emails.send({ from: 'onboarding@resend.dev', to: input.email, subject: input.subject, text: input.message });
-      if (!result.error) return await prisma.notification.create({ data: { ...base, channel: 'email', status: 'DELIVERED', deliveredAt: new Date() } });
-      return await prisma.notification.create({ data: { ...base, channel: 'email', status: 'FAILED', error: result.error.message } });
-    } catch (error: unknown) {
-      return await prisma.notification.create({ data: { ...base, channel: 'email', status: 'FAILED', error: error instanceof Error ? error.message : 'Email delivery failed' } });
+      if (input.type === 'CHECKED_IN' && !input.receipt) throw new Error('Registration receipt required');
+      const content = input.html ? { html: input.html, text: input.text ?? input.message } : brandedEmail({ title: input.subject, message: input.message });
+      const attachments = input.receipt ? [{ filename: `HappyPatient-registration-${input.receipt.reference}.pdf`, content: registrationReceiptPdf(input.receipt), contentType: 'application/pdf' }] : undefined;
+      const result = await new Resend(config.RESEND_API_KEY).emails.send({ from: 'onboarding@resend.dev', to: input.email, subject: input.subject, ...content, attachments }, { idempotencyKey: base.eventKey });
+      outcome = result.error ? { status: 'FAILED', error: 'Email provider rejected delivery' } : { status: 'DELIVERED', deliveredAt: new Date() };
+    } catch {
+      outcome = { status: 'FAILED', error: 'Email or receipt generation failed' };
     }
+    await prisma.notification.updateMany({ where: { id: notification.id }, data: outcome });
+    return { ...notification, ...outcome };
   } catch (error: unknown) {
-    console.error('Notification could not be stored', { type: input.type, userId: input.userId, message: error instanceof Error ? error.message : String(error) });
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') return null;
+    console.error('Notification could not be stored', { type: input.type });
     return null;
   }
 }
@@ -72,16 +87,20 @@ export async function recordAppointmentNotification(input: {
   doctorUserId?: string | null;
   patientName?: string;
   reason?: string;
+  occurrenceId?: string;
+  receipt?: RegistrationReceiptData;
 }) {
   const when = formatAlmaty(input.startAt);
-  const patient = await notifyUser({ userId: input.userId, email: input.email, slotId: input.slotId, type: input.event, ...patientCopy[input.event](input.reference, input.doctor, when, input.reason) });
+  const eventKey = `${input.event}:${input.slotId}:${input.userId}:${input.occurrenceId ?? input.startAt.toISOString()}`;
+  const content = appointmentEmail(input.event, input);
+  const patient = await notifyUser({ eventKey: `${eventKey}:patient`, receipt: input.receipt, ...content, userId: input.userId, email: input.email, slotId: input.slotId, type: input.event, message: patientCopy[input.event](input.reference, input.doctor, when, input.reason).message });
   if (input.doctorUserId) {
     let patientName = input.patientName;
     if (!patientName) {
       const user = await prisma.user.findUnique({ where: { id: input.userId }, select: { firstName: true, lastName: true } }).catch(() => null);
       patientName = user ? `${user.firstName} ${user.lastName}` : 'A patient';
     }
-    await notifyUser({ userId: input.doctorUserId, slotId: input.slotId, type: input.event, ...doctorCopy[input.event](input.reference, patientName, when, input.reason) });
+    await notifyUser({ eventKey: `${eventKey}:doctor`, userId: input.doctorUserId, slotId: input.slotId, type: input.event, ...doctorCopy[input.event](input.reference, patientName, when, input.reason) });
   }
   return patient;
 }

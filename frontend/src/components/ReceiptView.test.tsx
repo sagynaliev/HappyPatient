@@ -18,11 +18,13 @@ const receipt: Receipt = {
 };
 
 describe("receipt (US18)", () => {
-  it("shows the receipt details with the consultation fee", () => {
+  it("shows registration details without payment or medical content", () => {
     render(<ReceiptView receipt={receipt} />);
     expect(screen.getAllByText("VISIT REGISTRATION RECEIPT").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Casey Patient").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Consultation — Cardiology").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Checked in").length).toBeGreaterThan(0);
+    expect(screen.queryByText("TOTAL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Payment")).not.toBeInTheDocument();
   });
 
   it("downloads the receipt as a PDF", async () => {

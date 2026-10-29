@@ -1,3 +1,5 @@
+import { brandedEmail } from './email/layout';
+import { appointmentEmail } from './email/appointment';
 import { Router, Request, Response } from 'express';
 import { Prisma, Role, SlotStatus } from '@prisma/client';
 import { prisma } from './prisma';
@@ -51,7 +53,7 @@ router.post('/auth/forgot-password', async (req, res) => {
           from: 'onboarding@resend.dev',
           to: user.email,
           subject: 'Your HappyPatient password reset code',
-          text: `Your HappyPatient password reset code is: ${code}\n\nThis code expires in 10 minutes and can only be used once.`,
+          ...brandedEmail({ title: 'Your password reset code', message: 'Use this code to reset your HappyPatient password.', details: [['Verification code', code]], nextStep: 'This code expires in 10 minutes and can only be used once.' }),
         });
         if (error) {
           console.error('Resend rejected password recovery email', {
@@ -476,7 +478,7 @@ router.post('/doctors/:doctorId/schedule/:slotId/book', requireAuth, requireRole
   if (booked.count === 0) return res.status(409).json({ error: 'This slot is no longer available.' });
   const slot = await prisma.scheduleSlot.findFirst({
     where: { id: slotId, doctorId: doctor.id },
-    select: { id: true, startAt: true, endAt: true, status: true, visitPurpose: true },
+    select: { id: true, startAt: true, endAt: true, status: true, visitPurpose: true, updatedAt: true },
   });
   if (slot) {
     void recordAppointmentNotification({
@@ -484,6 +486,7 @@ router.post('/doctors/:doctorId/schedule/:slotId/book', requireAuth, requireRole
       userId: req.user!.id,
       email: req.user!.email,
       event: 'BOOKED',
+      occurrenceId: slot.updatedAt?.toISOString(),
       reference: appointmentReference(slot.id),
       doctor: doctor.user ? `Dr. ${doctor.user.firstName} ${doctor.user.lastName}` : 'your doctor',
       startAt: slot.startAt,
@@ -496,7 +499,7 @@ router.post('/doctors/:doctorId/schedule/:slotId/book', requireAuth, requireRole
 router.post('/appointments/:slotId/cancel', requireAuth, requireRole(Role.PATIENT), async (req, res) => {
   const slotId = Array.isArray(req.params.slotId) ? req.params.slotId[0] : req.params.slotId;
   const { reason } = parsed(cancelSchema, req.body ?? {});
-  const slot = await prisma.scheduleSlot.findFirst({ where: { id: slotId, patientId: req.user!.id }, select: { id: true, status: true, startAt: true, endAt: true, patientId: true, doctorId: true, visitPurpose: true, doctor: { select: { userId: true, user: { select: { firstName: true, lastName: true } } } } } });
+  const slot = await prisma.scheduleSlot.findFirst({ where: { id: slotId, patientId: req.user!.id }, select: { id: true, status: true, startAt: true, endAt: true, patientId: true, doctorId: true, visitPurpose: true, updatedAt: true, doctor: { select: { userId: true, user: { select: { firstName: true, lastName: true } } } } } });
   if (!slot || slot.patientId !== req.user!.id) return res.status(404).json({ error: 'Appointment not found.' });
   if (slot.status !== SlotStatus.BOOKED) return res.status(409).json({ error: 'Only booked appointments can be cancelled.' });
   if (slot.startAt <= new Date()) return res.status(409).json({ error: 'Past or started appointments cannot be cancelled.' });
@@ -507,7 +510,7 @@ router.post('/appointments/:slotId/cancel', requireAuth, requireRole(Role.PATIEN
     return true;
   });
   if (!cancelled) return res.status(409).json({ error: 'This appointment changed while it was being cancelled. Refresh and try again.' });
-  void recordAppointmentNotification({ slotId: slot.id, userId: req.user!.id, email: req.user!.email, event: 'CANCELLED', reference: appointmentReference(slot.id), doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, startAt: slot.startAt, doctorUserId: slot.doctor.userId, reason }).catch(() => undefined);
+  void recordAppointmentNotification({ slotId: slot.id, userId: req.user!.id, email: req.user!.email, event: 'CANCELLED', occurrenceId: slot.updatedAt?.toISOString(), reference: appointmentReference(slot.id), doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, startAt: slot.startAt, doctorUserId: slot.doctor.userId, reason }).catch(() => undefined);
   res.json({ cancelled: true, reference: appointmentReference(slot.id) });
 });
 
@@ -523,14 +526,15 @@ router.post('/appointments/:slotId/check-in', requireAuth, requireRole(Role.PATI
   const patientId = existing.patientId;
   if (!patientId) return res.status(404).json({ error: 'Booked appointment has no patient.' });
   const reference = appointmentReference(slotId);
+  const checkedInAt = new Date();
   const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.scheduleSlot.updateMany({ where: { id: slotId, status: SlotStatus.BOOKED, patientId }, data: { status: SlotStatus.OCCUPIED, checkedInAt: new Date(), checkedInById: req.user!.id } });
+    const updated = await tx.scheduleSlot.updateMany({ where: { id: slotId, status: SlotStatus.BOOKED, patientId }, data: { status: SlotStatus.OCCUPIED, checkedInAt, checkedInById: req.user!.id } });
     if (!updated.count) return null;
     return tx.receipt.upsert({ where: { slotId }, create: { slotId, patientId, reference }, update: {} });
   });
   if (!result) return res.status(409).json({ error: 'This appointment was checked in by another user.' });
   const receipt = result;
-  void recordAppointmentNotification({ slotId, userId: patientId, email: existing.patient.email, event: 'CHECKED_IN', reference, doctor: `Dr. ${existing.doctor.user.firstName} ${existing.doctor.user.lastName}`, startAt: existing.startAt, doctorUserId: existing.doctor.userId, patientName: `${existing.patient.firstName} ${existing.patient.lastName}` }).catch(() => undefined);
+  void recordAppointmentNotification({ slotId, userId: patientId, email: existing.patient.email, event: 'CHECKED_IN', occurrenceId: receipt.id, receipt: { id: receipt.id, reference, patientName: `${existing.patient.firstName} ${existing.patient.lastName}`, doctor: `Dr. ${existing.doctor.user.firstName} ${existing.doctor.user.lastName}`, startAt: existing.startAt, checkedInAt }, reference, doctor: `Dr. ${existing.doctor.user.firstName} ${existing.doctor.user.lastName}`, startAt: existing.startAt, doctorUserId: existing.doctor.userId, patientName: `${existing.patient.firstName} ${existing.patient.lastName}` }).catch(() => undefined);
   res.json({ checkedIn: true, reference, receipt });
 });
 
@@ -650,19 +654,17 @@ router.post('/front-desk/walk-ins', requireAuth, requireRole(Role.FRONT_DESK, Ro
   const existing = await prisma.user.findUnique({ where: { iin: input.iin }, select: { id: true, role: true, email: true, firstName: true, lastName: true } });
   if (existing && existing.role !== Role.PATIENT) return res.status(409).json({ error: 'That IIN belongs to a non-patient account.' });
   const status = slot.startAt.getTime() - Date.now() < 30 * 60_000 ? SlotStatus.OCCUPIED : SlotStatus.BOOKED;
+  const checkedInAt = new Date();
   const result = await prisma.$transaction(async (tx) => {
     const patient = existing ?? await tx.user.create({ data: { firstName: input.firstName, lastName: input.lastName, iin: input.iin, email: input.email || `walkin-${randomToken()}@local.happypatient`, phone: input.phone || null, passwordHash: await hashPassword(randomToken()), role: Role.PATIENT }, select: { id: true, email: true, firstName: true, lastName: true } });
-    const updated = await tx.scheduleSlot.updateMany({ where: { id: slot.id, doctorId: input.doctorId, status: SlotStatus.FREE }, data: { status, patientId: patient.id, visitPurpose: input.visitPurpose, ...(status === SlotStatus.OCCUPIED ? { checkedInAt: new Date(), checkedInById: req.user!.id } : {}) } });
+    const updated = await tx.scheduleSlot.updateMany({ where: { id: slot.id, doctorId: input.doctorId, status: SlotStatus.FREE }, data: { status, patientId: patient.id, visitPurpose: input.visitPurpose, ...(status === SlotStatus.OCCUPIED ? { checkedInAt, checkedInById: req.user!.id } : {}) } });
     if (!updated.count) return null;
-    return patient;
+    const receipt = status === SlotStatus.OCCUPIED ? await tx.receipt.upsert({ where: { slotId: slot.id }, create: { slotId: slot.id, patientId: patient.id, reference: appointmentReference(slot.id) }, update: {} }) : undefined;
+    return { patient, receipt };
   });
   if (!result) return res.status(409).json({ error: 'The selected slot was booked by someone else.' });
-  const patient = result;
-  let receipt;
-  if (status === SlotStatus.OCCUPIED) {
-    receipt = await prisma.receipt.upsert({ where: { slotId: slot.id }, create: { slotId: slot.id, patientId: patient.id, reference: appointmentReference(slot.id) }, update: {} });
-  }
-  void recordAppointmentNotification({ slotId: slot.id, userId: patient.id, email: patient.email, event: status === SlotStatus.OCCUPIED ? 'CHECKED_IN' : 'BOOKED', reference: appointmentReference(slot.id), doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, startAt: slot.startAt, doctorUserId: slot.doctor.userId, patientName: `${patient.firstName} ${patient.lastName} (walk-in)` }).catch(() => undefined);
+  const { patient, receipt } = result;
+  void recordAppointmentNotification({ slotId: slot.id, userId: patient.id, email: patient.email, event: status === SlotStatus.OCCUPIED ? 'CHECKED_IN' : 'BOOKED', occurrenceId: receipt?.id ?? checkedInAt.toISOString(), receipt: receipt ? { id: receipt.id, reference: receipt.reference, patientName: `${patient.firstName} ${patient.lastName}`, doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, startAt: slot.startAt, checkedInAt } : undefined, reference: appointmentReference(slot.id), doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, startAt: slot.startAt, doctorUserId: slot.doctor.userId, patientName: `${patient.firstName} ${patient.lastName} (walk-in)` }).catch(() => undefined);
   res.status(201).json({ patient: { id: patient.id, firstName: patient.firstName, lastName: patient.lastName }, slot: { id: slot.id, status }, reference: appointmentReference(slot.id), receipt });
 });
 
@@ -671,7 +673,7 @@ router.patch('/doctors/me/schedule/:slotId', requireAuth, requireRole(Role.DOCTO
   const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true, user: { select: { firstName: true, lastName: true } } } });
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
   const slotId = Array.isArray(req.params.slotId) ? req.params.slotId[0] : req.params.slotId;
-  const slot = await prisma.scheduleSlot.findFirst({ where: { id: slotId, doctorId: doctor.id }, select: { id: true, status: true, startAt: true, endAt: true, visitPurpose: true, patientId: true, patient: { select: { email: true } } } });
+  const slot = await prisma.scheduleSlot.findFirst({ where: { id: slotId, doctorId: doctor.id }, select: { id: true, status: true, startAt: true, endAt: true, visitPurpose: true, updatedAt: true, patientId: true, patient: { select: { email: true } } } });
   if (!slot) return res.status(404).json({ error: 'Schedule slot not found.' });
   if (input.status === SlotStatus.BOOKED && slot.status !== SlotStatus.BOOKED && slot.startAt <= new Date()) {
     return res.status(400).json({ error: 'Past schedule slots cannot be booked.' });
@@ -707,7 +709,7 @@ router.patch('/doctors/me/schedule/:slotId', requireAuth, requireRole(Role.DOCTO
     const reason = input.cancellationReason ?? 'No reason given';
     await prisma.cancelledAppointment.create({ data: { slotId: slot.id, patientId: slot.patientId, doctorId: doctor.id, startAt: slot.startAt, endAt: slot.endAt, visitPurpose: slot.visitPurpose, reason, cancelledById: req.user!.id, cancelledByRole: Role.DOCTOR } })
       .catch((error: unknown) => console.error('Cancellation history could not be stored', { message: error instanceof Error ? error.message : String(error) }));
-    void notifyUser({ userId: slot.patientId, email: slot.patient?.email, slotId: slot.id, type: 'APPOINTMENT_RELEASED', subject: 'Appointment cancelled by the clinic', message: `Your appointment ${appointmentReference(slot.id)} with ${doctorName} on ${formatAlmaty(slot.startAt)} was cancelled by the doctor. Reason: ${reason}. Please book another time.` });
+    void notifyUser({ userId: slot.patientId, email: slot.patient?.email, slotId: slot.id, type: 'APPOINTMENT_RELEASED', eventKey: `DOCTOR_CANCELLED:${slot.id}:${slot.patientId}:${slot.updatedAt?.toISOString() ?? slot.startAt.toISOString()}`, ...appointmentEmail('DOCTOR_CANCELLED', { doctor: doctorName, reference: appointmentReference(slot.id), startAt: slot.startAt, reason }), message: `Your appointment ${appointmentReference(slot.id)} with ${doctorName} on ${formatAlmaty(slot.startAt)} was cancelled by the doctor. Reason: ${reason}. Please book another time.` });
   }
   res.json({ slot: updated });
 });

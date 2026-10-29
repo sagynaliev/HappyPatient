@@ -56,3 +56,7 @@ npm test
 ```
 
 No real credentials or secrets are committed; use `.env.example` as the configuration template.
+
+## Branded email notifications and check-in receipts
+
+Appointment emails now share Happy Patient branding and include plain-text fallbacks. Successful check-in attaches a registration PDF with real appointment details in Asia/Almaty time. Existing authenticated receipt download/printing remains available. See [notification configuration, local previews, verification and failure handling](docs/notifications.md).

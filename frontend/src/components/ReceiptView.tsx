@@ -7,7 +7,6 @@ import "../styles/receipt.css";
 const TZ = "Asia/Almaty";
 const date = (value: string) => new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ }).format(new Date(value));
 const time = (value: string) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: TZ }).format(new Date(value));
-const money = (value: number) => `${new Intl.NumberFormat("ru-RU").format(value)} ₸`;
 
 /** Deterministic barcode-style bars generated from the receipt reference. */
 function Barcode({ value }: { value: string }) {
@@ -29,22 +28,21 @@ function Barcode({ value }: { value: string }) {
 }
 
 function ReceiptSlip({ receipt }: { receipt: Receipt }) {
-  const issued = receipt.checkedInAt ?? receipt.createdAt ?? new Date().toISOString();
-  const fee = receipt.consultationFee ?? 0;
+  const issued = receipt.checkedInAt ?? receipt.createdAt;
   return (
     <div className="receipt-slip">
       <header className="receipt-slip-header">
         <div className="receipt-logo" aria-hidden="true">+</div>
-        <strong>HappyPatient Medical Center</strong>
+        <strong>HappyPatient</strong>
         <span>{receipt.address ?? receipt.clinic ?? "Almaty, Kazakhstan"}</span>
-        <span>Front desk · +7 727 000 00 00</span>
       </header>
 
       <div className="receipt-title">VISIT REGISTRATION RECEIPT</div>
 
       <dl className="receipt-rows">
-        <div><dt>Receipt No.</dt><dd>{receipt.reference}</dd></div>
-        <div><dt>Issued</dt><dd>{date(issued)} {time(issued)}</dd></div>
+        <div><dt>Receipt ID</dt><dd>{receipt.id}</dd></div>
+        <div><dt>Booking ID</dt><dd>{receipt.reference}</dd></div>
+        <div><dt>Issued</dt><dd>{issued ? `${date(issued)} ${time(issued)} (Asia/Almaty)` : "Unavailable"}</dd></div>
       </dl>
 
       <hr />
@@ -56,23 +54,13 @@ function ReceiptSlip({ receipt }: { receipt: Receipt }) {
         {receipt.specialty && <div><dt>Specialty</dt><dd>{receipt.specialty}</dd></div>}
         {receipt.office && <div><dt>Office</dt><dd>{receipt.office}</dd></div>}
         <div><dt>Appointment</dt><dd>{date(receipt.startAt)} {time(receipt.startAt)}–{time(receipt.endAt)}</dd></div>
-        {receipt.checkedInAt && <div><dt>Arrived</dt><dd>{time(receipt.checkedInAt)}</dd></div>}
+        {receipt.checkedInAt && <div><dt>Arrived</dt><dd>{date(receipt.checkedInAt)} {time(receipt.checkedInAt)} (Asia/Almaty)</dd></div>}
         {receipt.checkedInBy && <div><dt>Checked in by</dt><dd>{receipt.checkedInBy}</dd></div>}
-        {receipt.visitPurpose && <div><dt>Purpose</dt><dd>{receipt.visitPurpose}</dd></div>}
       </dl>
 
       <hr />
 
-      <table className="receipt-items">
-        <thead><tr><th>Service</th><th>Qty</th><th>Amount</th></tr></thead>
-        <tbody>
-          <tr><td>Consultation{receipt.specialty ? ` — ${receipt.specialty}` : ""}</td><td>1</td><td>{money(fee)}</td></tr>
-        </tbody>
-      </table>
-
-      <dl className="receipt-rows receipt-total">
-        <div><dt>TOTAL</dt><dd>{money(fee)}</dd></div>
-        <div><dt>Payment</dt><dd>At reception</dd></div>
+      <dl className="receipt-rows">
         <div><dt>Status</dt><dd>{receipt.status === "OCCUPIED" ? "Checked in" : receipt.status}</dd></div>
       </dl>
 
@@ -81,7 +69,7 @@ function ReceiptSlip({ receipt }: { receipt: Receipt }) {
 
       <p className="receipt-note">Please take a seat in the waiting area. Show this receipt when your name is called.</p>
       <p className="receipt-thanks">Thank you for choosing HappyPatient!</p>
-      <p className="receipt-disclaimer">Alpha version · sample receipt · not a fiscal document</p>
+      <p className="receipt-disclaimer">Registration completed successfully. Not a fiscal or payment receipt.</p>
     </div>
   );
 }

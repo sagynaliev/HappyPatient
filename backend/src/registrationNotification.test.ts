@@ -31,7 +31,7 @@ describe('registration confirmation notification', () => {
     expect(payload.html).toContain('Hello Amina,');
     expect(payload.html).toContain('Your account has been successfully created.');
     expect(payload.html).toContain('Search for doctors and specialists.');
-    expect(payload.html).toContain("View doctors' schedules.");
+    expect(payload.html).toContain("View doctors&#39; schedules.");
     expect(payload.html).toContain('Book and manage appointments.');
     expect(payload.html).toContain('Receive important notifications.');
     expect(payload.html).toContain('href="https://app.example.test/"');

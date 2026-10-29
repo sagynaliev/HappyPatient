@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/assets && cp src/assets/* dist/assets/",
     "start": "prisma migrate deploy && node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:seed": "tsx prisma/seed.ts",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "preview:notifications": "node scripts/previewNotifications.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
@@ -21,6 +22,7 @@
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "jspdf": "4.2.1",
     "prisma": "^6.19.0",
     "resend": "^6.28.1",
     "zod": "^4.1.5"
@@ -32,6 +34,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.3.1",
     "@types/supertest": "^7.2.1",
+    "pdfjs-dist": "^6.4.299",
     "supertest": "^7.1.4",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

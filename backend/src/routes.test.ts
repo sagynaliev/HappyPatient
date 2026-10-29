@@ -12,22 +12,29 @@ const prismaMock = vi.hoisted(() => ({
   $transaction: vi.fn(),
 }));
 const notificationMock = vi.hoisted(() => vi.fn());
+const sendEmail = vi.hoisted(() => vi.fn());
+vi.mock('resend', () => ({ Resend: class { emails = { send: sendEmail }; } }));
 
 vi.mock('./prisma', () => ({ prisma: prismaMock }));
 vi.mock('./registrationNotification', () => ({ sendRegistrationConfirmation: notificationMock }));
 
 let app: (typeof import('./app'))['app'];
+let testConfig: (typeof import('./config'))['config'];
 let signToken: (user: { id: string; email: string; role: Role }) => string;
 
 beforeAll(async () => {
   process.env.DATABASE_URL ||= 'postgresql://user:pass@localhost:5432/test';
   process.env.JWT_SECRET ||= 'test-secret-with-at-least-16-chars';
   ({ app } = await import('./app.js'));
+  ({ config: testConfig } = await import('./config.js'));
   ({ signToken } = await import('./auth.js'));
 });
 
 beforeEach(() => {
   vi.resetAllMocks();
+  testConfig.RESEND_API_KEY = undefined;
+  sendEmail.mockResolvedValue({ error: null });
+  prismaMock.notification.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.doctor.findMany.mockResolvedValue([]);
   prismaMock.doctor.findUnique.mockResolvedValue({
     id: 'doctor-1',
@@ -157,7 +164,7 @@ describe('notifications for both sides of an appointment', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const created = prismaMock.notification.create.mock.calls.map(([arg]) => arg.data);
     expect(created).toEqual(expect.arrayContaining([
-      expect.objectContaining({ userId: 'patient-user', type: 'BOOKED', subject: 'Appointment booking confirmed' }),
+      expect.objectContaining({ userId: 'patient-user', type: 'BOOKED', subject: 'Appointment Confirmed | Happy Patient' }),
       expect.objectContaining({ userId: 'doctor-user', type: 'BOOKED', subject: 'New appointment booked', message: expect.stringContaining('Casey Patient') }),
     ]));
   });
@@ -209,7 +216,7 @@ describe('front-desk availability picker', () => {
 
 describe('notification bell endpoints', () => {
   it('returns only the signed-in user notifications with an unread count', async () => {
-    prismaMock.notification.findMany.mockResolvedValueOnce([{ id: 'n1', type: 'BOOKED', subject: 'Appointment booking confirmed', readAt: null }]);
+    prismaMock.notification.findMany.mockResolvedValueOnce([{ id: 'n1', type: 'BOOKED', subject: 'Appointment Confirmed | Happy Patient', readAt: null }]);
     prismaMock.notification.count.mockResolvedValueOnce(1);
     const response = await request(app).get('/api/notifications').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(200);
     expect(response.body.unreadCount).toBe(1);
@@ -663,5 +670,93 @@ describe('Sprint 2 doctor endpoints', () => {
     expect(prismaMock.doctor.update).toHaveBeenLastCalledWith(expect.objectContaining({
       data: { city: null, clinicName: null, streetAddress: null, officeNumber: null },
     }));
+  });
+});
+
+
+describe('branded appointment emails through real routes (mocked Resend)', () => {
+  const checkedInSlot = () => ({
+    id: 'slot-1', status: SlotStatus.BOOKED, startAt: new Date(Date.now() + 5 * 60_000), endAt: new Date(Date.now() + 35 * 60_000), patientId: 'patient-user',
+    patient: { id: 'patient-user', email: 'patient@example.test', firstName: 'Casey', lastName: 'Patient' },
+    doctor: { userId: 'doctor-user', user: { firstName: 'Sam', lastName: 'Doctor' } },
+  });
+  beforeEach(() => { testConfig.RESEND_API_KEY = 'mock-provider-key'; });
+
+  it('sends branded booking email only after a successful booking', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-1', startAt: new Date(Date.now() + 86400000), status: SlotStatus.BOOKED, updatedAt: new Date() });
+    await request(app).post('/api/doctors/doctor-1/schedule/slot-1/book').set('Authorization', bearer(Role.PATIENT, 'patient-user')).send({ visitPurpose: 'Private clinical purpose' }).expect(201);
+    await vi.waitFor(() => expect(sendEmail).toHaveBeenCalledOnce());
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({ subject: 'Appointment Confirmed | Happy Patient', to: 'patient@example.test' });
+    expect(sendEmail.mock.calls[0][0].html).not.toContain('Private clinical purpose');
+    prismaMock.scheduleSlot.updateMany.mockResolvedValueOnce({ count: 0 });
+    await request(app).post('/api/doctors/doctor-1/schedule/slot-1/book').set('Authorization', bearer(Role.PATIENT)).send({ visitPurpose: 'Follow-up' }).expect(409);
+    expect(sendEmail).toHaveBeenCalledOnce();
+  });
+
+  it('attaches a receipt using the exact persisted check-in timestamp', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(checkedInSlot());
+    await request(app).post('/api/appointments/slot-1/check-in').set('Authorization', bearer(Role.FRONT_DESK, 'desk-user')).expect(200);
+    await vi.waitFor(() => expect(sendEmail).toHaveBeenCalledOnce());
+    const payload = sendEmail.mock.calls[0][0];
+    expect(payload.subject).toBe('Visit Check-in Confirmed | Happy Patient');
+    expect(payload.attachments[0].content.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(prismaMock.receipt.upsert).toHaveBeenCalledOnce();
+    const checkedInAt = prismaMock.scheduleSlot.updateMany.mock.calls[0][0].data.checkedInAt;
+    expect(checkedInAt).toBeInstanceOf(Date);
+    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const task = getDocument({ data: new Uint8Array(payload.attachments[0].content) });
+    const doc = await task.promise;
+    const content = await (await doc.getPage(1)).getTextContent();
+    const text = content.items.map(item => 'str' in item ? item.str : '').join(' ');
+    const time = new Intl.DateTimeFormat('en-GB', { timeStyle: 'short', timeZone: 'Asia/Almaty' }).format(checkedInAt);
+    for (const value of ['receipt-1', 'HP-SLOT-1', 'Casey Patient', 'Dr. Sam Doctor', time]) expect(text).toContain(value);
+    await task.destroy();
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ ...checkedInSlot(), status: SlotStatus.OCCUPIED });
+    await request(app).post('/api/appointments/slot-1/check-in').set('Authorization', bearer(Role.FRONT_DESK)).expect(409);
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(prismaMock.receipt.upsert).toHaveBeenCalledOnce();
+  });
+
+  it('does not create receipts or send email after losing the check-in race', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(checkedInSlot());
+    prismaMock.scheduleSlot.updateMany.mockResolvedValueOnce({ count: 0 });
+    await request(app).post('/api/appointments/slot-1/check-in').set('Authorization', bearer(Role.FRONT_DESK)).expect(409);
+    expect(prismaMock.receipt.upsert).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('keeps successful check-in state when Resend fails', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(checkedInSlot());
+    sendEmail.mockRejectedValueOnce(new Error('Provider unavailable'));
+    await request(app).post('/api/appointments/slot-1/check-in').set('Authorization', bearer(Role.FRONT_DESK)).expect(200);
+    await vi.waitFor(() => expect(prismaMock.notification.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'FAILED' }) })));
+    expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledOnce();
+    expect(prismaMock.receipt.upsert).toHaveBeenCalledOnce();
+  });
+
+  it('sends a distinct patient cancellation email', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ ...checkedInSlot(), doctorId: 'doctor-1', visitPurpose: 'Private purpose', updatedAt: new Date() });
+    await request(app).post('/api/appointments/slot-1/cancel').set('Authorization', bearer(Role.PATIENT, 'patient-user')).send({ reason: 'Plans changed' }).expect(200);
+    await vi.waitFor(() => expect(sendEmail).toHaveBeenCalledOnce());
+    expect(sendEmail.mock.calls[0][0].subject).toBe('Appointment Cancelled | Happy Patient');
+    expect(sendEmail.mock.calls[0][0].text).toContain('Cancelled by patient');
+  });
+
+  it('sends doctor cancellation details and reason to the existing patient recipient', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ ...checkedInSlot(), updatedAt: new Date() }).mockResolvedValueOnce({ id: 'slot-1', status: SlotStatus.FREE });
+    await request(app).patch('/api/doctors/me/schedule/slot-1').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).send({ status: 'FREE', releaseBooking: true, cancellationReason: 'Doctor unavailable' }).expect(200);
+    await vi.waitFor(() => expect(sendEmail).toHaveBeenCalledOnce());
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({ to: 'patient@example.test', subject: 'Appointment Cancelled by Doctor | Happy Patient' });
+    expect(sendEmail.mock.calls[0][0].text).toContain('Doctor unavailable');
+    expect(sendEmail.mock.calls[0][0].text).toContain('Cancelled by doctor');
+  });
+
+  it('creates and emails the receipt for an immediately checked-in walk-in', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(checkedInSlot());
+    prismaMock.user.findUnique.mockResolvedValueOnce({ id: 'patient-user', role: Role.PATIENT, email: 'patient@example.test', firstName: 'Casey', lastName: 'Patient' });
+    await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK)).send({ slotId: 'slot-1', doctorId: 'doctor-1', iin: '123456789012', firstName: 'Casey', lastName: 'Patient', visitPurpose: 'Walk-in consultation' }).expect(201);
+    await vi.waitFor(() => expect(sendEmail).toHaveBeenCalledOnce());
+    expect(sendEmail.mock.calls[0][0].attachments).toHaveLength(1);
+    expect(prismaMock.receipt.upsert).toHaveBeenCalledOnce();
   });
 });
