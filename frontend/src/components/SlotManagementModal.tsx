@@ -154,7 +154,7 @@ export function SlotManagementModal({
             </>
           )}
 
-          {!loading && !error && slot.status === "OCCUPIED" && (
+          {!loading && !error && slot.status === "OCCUPIED" && !slot.patientId && !slot.patient && !slot.checkedInAt && (
             <button className="button button-outline" type="button" disabled={busy} onClick={() => onUpdate("FREE")}>
               {busy ? "Updating…" : "Mark as available"}
             </button>

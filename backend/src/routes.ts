@@ -673,8 +673,11 @@ router.patch('/doctors/me/schedule/:slotId', requireAuth, requireRole(Role.DOCTO
   const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true, user: { select: { firstName: true, lastName: true } } } });
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
   const slotId = Array.isArray(req.params.slotId) ? req.params.slotId[0] : req.params.slotId;
-  const slot = await prisma.scheduleSlot.findFirst({ where: { id: slotId, doctorId: doctor.id }, select: { id: true, status: true, startAt: true, endAt: true, visitPurpose: true, updatedAt: true, patientId: true, patient: { select: { email: true } } } });
+  const slot = await prisma.scheduleSlot.findFirst({ where: { id: slotId, doctorId: doctor.id }, select: { id: true, status: true, startAt: true, endAt: true, visitPurpose: true, updatedAt: true, patientId: true, checkedInAt: true, patient: { select: { email: true } } } });
   if (!slot) return res.status(404).json({ error: 'Schedule slot not found.' });
+  if (slot.checkedInAt || (slot.status === SlotStatus.OCCUPIED && slot.patientId)) {
+    return res.status(409).json({ error: 'Checked-in appointments cannot be changed through manual availability controls.' });
+  }
   if (input.status === SlotStatus.BOOKED && slot.status !== SlotStatus.BOOKED && slot.startAt <= new Date()) {
     return res.status(400).json({ error: 'Past schedule slots cannot be booked.' });
   }
@@ -689,7 +692,7 @@ router.patch('/doctors/me/schedule/:slotId', requireAuth, requireRole(Role.DOCTO
     if (patient?.role !== Role.PATIENT) return res.status(400).json({ error: 'The selected patient account was not found.' });
   }
   const updatedCount = await prisma.scheduleSlot.updateMany({
-    where: { id: slot.id, doctorId: doctor.id, status: slot.status },
+    where: { id: slot.id, doctorId: doctor.id, status: slot.status, ...(slot.status === SlotStatus.OCCUPIED ? { patientId: null, checkedInAt: null } : {}) },
     data: {
       status: input.status as SlotStatus,
       patientId: input.status === SlotStatus.BOOKED ? input.patientId : null,

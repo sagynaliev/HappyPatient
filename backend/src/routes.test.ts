@@ -760,3 +760,51 @@ describe('branded appointment emails through real routes (mocked Resend)', () =>
     expect(prismaMock.receipt.upsert).toHaveBeenCalledOnce();
   });
 });
+
+describe('manual availability protects active appointments', () => {
+  it.each([
+    { status: SlotStatus.BOOKED, patientId: 'patient-1', checkedInAt: null },
+    { status: SlotStatus.OCCUPIED, patientId: 'patient-1', checkedInAt: new Date() },
+    { status: SlotStatus.OCCUPIED, patientId: 'patient-1', checkedInAt: null },
+    { status: SlotStatus.OCCUPIED, patientId: null, checkedInAt: new Date() },
+  ])('rejects freeing active appointment data %j', async fields => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-1', ...fields });
+    await request(app).patch('/api/doctors/me/schedule/slot-1').set('Authorization', bearer(Role.DOCTOR)).send({ status: 'FREE' }).expect(409);
+    expect(prismaMock.scheduleSlot.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.cancelledAppointment.create).not.toHaveBeenCalled();
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['FREE', 'BOOKED', 'OCCUPIED'])('cannot overwrite checked-in data with status %s', async status => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-1', status: SlotStatus.OCCUPIED, patientId: 'patient-1', checkedInAt: new Date() });
+    await request(app).patch('/api/doctors/me/schedule/slot-1').set('Authorization', bearer(Role.DOCTOR)).send({ status, ...(status === 'BOOKED' ? { patientId: 'other-patient', visitPurpose: 'Replacement visit' } : {}) }).expect(409);
+    expect(prismaMock.scheduleSlot.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not permit doctor or patient cancellation after check-in', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValue({ id: 'slot-1', status: SlotStatus.OCCUPIED, patientId: 'patient-user', checkedInAt: new Date() });
+    await request(app).patch('/api/doctors/me/schedule/slot-1').set('Authorization', bearer(Role.DOCTOR)).send({ status: 'FREE', releaseBooking: true, cancellationReason: 'Doctor unavailable' }).expect(409);
+    await request(app).post('/api/appointments/slot-1/cancel').set('Authorization', bearer(Role.PATIENT, 'patient-user')).send({ reason: 'Plans changed' }).expect(409);
+    expect(prismaMock.scheduleSlot.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.cancelledAppointment.create).not.toHaveBeenCalled();
+  });
+
+  it('allows manual blocks to become available using an atomic no-appointment guard', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-1', status: SlotStatus.OCCUPIED, patientId: null, checkedInAt: null }).mockResolvedValueOnce({ id: 'slot-1', status: SlotStatus.FREE, patient: null });
+    await request(app).patch('/api/doctors/me/schedule/slot-1').set('Authorization', bearer(Role.DOCTOR)).send({ status: 'FREE' }).expect(200);
+    expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith({
+      where: { id: 'slot-1', doctorId: 'doctor-1', status: SlotStatus.OCCUPIED, patientId: null, checkedInAt: null },
+      data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null },
+    });
+    expect(prismaMock.cancelledAppointment.create).not.toHaveBeenCalled();
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
+  });
+
+  it('returns conflict when an appointment appears after loading a manual block', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-1', status: SlotStatus.OCCUPIED, patientId: null, checkedInAt: null });
+    prismaMock.scheduleSlot.updateMany.mockResolvedValueOnce({ count: 0 });
+    await request(app).patch('/api/doctors/me/schedule/slot-1').set('Authorization', bearer(Role.DOCTOR)).send({ status: 'FREE' }).expect(409);
+    expect(prismaMock.scheduleSlot.updateMany.mock.calls[0][0].where).toMatchObject({ patientId: null, checkedInAt: null });
+    expect(prismaMock.scheduleSlot.findFirst).toHaveBeenCalledOnce();
+  });
+});

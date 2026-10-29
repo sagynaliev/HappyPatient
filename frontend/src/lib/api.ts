@@ -57,6 +57,8 @@ export type ScheduleSlot = {
   startAt: string;
   endAt: string;
   status: 'FREE' | 'BOOKED' | 'OCCUPIED';
+  patientId?: string | null;
+  checkedInAt?: string | null;
   visitPurpose?: string | null;
   patient?: { id: string; firstName: string; lastName: string; email?: string } | null;
 };
