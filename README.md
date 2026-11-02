@@ -1,13 +1,27 @@
-# HappyPatient Sprint 1 MVP
+# Happy Patient
 
-HappyPatient is a small patient/doctor directory and authentication MVP. It is a clean TypeScript monorepo with:
+Happy Patient is a clinic management web platform built for the SOE 202 course (SDU). Patients find doctors and book 30-minute slots online, doctors manage their schedule and medical records, front-desk staff check patients in, and administrators manage pricing, statistics and reference data.
 
-- `backend/`: Express API, Prisma/PostgreSQL persistence, JWT authentication, bcrypt password hashing, role middleware, recovery tokens, and seed data.
-- `frontend/`: React + TypeScript + Vite single-page application with responsive navigation, protected dashboards, authentication forms, and doctor/category search.
+It is a TypeScript monorepo:
+
+- `backend/`: Express 5 API, Prisma 6 with PostgreSQL, JWT authentication, bcrypt password hashing, role-based access control, zod validation, Resend email and jsPDF receipts.
+- `frontend/`: React 19 + TypeScript + Vite single-page app with React Router, role-specific dashboards and plain CSS.
+
+## Features
+
+| Role | What they can do |
+| --- | --- |
+| Patient | Register, log in, recover a password, search doctors by name, category and location, view schedules, book and cancel appointments, check in at the front desk, view own medical history, see visit and parking cost, receive notifications and upcoming-visit reminders |
+| Doctor | Log in, publish a daily schedule in 30-minute slots, see slot statuses (free / booked / occupied) and booking details, add categorized medical notes (tests, anamnesis, conclusions), view a patient's history in chronological order |
+| Front desk | Look up patients, register walk-ins by ID/IIN, check patients in, issue receipts; walk-in slots are marked occupied within 30 minutes of the visit and booked otherwise |
+| Administrator | Manage pricing rules (versioned, effective-dated), view workload and visit statistics, run data-integrity checks, manage reference data (categories, city → floor → office) |
+| System | Releases unconfirmed slots, sends reminders, restricts medical history to the assigned doctor and the patient, sends branded email notifications |
+
+Medical entries are append-only and visible only to the assigned doctor and the corresponding patient. Administrators cannot read confidential medical records.
 
 ## Local development
 
-1. Copy `.env.example` to the repository-root `.env` and replace `JWT_SECRET` with a long random value. Keep local configuration in this single file; do not duplicate its variables in `backend/.env`, because Prisma Studio rejects conflicting environment files.
+1. Copy `.env.example` to the repository-root `.env` and replace `JWT_SECRET` with a long random value. Keep local configuration in this single file. Do not duplicate its variables in `backend/.env`, because Prisma Studio rejects conflicting environment files.
 2. Start PostgreSQL:
 
    ```bash
@@ -29,26 +43,46 @@ HappyPatient is a small patient/doctor directory and authentication MVP. It is a
    npm run dev
    ```
 
-   The API runs on `http://localhost:4000`, and the web app runs on `http://localhost:5173`.
+   The API runs on `http://localhost:4000` and the web app on `http://localhost:5173`.
 
-The deterministic Prisma seed command is `npm run seed` (equivalently `npm run db:seed`). It re-seeds exactly 15 categories, 300 doctors, and one admin account with bcrypt-hashed alpha-test password `Demo@12345`; it preserves patient accounts and prints verification counts plus five sample doctors. Password recovery email uses Resend when configured. Registration confirmations use Resend when configured and a local development confirmation otherwise.
+The deterministic seed (`npm run seed`, also `npm run db:seed`) creates exactly 15 categories, 300 doctors and one admin account with the alpha-test password `Demo@12345`. It keeps existing patient accounts and prints verification counts plus five sample doctors. Change the demo password before any real deployment.
 
-## Doctor schedules
+## Scheduling and booking
 
-Doctors can update their office location and publish daily availability from their dashboard. Schedule ranges are interpreted in UTC and generated as non-overlapping 30-minute slots. Signed-in patients can book future free slots with a visit purpose; doctors can mark slots occupied or free and view booked patient details. Patient schedule responses include slot status but never another patient's details.
+- Doctors set their office and publish daily availability. Ranges are generated as non-overlapping 30-minute slots. Times are shown in Asia/Almaty.
+- Signed-in patients can book future free slots with a visit purpose. Patient schedule responses show slot status only, never another patient's details.
+- Doctor search offers debounced suggestions for names, specialties and offices, and filters by specialty, location, availability and time of day. Choosing a listed appointment opens that exact slot in the booking flow.
+- A booked slot that is not checked in within 10 minutes of its start is released back to free by a background job.
+- Check-in moves a slot from booked to occupied and issues a registration receipt.
 
-The doctor directory provides debounced suggestions for doctor names, specialties, and offices. Patients can filter by specialty, location, published availability, and time of day; selecting a listed appointment opens that exact slot in the existing booking flow. Doctor consultation fees remain available as the fallback price; administrators can configure effective-dated visit and parking rules in the operations area. Ratings, experience, languages, and online-visit modes are not currently stored.
+## Pricing
 
+Administrators configure effective-dated visit and parking pricing rules in the operations area. The doctor's consultation fee is used as the fallback price. Patients see the calculated visit and parking cost for each appointment. Amounts are integer KZT.
 
-## Sprint 5–6 operations
+## Admin operations
 
-The existing admin area now includes pricing rules, statistics, data quality/integrity, and reference data. Medical history is chronological and role-restricted; patients receive in-app upcoming-visit reminders. The office hierarchy is city → floor → office. See the [Sprint 5–6 implementation report](docs/sprint56-status.md) for rule definitions, migrations, verification and product-data limits.
+The admin area includes pricing rules, statistics, data quality and integrity checks, and reference data. The office hierarchy is city → floor → office. See the [Sprint 5–6 implementation report](docs/sprint56-status.md) for rule definitions, migrations, verification and known product-data limits, and the [Sprint 4 notes](docs/sprint4.md).
 
-Reminder polling is configured by REMINDER_INTERVAL_MS and REMINDER_LEAD_HOURS; persisted integrity checks use INTEGRITY_INTERVAL_MS. Defaults are 60 seconds, 24 and 2 hours, and one day respectively. No reminder email or SMS delivery is claimed.
+## Notifications and receipts
+
+Appointment emails share Happy Patient branding and include plain-text fallbacks. Password recovery, registration confirmation and appointment emails are sent through Resend when `RESEND_API_KEY` is configured. Without it, the app uses a local development confirmation instead. Successful check-in attaches a registration PDF with the real appointment details. Authenticated receipt download and printing remain available. Upcoming-visit reminders are shown in the app only. SMS delivery is not implemented.
+
+See [notification configuration, local previews, verification and failure handling](docs/notifications.md).
+
+## Background jobs
+
+Three schedulers run inside the API server. Defaults are shown below.
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `SLOT_RELEASE_INTERVAL_MS` | How often unconfirmed slots are released | see `.env.example` |
+| `REMINDER_INTERVAL_MS` | How often reminders are checked | 60 seconds |
+| `REMINDER_LEAD_HOURS` | How long before a visit the reminder appears | 24 and 2 hours |
+| `INTEGRITY_INTERVAL_MS` | How often persisted integrity checks run | one day |
 
 ## Docker
 
-`docker compose up --build` runs PostgreSQL, the API, and the built frontend. The backend applies pending Prisma migrations before it starts. To seed optional demo accounts in the local Compose database, run the seed script from the repository after installing host dependencies and setting `DATABASE_URL` to the local PostgreSQL URL:
+`docker compose up --build` runs PostgreSQL, the API and the built frontend. The backend applies pending Prisma migrations before it starts. To seed demo accounts in the local Compose database, install the host dependencies, set `DATABASE_URL` to the local PostgreSQL URL and run:
 
 ```bash
 npm run seed
@@ -62,10 +96,12 @@ npm run build
 npm test
 ```
 
-No real credentials or secrets are committed; use `.env.example` as the configuration template.
+Some backend suites run against a real PostgreSQL database, so start the database first.
 
-## Branded email notifications and check-in receipts
+## Database tools
 
-Appointment emails now share Happy Patient branding and include plain-text fallbacks. Successful check-in attaches a registration PDF with real appointment details in Asia/Almaty time. Existing authenticated receipt download/printing remains available. See [notification configuration, local previews, verification and failure handling](docs/notifications.md).
+To inspect local tables, run `npm run db:studio` from the repository root and open the localhost URL Prisma prints. Backend workspace commands also load the root `.env`, and externally supplied environment variables take precedence.
 
-To inspect local database tables, run `npm run db:studio` from the repository root and open the localhost URL printed by Prisma. Backend workspace commands also load the root `.env`; externally supplied environment variables retain precedence.
+## Security
+
+No real credentials or secrets are committed. Use `.env.example` as the configuration template.
