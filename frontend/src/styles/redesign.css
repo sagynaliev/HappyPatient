@@ -741,3 +741,7 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 .patient-appointment-actions { flex-wrap: wrap; }
 
 .bk-reschedule-note { margin: 8px 0 0; color: var(--text-secondary); font-size: 14px; }
+
+.bk-confirmed-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 16px; }
+.bk-confirmed-banner strong { font-size: 18px; font-weight: 600; }
+.bk-action-group { display: flex; flex-wrap: wrap; gap: 12px; }

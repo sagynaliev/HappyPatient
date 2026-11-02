@@ -149,8 +149,11 @@ export default function PatientBookingFlow({
   }, [bookingSuccess, consultationType, patientDetailsValid, queryStep, selectedSlot, setSearchParams]);
 
   const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
+  const successHandled = useRef(false);
   useEffect(() => {
-    if (!bookingSuccess) return;
+    if (!bookingSuccess) { successHandled.current = false; return; }
+    if (successHandled.current) return;
+    successHandled.current = true;
     setStepState(4);
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
@@ -176,6 +179,9 @@ export default function PatientBookingFlow({
     ? `${formatTimeInAlmaty(selectedSlot.startAt)}–${formatTimeInAlmaty(selectedSlot.endAt)}`
     : "";
 
+  const summarySlot = bookingSuccess ? bookingSuccess.slot : selectedSlot;
+  const summaryTime = summarySlot ? `${formatTimeInAlmaty(summarySlot.startAt)}–${formatTimeInAlmaty(summarySlot.endAt)}` : "";
+
   // Small progress dots inside the current step of the vertical stepper.
   const subSteps: Record<number, { label: string; done: boolean }[]> = {
     1: [{ label: "Consultation type", done: Boolean(consultationType) }],
@@ -189,37 +195,39 @@ export default function PatientBookingFlow({
   };
   const stepHints = [
     "In-person visit",
-    selectedSlot ? selectedTime : "Pick a day and time",
+    summarySlot ? summaryTime : "Pick a day and time",
     "Contact and reason",
     "Check and confirm",
   ];
 
   const confirmationCard = bookingSuccess ? (
-          <section className="bk-confirmation bk-card" role="status" aria-live="polite" aria-labelledby="bk-confirmation-title">
-            <div className="bk-confirm-icon" aria-hidden="true">
-              <svg viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="20" rx="3" /><path d="M10 4v6m12-6v6M5 13h22m-16 7 3 3 7-7" /></svg>
-            </div>
-            <span className="bk-badge bk-badge--success">Confirmed</span>
-            <h2 id="bk-confirmation-title" ref={confirmationHeadingRef} tabIndex={-1}>You’re all set, {patient?.firstName || "patient"}.</h2>
-            <p className="bk-confirm-meta">{bookingSuccess.doctorName} · {doctor?.category.name}</p>
-            <dl className="bk-confirm-details">
-              <div><dt>Appointment</dt><dd>{formatFullDate(slotDateInAlmaty(bookingSuccess.slot.startAt))}</dd></div>
-              <div><dt>Time</dt><dd>{formatTimeInAlmaty(bookingSuccess.slot.startAt)}–{formatTimeInAlmaty(bookingSuccess.slot.endAt)} · UTC+5</dd></div>
-              {office && doctor && <div><dt>Location</dt><dd><DoctorLocation {...doctor} /></dd></div>}
-              {bookingSuccess.purpose && <div><dt>Reason for visit</dt><dd>{bookingSuccess.purpose}</dd></div>}
-              {fee && <div><dt>Price</dt><dd>{fee}</dd></div>}
-              <div><dt>Booking ID</dt><dd>{bookingSuccess.reference}</dd></div>
-              <div><dt>Status</dt><dd>{bookingSuccess.slot.status === "OCCUPIED" ? "Checked in" : "Booked"}</dd></div>
-            </dl>
-            <p className="bk-info bk-info--success">A booking notification is waiting under the bell.</p>
-            <div className="bk-confirm-actions">
-              <Link className="button" to="/appointments">View my appointments</Link>
-              <button className="button button-outline" type="button" onClick={() => downloadCalendarEvent(bookingSuccess.doctorName, bookingSuccess.slot, office)}>
-                Add to calendar
-              </button>
-            </div>
-            <Link className="bk-home-link" to="/search">Book another doctor</Link>
-          </section>
+    <section className="bk-card" role="status" aria-live="polite" aria-labelledby="bk-step-title">
+      <header className="bk-card-heading">
+        <h2 id="bk-step-title" ref={confirmationHeadingRef} tabIndex={-1}>4. {steps[3]}</h2>
+        <p>Your appointment is booked. These are the details that were saved.</p>
+      </header>
+      <div className="bk-confirmed-banner">
+        <span className="bk-badge bk-badge--success">Confirmed</span>
+        <strong>You’re all set, {patient?.firstName || "patient"}.</strong>
+      </div>
+      <div className="bk-review">
+        <dl>
+          <div><dt>Doctor</dt><dd>{bookingSuccess.doctorName}{doctor ? ` · ${doctor.category.name}` : ""}</dd></div>
+          <div><dt>Consultation</dt><dd>In-person · 30 minutes</dd></div>
+          <div><dt>Date & time</dt><dd>{formatFullDate(slotDateInAlmaty(bookingSuccess.slot.startAt))} · {summaryTime}</dd></div>
+          <div><dt>Timezone</dt><dd>Asia/Almaty · UTC+5</dd></div>
+          {office && doctor && <div><dt>Clinic</dt><dd><DoctorLocation {...doctor} /></dd></div>}
+          <div><dt>Patient</dt><dd>{patient ? `${patient.firstName} ${patient.lastName}` : ""}</dd></div>
+          <div><dt>Email</dt><dd>{patient?.email || ""}</dd></div>
+          <div><dt>Phone</dt><dd>{patient?.phone || "Not provided"}</dd></div>
+          {bookingSuccess.purpose && <div><dt>Visit reason</dt><dd>{bookingSuccess.purpose}</dd></div>}
+          <div><dt>Booking ID</dt><dd>{bookingSuccess.reference}</dd></div>
+          <div><dt>Status</dt><dd>{bookingSuccess.slot.status === "OCCUPIED" ? "Checked in" : "Booked"}</dd></div>
+          {fee && <div className="bk-review-total"><dt>Total consultation fee</dt><dd>{fee}</dd></div>}
+        </dl>
+      </div>
+      <p className="bk-info bk-info--success">A booking notification is waiting under the bell.</p>
+    </section>
   ) : null;
   const nextCards = bookingSuccess ? (
     <div className="bk-next">
@@ -444,6 +452,15 @@ export default function PatientBookingFlow({
                 )}
               </section>)}
 
+              {bookingSuccess && (
+                <div className="bk-action-bar">
+                  <span>Booked · {bookingSuccess.reference}</span>
+                  <div className="bk-action-group">
+                    <button className="button button-outline" type="button" onClick={() => downloadCalendarEvent(bookingSuccess.doctorName, bookingSuccess.slot, office)}>Add to calendar</button>
+                    <Link className="button" to="/appointments">View my appointments</Link>
+                  </div>
+                </div>
+              )}
               {!bookingSuccess && <div className="bk-action-bar">
                 <span>{fee ? `${fee} · ` : ""}{step === 4 ? "Final confirmation" : `${consultationType === "in-person" ? "In-person" : ""} · 30 minutes`}</span>
                 {step === 4 ? (
@@ -506,22 +523,22 @@ export default function PatientBookingFlow({
                   })}
                 </ol>
               </nav>
-              {!bookingSuccess && <section className="bk-summary bk-card" aria-label="Your appointment">
+              <section className="bk-summary bk-card" aria-label="Your appointment">
                 <h2>Your appointment</h2>
                 <div className="bk-summary-doctor">
                   <div className="bk-summary-avatar" aria-hidden="true">{initials(doctor.user?.firstName, doctor.user?.lastName)}</div>
                   <div><strong>{doctorName}</strong><span>{doctor.category.name}</span></div>
                 </div>
-                {selectedSlot && (
+                {summarySlot && (
                   <div className="bk-summary-time">
-                    <strong>{formatFullDate(slotDateInAlmaty(selectedSlot.startAt))} · {selectedTime}</strong>
+                    <strong>{formatFullDate(slotDateInAlmaty(summarySlot.startAt))} · {summaryTime}</strong>
                     <span>Asia/Almaty · UTC+5</span>
                   </div>
                 )}
                 {office && doctor && <p className="bk-summary-clinic"><DoctorLocation {...doctor} /></p>}
                 {fee && <p className="bk-summary-price">{fee}</p>}
-                <p className="bk-summary-footnote">Not confirmed yet. Review and confirm in step 4.</p>
-              </section>}
+                <p className="bk-summary-footnote">{bookingSuccess ? `Confirmed · Booking ID ${bookingSuccess.reference}` : "Not confirmed yet. Review and confirm in step 4."}</p>
+              </section>
               {nextCards}
             </aside>
           </div>
