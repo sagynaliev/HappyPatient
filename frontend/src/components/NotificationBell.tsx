@@ -1,32 +1,14 @@
-import { Link } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppNotification, authApi } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
+import { NotificationItem } from "./NotificationItem";
 import { onNotificationsChanged } from "../lib/notificationEvents";
 import "../styles/notificationBell.css";
 
 const POLL_MS = 15_000;
 
-function relativeTime(value: string, now = Date.now()): string {
-  const minutes = Math.round((now - Date.parse(value)) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "Asia/Almaty" }).format(new Date(value));
-}
-
-type Kind = "booked" | "cancelled" | "checked-in" | "system" | "security";
-function kindOf(type: string): Kind {
-  if (type === "BOOKED") return "booked";
-  if (type === "CANCELLED" || type === "APPOINTMENT_RELEASED") return "cancelled";
-  if (type === "CHECKED_IN") return "checked-in";
-  if (type === "PASSWORD_CHANGED") return "security";
-  return "system";
-}
-
-const KIND_ICON: Record<Kind, string> = { booked: "✓", cancelled: "✕", "checked-in": "➜", system: "i", security: "!" };
-
 export function NotificationBell() {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -112,15 +94,7 @@ export function NotificationBell() {
           ) : (
             <ul className="notification-panel-list">
               {notifications.slice(0, 20).map((item) => (
-                <li key={item.id} className={`notification-item notification-item--${kindOf(item.type)}${item.readAt ? "" : " is-unread"}`}>
-                  <span className="notification-item-icon" aria-hidden="true">{KIND_ICON[kindOf(item.type)]}</span>
-                  <div>
-                    {item.slotId ? <Link to={"/appointments?appointmentId="+encodeURIComponent(item.slotId)} onClick={() => { void markOneRead(item.id); setOpen(false); }}><strong>{item.subject}</strong></Link> : <strong>{item.subject}</strong>}
-                    <p>{item.message}</p>
-                    {!item.readAt && <button type="button" className="notification-mark-read" onClick={() => void markOneRead(item.id)}>Mark as read</button>}
-                    <small>{relativeTime(item.createdAt)} · {item.channel === "email" ? (item.status === "DELIVERED" ? "Sent by email" : "Email failed") : "In-app"}</small>
-                  </div>
-                </li>
+                <NotificationItem key={item.id} item={item} role={user?.role ?? "PATIENT"} onMarkRead={(id) => { void markOneRead(id); setOpen(false); }} />
               ))}
             </ul>
           )}

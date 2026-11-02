@@ -80,8 +80,8 @@ describe("doctor weekly schedule setup", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole("heading", { name: "My Schedule" });
-    fireEvent.click(screen.getByRole("button", { name: "+ Add Availability" }));
+    await screen.findByRole("heading", { name: "My schedule" });
+    fireEvent.click(screen.getByRole("button", { name: "+ Add availability" }));
     fireEvent.change(screen.getAllByLabelText("Week containing")[0], { target: { value: "2099-05-11" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Mon" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Wed" }));
@@ -214,8 +214,8 @@ describe("doctor weekly schedule setup", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole("heading", { name: "My Schedule" });
-    fireEvent.click(screen.getByRole("button", { name: "+ Add Availability" }));
+    await screen.findByRole("heading", { name: "My schedule" });
+    fireEvent.click(screen.getByRole("button", { name: "+ Add availability" }));
     expect(screen.getByRole("button", { name: "Add availability" })).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Close add availability dialog" }));
     fireEvent.change(screen.getByLabelText("Week containing"), { target: { value: "2099-05-11" } });
@@ -371,15 +371,15 @@ describe("doctor weekly schedule setup", () => {
 
     await screen.findByRole("heading", { name: "Book your appointment" });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByRole("heading", { name: "2. Date & Time" })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "2. Date and time" })).not.toBeNull();
     expect(new URLSearchParams(screen.getByTestId("booking-query").textContent ?? "").get("step")).toBe("2");
     expect(screen.getByRole("button", { name: /15:00–15:30, selected/i }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByRole("heading", { name: "3. Patient Details" })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "3. Patient details" })).not.toBeNull();
     fireEvent.change(screen.getByLabelText("Reason for visit *"), { target: { value: "Follow-up" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "These details are correct for my appointment." }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByRole("heading", { name: "4. Review" })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "4. Review and confirm" })).not.toBeNull();
     expect(screen.getByText("Follow-up")).not.toBeNull();
     expect(screen.getAllByText("Almaty · Central Clinic").length).toBeGreaterThan(0);
     expect(screen.getAllByText("18 Abay Avenue, Office 101").length).toBeGreaterThan(0);
@@ -389,10 +389,10 @@ describe("doctor weekly schedule setup", () => {
     fireEvent.submit(form);
     expect(await screen.findByRole("button", { name: "Confirming…" })).not.toBeNull();
     expect(authApi.bookSlot).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("heading", { name: "Appointment Confirmed!" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Appointment confirmed" })).toBeNull();
 
     finishBooking?.({ slot: { id: "future-free", startAt: "2099-05-11T10:00:00.000Z", endAt: "2099-05-11T10:30:00.000Z", status: "BOOKED" } });
-    expect(await screen.findByRole("heading", { name: "Appointment Confirmed!" })).not.toBeNull();
+    expect(await screen.findByRole("heading", { name: "Appointment confirmed" })).not.toBeNull();
     expect(screen.getByText("Follow-up", { exact: false })).not.toBeNull();
   });
 
@@ -429,10 +429,10 @@ describe("doctor weekly schedule setup", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("heading", { name: "3. Patient Details" })).not.toBeNull();
+    expect(await screen.findByRole("heading", { name: "3. Patient details" })).not.toBeNull();
     await waitFor(() => {
       expect(new URLSearchParams(screen.getByTestId("booking-query").textContent ?? "").get("step")).toBe("3");
     });
-    expect(screen.queryByRole("heading", { name: "4. Review" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "4. Review and confirm" })).toBeNull();
   });
 });

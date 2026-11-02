@@ -112,6 +112,7 @@ export default function Schedule() {
     time: string;
     purpose: string;
     slot: ScheduleSlot;
+    reference: string;
   } | null>(null);
   const refreshRequest = useRef(0);
   const slotDetailsRequest = useRef(0);
@@ -314,6 +315,7 @@ export default function Schedule() {
         time: chosenTime,
         purpose: visitPurpose.trim(),
         slot: result.slot,
+        reference: result.reference ?? result.slot.id,
       });
       clearSlotSelection();
       setMessage("Appointment booked.");
@@ -481,7 +483,7 @@ export default function Schedule() {
 
         <div className="schedule-slot-body">
           <div className="slot-summary">
-            {slot.patient ? <span>{slot.patient.firstName} {slot.patient.lastName}</span> : <span>{slot.status === "FREE" ? "Open appointment" : "No patient assigned"}</span>}
+            {slot.patient ? <span>{slot.patient.firstName} {slot.patient.lastName}</span> : <span>{slot.status === "FREE" ? "Available" : "No patient assigned"}</span>}
             {slot.visitPurpose && <small>{slot.visitPurpose}</small>}
           </div>
 
@@ -513,11 +515,11 @@ export default function Schedule() {
         <header className="schedule-page-heading">
           <div>
             <p className="eyebrow">Doctor portal</p>
-            <h1 className="page-heading">My Schedule</h1>
+            <h1 className="page-heading">My schedule</h1>
             <p className="lead">Manage your availability without changing confirmed visits.</p>
           </div>
           <button ref={availabilityTriggerRef} className="button schedule-add-availability" type="button" aria-expanded={availabilityFormOpen} aria-controls="schedule-create-form" onClick={openAvailabilityDialog}>
-            + Add Availability
+            + Add availability
           </button>
         </header>
       ) : (
@@ -698,7 +700,7 @@ export default function Schedule() {
             <>
               <h2>No availability configured for this day</h2>
               <p>Add working hours to make appointment slots available in your schedule.</p>
-              <button className="button" type="button" onClick={openAvailabilityDialog}>+ Add Availability</button>
+              <button className="button" type="button" onClick={openAvailabilityDialog}>+ Add availability</button>
             </>
           ) : (
             <>

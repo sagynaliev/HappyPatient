@@ -4,7 +4,7 @@
   --da-ink: #0f172a;
   --da-muted: #64748b;
   --da-line: #e2e8f0;
-  width: min(100% - 48px, 1440px);
+  width: min(100% - 48px, 1280px);
   margin: 0 auto;
   padding: 36px 0 52px;
   color: var(--da-ink);
@@ -25,9 +25,9 @@
 .da-metric small { color:var(--da-muted); font-size:12px; }
 .da-filters { display:grid; grid-template-columns:minmax(200px,1.5fr) minmax(140px,.8fr) minmax(170px,auto) auto; align-items:end; gap:12px; padding:16px; margin-bottom:16px; }
 .da-filters label { display:grid; gap:6px; color:#475569; font-size:12px; font-weight:700; }
-.da-filters input,.da-filters select { width:100%; min-height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:8px 10px; background:white; color:var(--da-ink); font:inherit; font-size:14px; }
+.da-filters input,.da-filters select { width:100%; min-height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:8px 10px; background:white; color:var(--text-primary); color-scheme:light; font:inherit; font-size:14px; }
 .da-filters input:focus-visible,.da-filters select:focus-visible { outline:3px solid var(--da-primary); outline-offset:2px; }
-.da-filter-note { align-self:center; margin:0; color:var(--da-muted); font-size:12px; }
+.da-filter-note { align-self:end; min-height:40px; display:flex; align-items:center; margin:0; color:var(--da-muted); font-size:12px; }
 .da-reset { min-height:40px; padding:8px 12px; border:0; background:transparent; color:var(--da-muted); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
 .da-tabs { display:flex; gap:8px; overflow-x:auto; margin-bottom:16px; padding:2px 0 4px; }
 .da-tabs button { flex:0 0 auto; min-height:38px; padding:8px 13px; border:1px solid var(--da-line); border-radius:9px; background:#fff; color:#475569; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
@@ -70,4 +70,4 @@
 .da-alert { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; padding:12px 14px; border:1px solid #fecaca; border-radius:9px; background:#fef2f2; color:#991b1b; font-size:13px; }
 .da-alert button { border:0; background:transparent; color:#991b1b; font:inherit; font-weight:800; text-decoration:underline; cursor:pointer; }
 @media (max-width: 1023px) { .da-workspace { grid-template-columns:1fr; }.da-inspector { position:static; }.da-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-@media (max-width: 700px) { .doctor-appointments { width:min(100% - 32px,1440px); padding:26px 0 36px; }.da-heading { flex-direction:column; }.da-heading .da-button { width:100%; }.da-metrics { grid-template-columns:1fr; }.da-filters { grid-template-columns:1fr; padding:14px; }.da-reset { justify-self:start; }.da-panel { padding:15px; }.da-table { min-width:680px; }.da-tabs { margin-right:-2px; }.da-alert { align-items:flex-start; } }
+@media (max-width: 700px) { .doctor-appointments { width:min(100% - 32px,1280px); padding:26px 0 36px; }.da-heading { flex-direction:column; }.da-heading .da-button { width:100%; }.da-metrics { grid-template-columns:1fr; }.da-filters { grid-template-columns:1fr; padding:14px; }.da-reset { justify-self:start; }.da-panel { padding:15px; }.da-table { min-width:680px; }.da-tabs { margin-right:-2px; }.da-alert { align-items:flex-start; } }

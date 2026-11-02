@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AppNotification, DoctorCancellation, DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
+import { NotificationItem } from "../components/NotificationItem";
 import { onNotificationsChanged } from "../lib/notificationEvents";
 import "../styles/doctorDashboard.css";
 
@@ -135,6 +136,7 @@ export default function DoctorDashboard() {
       </section>
 
       <section className="pd-main-grid">
+        <div className="pd-main-stack">
         <article className="pd-card pd-timeline">
           <div className="pd-card-heading"><div><h2>Today’s timeline</h2><p>{doctor?.office || "Office not listed"} · Schedule status in {ZONE}</p></div><Link to="/doctor/schedule">Open schedule →</Link></div>
           {loading ? <div className="pd-loading" role="status">Loading today’s schedule…</div> : todaySlots.length === 0 ? <div className="pd-empty">No schedule slots found for today.</div> : <ol className="pd-timeline-list">{todaySlots.map((slot) => <li key={slot.id} className={`pd-agenda pd-agenda-${slot.status.toLowerCase()}`}>
@@ -142,19 +144,24 @@ export default function DoctorDashboard() {
           </li>)}</ol>}
         </article>
 
-        <aside className="pd-side-stack">
-          <section className="pd-card pd-actions"><h2>Quick actions</h2><Link className="pd-button pd-button-primary" to="/doctor/schedule?addAvailability=1">+ Add availability</Link><Link className="pd-button pd-button-outline" to="/doctor/appointments">Review bookings</Link><Link className="pd-button pd-button-outline" to="/profile">Edit my profile</Link></section>
-          <section className="pd-card dd-cancellations"><h2>Recent cancellations</h2>{cancellations.length === 0 ? <p className="dd-muted">No cancelled visits.</p> : <ul className="dd-notes">{cancellations.map((item) => <li key={item.id}><strong>{item.patientName} · {formatDate(item.startAt)}, {localTime(item.startAt)}</strong><span>{item.cancelledBy === "PATIENT" ? "Cancelled by the patient" : "Cancelled by you"}: {item.reason}</span></li>)}</ul>}</section>
-          <section className="pd-card pd-notifications"><h2>Notifications</h2>{notes.length === 0 ? <div className="pd-notification-empty"><span aria-hidden="true">♧</span><p>No notifications yet. New bookings, cancellations and arrivals will appear here.</p></div> : <ul className="dd-notes">{notes.map((note) => <li key={note.id} className={note.readAt ? "" : "is-unread"}><strong>{note.subject}</strong><span>{note.message}</span><small>{new Intl.DateTimeFormat("en-GB", { timeZone: ZONE, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(note.createdAt))}</small></li>)}</ul>}</section>
-        </aside>
-      </section>
-
-      <section className="pd-bookings pd-card" aria-labelledby="pd-booking-title">
+              <section className="pd-bookings pd-card" aria-labelledby="pd-booking-title">
         <div className="pd-bookings-header"><div><h2 id="pd-booking-title">Upcoming bookings</h2><p>Booked visits from your schedule</p></div><Link to="/doctor/appointments">Manage appointments →</Link></div>
         <div className="pd-tabs" role="tablist" aria-label="Filter bookings">{(["today", "upcoming", "past", "all"] as BookingTab[]).map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} className={tab === item ? "is-active" : ""} onClick={() => selectTab(item)}>{item[0].toUpperCase() + item.slice(1)} <span>{loading ? "—" : counts[item]}</span></button>)}</div>
         {loading ? <div className="pd-loading" role="status">Loading bookings…</div> : visibleBookings.length === 0 ? <div className="pd-empty">No booked visits in this view.</div> : <div className="pd-table-wrap" tabIndex={0} role="region" aria-label="Upcoming bookings table"><table className="pd-table"><thead><tr><th scope="col">Patient</th><th scope="col">Date &amp; time · UTC+5</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Visit reason</th><th scope="col">Action</th></tr></thead><tbody>{visibleBookings.map((slot) => <tr key={slot.id}><td><strong>{slotName(slot)}</strong></td><td>{formatDate(slot.startAt)}<small>{localTime(slot.startAt)}–{localTime(slot.endAt)}</small></td><td>Not recorded</td><td><span className="pd-state pd-state-booked">Booked</span></td><td>{slot.visitPurpose || "Not provided"}</td><td><Link className="pd-details-link" to={`/doctor/appointments?slotId=${encodeURIComponent(slot.id)}`}>Details →</Link></td></tr>)}</tbody></table></div>}
         <footer className="pd-pagination"><span>Showing {filteredBookings.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredBookings.length)} of {filteredBookings.length}</span><div><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>Previous</button><span aria-current="page">{page} / {pageCount}</span><button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page >= pageCount}>Next</button></div></footer>
       </section>
+        </div>
+        <aside className="pd-side-stack">
+          <section className="pd-card pd-actions"><h2>Quick actions</h2><Link className="pd-button pd-button-primary" to="/doctor/schedule?addAvailability=1">+ Add availability</Link><Link className="pd-button pd-button-outline" to="/doctor/appointments">Review bookings</Link><Link className="pd-button pd-button-outline" to="/profile">Edit my profile</Link></section>
+          <section className="pd-card dd-cancellations"><h2>Recent cancellations</h2>{cancellations.length === 0 ? <p className="dd-muted">No cancelled visits.</p> : <ul className="notification-panel-list">{cancellations.map((item) => {
+            const notification: AppNotification = { id: item.id, slotId: item.slotId, type: "CANCELLED", channel: "in-app", status: "RECORDED", subject: `${item.patientName} · ${formatDate(item.startAt)}, ${localTime(item.startAt)} — cancelled`, message: `${item.cancelledBy === "PATIENT" ? "Cancelled by the patient" : "Cancelled by you"}: ${item.reason}`, createdAt: item.createdAt };
+            return <NotificationItem key={item.id} item={notification} role="DOCTOR" />;
+          })}</ul>}</section>
+          <section className="pd-card pd-notifications"><h2>Notifications</h2>{notes.length === 0 ? <div className="pd-notification-empty"><span aria-hidden="true">♧</span><p>No notifications yet. New bookings, cancellations and arrivals will appear here.</p></div> : <ul className="notification-panel-list">{notes.map((note) => <NotificationItem key={note.id} item={note} role="DOCTOR" />)}</ul>}</section>
+        </aside>
+      </section>
+
+
 
       <aside className="pd-disclaimer">Patient information is shown only through the existing doctor-authorized schedule endpoints. Appointment state is reported as booked or available.</aside>
     </div>

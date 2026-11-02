@@ -48,33 +48,42 @@ describe("patient appointments dashboard", () => {
   it("loads patient-specific appointment data and displays real record details", async () => {
     renderPage();
 
-    expect(await screen.findByText("Dr. Sam Doctor")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Dr. Sam Doctor" })).toBeTruthy();
     expect(screen.getByText("Upcoming")).toBeTruthy();
-    expect(screen.getByText("Central Clinic")).toBeTruthy();
+    expect(screen.getAllByText("Central Clinic").length).toBeGreaterThan(0);
     expect(screen.getByText("18,000 KZT")).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Upcoming 1" }).getAttribute("aria-selected")).toBe("true");
     expect(authApi.myAppointments).toHaveBeenCalledOnce();
     expect(screen.queryByText(/HP-/)).toBeNull();
   });
 
-  it("filters past appointments and opens a details view", async () => {
+  it("filters past appointments and expands details inline", async () => {
     renderPage();
 
-    expect(await screen.findByText("Dr. Sam Doctor")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Dr. Sam Doctor" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Past 1" }));
-    expect(await screen.findByText("Dr. Past Doctor")).toBeTruthy();
-    expect(screen.queryByText("Dr. Sam Doctor")).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Dr. Past Doctor" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Dr. Sam Doctor" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "View details" }));
-    expect(screen.getByRole("dialog", { name: "Dr. Past Doctor" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Close appointment details" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const disclosure = screen.getByRole("button", { name: "View details for Dr. Past Doctor" });
+    fireEvent.click(disclosure);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Visit purpose")).toBeTruthy();
+    expect(screen.getByText("Booking ID")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens and expands an appointment from its deep link", async () => {
+    renderPage("/appointments?appointmentId=upcoming-1");
+    expect(await screen.findByRole("heading", { name: "Dr. Sam Doctor" })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Hide details for Dr. Sam Doctor" }).getAttribute("aria-expanded")).toBe("true"));
+    expect(screen.getByText("Booking ID")).toBeTruthy();
   });
 
   it("shows cancelled visits with who cancelled and the reason", async () => {
     vi.mocked(authApi.myAppointments).mockResolvedValue({
       appointments,
-      cancelled: [{ id: "c1", startAt: "2099-06-01T09:00:00.000Z", endAt: "2099-06-01T09:30:00.000Z", reason: "Doctor is unavailable", cancelledBy: "CLINIC", createdAt: "2099-05-20T09:00:00.000Z", doctor: { name: "Dr. Gone Doctor", specialty: "Neurology", office: null, consultationFee: 9000 } }],
+      cancelled: [{ id: "c1", slotId: "slot-c1", startAt: "2099-06-01T09:00:00.000Z", endAt: "2099-06-01T09:30:00.000Z", reason: "Doctor is unavailable", cancelledBy: "CLINIC", createdAt: "2099-05-20T09:00:00.000Z", doctor: { name: "Dr. Gone Doctor", specialty: "Neurology", office: null, consultationFee: 9000 } }],
     });
     renderPage();
 
@@ -107,7 +116,7 @@ describe("patient appointments dashboard", () => {
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("Dr. Sam Doctor")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Dr. Sam Doctor" })).toBeTruthy();
     expect(authApi.myAppointments).toHaveBeenCalledTimes(2);
   });
 });

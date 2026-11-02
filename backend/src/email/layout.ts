@@ -16,7 +16,7 @@ export function brandedEmail(content: EmailContent) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F3F6FF;"><tr><td align="center" style="padding:24px 12px;">
 <!--[if mso]><table role="presentation" width="600"><tr><td><![endif]-->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#FFFFFF;border:1px solid #E3E9FA;border-radius:20px;">
-<tr><td style="padding:24px;border-bottom:1px solid #E3E9FA;color:#2D5FF5;font-size:23px;font-weight:bold;">&#10010; HappyPatient</td></tr>
+<tr><td style="padding:24px;border-bottom:1px solid #E3E9FA;color:#2D5FF5;font-size:23px;font-weight:bold;"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 36 36" style="vertical-align:middle;margin-right:8px"><rect width="36" height="36" rx="11" fill="#2D5FF5"/><path d="M18 27s-9-5.1-9-12a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6.9-9 12-9 12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M10.5 18h4l2-3 2.8 6 2-3h4.2" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="vertical-align:middle;">HappyPatient</span></td></tr>
 <tr><td style="padding:32px 24px 24px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td align="center" width="48" height="48" style="background-color:#F3F6FF;border-radius:24px;color:${color};font-size:28px;font-weight:bold;">${icon}</td></tr></table>
 <h1 style="margin:20px 0 12px;font-size:26px;line-height:34px;color:#111D40;">${escapeHtml(title)}</h1>
 <p style="margin:0 0 24px;font-size:16px;line-height:26px;color:#52607C;white-space:pre-line;">${escapeHtml(message).replace(/\n/g, '<br>')}</p>

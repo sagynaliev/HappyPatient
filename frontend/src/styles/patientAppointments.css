@@ -7,7 +7,7 @@
 }
 
 .patient-appointments-container {
-  width: min(100%, 1232px);
+  width: min(100%, 1280px);
   margin: 0 auto;
 }
 
@@ -96,6 +96,16 @@
   background: var(--surface);
   box-shadow: 0 2px 8px rgb(16 27 59 / 4%);
 }
+.pa-inline-details { grid-column: 1 / -1; margin-top: 12px; padding: 16px; border-top: 1px solid var(--border); background: var(--surface); }
+.pa-detail-list,.pa-price-list { display: grid; gap: 0; margin: 0; }
+.pa-detail-list > div,.pa-price-list > div { display: grid; grid-template-columns: minmax(130px,1fr) minmax(0,1.2fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.pa-detail-list dt,.pa-price-list dt { color: var(--text-secondary); font-size: 13px; }
+.pa-detail-list dd,.pa-price-list dd { margin: 0; color: var(--text-primary); font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pa-cost-breakdown { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--page-background); }
+.pa-price-total { font-weight: 800; }
+.pa-price-total dt,.pa-price-total dd { color: var(--text-primary); }
+.pa-detail-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.pa-detail-actions > .button,.patient-appointment-actions [aria-expanded] { min-width: 44px; min-height: 44px; }
 
 .patient-appointment-card-heading {
   display: flex;
@@ -344,6 +354,8 @@
   .patient-appointment-card {
     padding: 18px;
   }
+  .pa-detail-list > div,.pa-price-list > div { grid-template-columns: minmax(0,1fr); gap: 3px; }
+  .pa-inline-details { grid-column: 1; padding: 14px 0; }
 
   .patient-appointment-card-heading {
     flex-direction: column;

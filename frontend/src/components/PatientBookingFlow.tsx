@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import AvailabilityCalendar, {
   formatDateInAlmaty,
@@ -18,9 +18,10 @@ type BookingSuccess = {
   time: string;
   purpose: string;
   slot: ScheduleSlot;
+  reference: string;
 };
 
-type BookingStep = 1 | 2 | 3 | 4 | 5;
+type BookingStep = 1 | 2 | 3 | 4;
 
 type PatientBookingFlowProps = {
   doctor: DoctorProfile | null;
@@ -42,7 +43,7 @@ type PatientBookingFlowProps = {
   onSlotTaken: () => void;
 };
 
-const steps = ["Consultation Type", "Date & Time", "Patient Details", "Review", "Confirmed"] as const;
+const steps = ["Consultation type", "Date and time", "Patient details", "Review and confirm"] as const;
 const stepIcons = ["stethoscope", "calendar", "user", "file"] as const;
 
 function initials(firstName?: string, lastName?: string) {
@@ -145,9 +146,17 @@ export default function PatientBookingFlow({
     setStepState(allowedStep);
   }, [bookingSuccess, consultationType, patientDetailsValid, queryStep, selectedSlot, setSearchParams]);
 
+  const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    if (bookingSuccess) setStepState(5);
-  }, [bookingSuccess]);
+    if (!bookingSuccess) return;
+    setStepState(4);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("step", "4");
+      return next;
+    }, { replace: true });
+    requestAnimationFrame(() => confirmationHeadingRef.current?.focus());
+  }, [bookingSuccess, setSearchParams]);
 
   useEffect(() => {
     if (error && /slot is no longer available|no longer available/i.test(error)) {
@@ -174,7 +183,7 @@ export default function PatientBookingFlow({
       { label: "Reason for visit", done: Boolean(visitPurpose.trim()) },
       { label: "Details confirmed", done: detailsConfirmed },
     ],
-    4: [{ label: "Details checked", done: true }, { label: "Appointment confirmed", done: false }],
+    4: [{ label: "Details checked", done: true }, { label: "Booking complete", done: Boolean(bookingSuccess) }],
   };
   const stepHints = [
     "In-person visit",
@@ -191,7 +200,8 @@ export default function PatientBookingFlow({
     <div className="bk-page">
       <div className="bk-container">
         <BreadcrumbLabel id="doctor" label={doctor ? doctorName : undefined} />
-        {step < 5 ? (
+        <BreadcrumbLabel id="bookingStage" label={bookingSuccess ? "Confirmation" : undefined} />
+        {!bookingSuccess ? (
           <Link className="bk-back" to={step === 1 ? `/doctors/${doctor?.id ?? ""}` : "#"} onClick={step === 1 ? undefined : (event) => {
             event.preventDefault();
             goBack();
@@ -200,27 +210,28 @@ export default function PatientBookingFlow({
           </Link>
         ) : null}
         <header className="bk-page-heading">
-          <h1>{step === 5 ? "Appointment Confirmed!" : "Book your appointment"}</h1>
-          {step === 5 && <p>Your appointment is confirmed. Keep these details handy.</p>}
+          <h1>{bookingSuccess ? "Appointment confirmed" : "Book your appointment"}</h1>
         </header>
 
-        {step === 5 && bookingSuccess ? (
+        {bookingSuccess ? (
           <div className="bk-done">
-          <section className="bk-confirmation bk-card" aria-labelledby="bk-confirmation-title">
+          <section className="bk-confirmation bk-card" role="status" aria-live="polite" aria-labelledby="bk-confirmation-title">
             <div className="bk-confirm-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="20" rx="3" /><path d="M10 4v6m12-6v6M5 13h22m-16 7 3 3 7-7" /></svg>
             </div>
             <span className="bk-badge bk-badge--success">Confirmed</span>
-            <h2 id="bk-confirmation-title">You’re all set, {patient?.firstName || "patient"}.</h2>
+            <h2 id="bk-confirmation-title" ref={confirmationHeadingRef} tabIndex={-1}>You’re all set, {patient?.firstName || "patient"}.</h2>
             <p className="bk-confirm-meta">{bookingSuccess.doctorName} · {doctor?.category.name}</p>
             <dl className="bk-confirm-details">
               <div><dt>Appointment</dt><dd>{formatFullDate(slotDateInAlmaty(bookingSuccess.slot.startAt))}</dd></div>
               <div><dt>Time</dt><dd>{formatTimeInAlmaty(bookingSuccess.slot.startAt)}–{formatTimeInAlmaty(bookingSuccess.slot.endAt)} · UTC+5</dd></div>
               {office && doctor && <div><dt>Location</dt><dd><DoctorLocation {...doctor} /></dd></div>}
               {bookingSuccess.purpose && <div><dt>Reason for visit</dt><dd>{bookingSuccess.purpose}</dd></div>}
-              {fee && <div><dt>Consultation fee</dt><dd>{fee}</dd></div>}
+              {fee && <div><dt>Price</dt><dd>{fee}</dd></div>}
+              <div><dt>Booking ID</dt><dd>{bookingSuccess.reference}</dd></div>
+              <div><dt>Status</dt><dd>{bookingSuccess.slot.status === "OCCUPIED" ? "Checked in" : "Booked"}</dd></div>
             </dl>
-            <p className="bk-info bk-info--success">Your appointment is confirmed and attached to your patient account. A confirmation is waiting under the bell.</p>
+            <p className="bk-info bk-info--success">A booking notification is waiting under the bell.</p>
             <div className="bk-confirm-actions">
               <Link className="button" to="/appointments">View my appointments</Link>
               <button className="button button-outline" type="button" onClick={() => downloadCalendarEvent(bookingSuccess.doctorName, bookingSuccess.slot, office)}>
@@ -294,11 +305,11 @@ export default function PatientBookingFlow({
                       </span>
                       {consultationType === "in-person" && <span className="bk-selected-label">Selected</span>}
                     </label>
-                    <div className="bk-consult-option is-disabled" aria-disabled="true">
-                      <span className="bk-consult-icon" aria-hidden="true">◌</span>
+                    <div className="bk-consult-option is-disabled" aria-disabled="true" aria-describedby="bk-online-not-offered">
+                      <span className="bk-consult-icon" aria-hidden="true">⊘</span>
                       <span className="bk-consult-copy">
                         <strong>Online consultation · Not offered</strong>
-                        <span>{doctorName} does not have an online consultation option in the booking system.</span>
+                        <span id="bk-online-not-offered">{doctorName} does not have an online consultation option in the booking system.</span>
                       </span>
                     </div>
                   </div>
@@ -400,7 +411,7 @@ export default function PatientBookingFlow({
                 )}
               </section>
 
-              <div className="bk-action-bar">
+              {!bookingSuccess && <div className="bk-action-bar">
                 <span>{fee ? `${fee} · ` : ""}{step === 4 ? "Final confirmation" : `${consultationType === "in-person" ? "In-person" : ""} · 30 minutes`}</span>
                 {step === 4 ? (
                   <form className="bk-action-form" onSubmit={onConfirm}>
@@ -418,19 +429,19 @@ export default function PatientBookingFlow({
                     Continue
                   </button>
                 )}
-              </div>
+              </div>}
             </div>
 
             <aside className="bk-side">
               <nav className="bk-vsteps" aria-label="Booking steps">
-                <div className="bk-vsteps-head" role="progressbar" aria-label="Booking progress" aria-valuemin={1} aria-valuemax={4} aria-valuenow={step}>
+                <div className="bk-vsteps-head" role="progressbar" aria-label="Booking progress" aria-valuemin={1} aria-valuemax={4} aria-valuenow={bookingSuccess ? 4 : step}>
                   <span>Your progress</span>
-                  <strong>Step {step} of 4</strong>
+                  <strong>Step {bookingSuccess ? 4 : step} of 4</strong>
                 </div>
                 <ol>
                   {steps.slice(0, 4).map((label, index) => {
                     const number = (index + 1) as BookingStep;
-                    const status = number < step ? "completed" : number === step ? "current" : "upcoming";
+                    const status = bookingSuccess || number < step ? "completed" : number === step ? "current" : "upcoming";
                     const content = (
                       <>
                         <span className="bk-vstep-icon" aria-hidden="true">
@@ -452,7 +463,7 @@ export default function PatientBookingFlow({
                     );
                     return (
                       <li key={label} className={`bk-vstep is-${status}`} aria-current={status === "current" ? "step" : undefined}>
-                        {status === "completed" ? (
+                        {status === "completed" && !bookingSuccess ? (
                           <button type="button" className="bk-vstep-row" onClick={() => goToStep(number)} title={`Go back to ${label}`}>{content}</button>
                         ) : (
                           <div className="bk-vstep-row">{content}</div>
@@ -462,7 +473,7 @@ export default function PatientBookingFlow({
                   })}
                 </ol>
               </nav>
-              <section className="bk-summary bk-card" aria-label="Your appointment">
+              {!bookingSuccess && <section className="bk-summary bk-card" aria-label="Your appointment">
                 <h2>Your appointment</h2>
                 <div className="bk-summary-doctor">
                   <div className="bk-summary-avatar" aria-hidden="true">{initials(doctor.user?.firstName, doctor.user?.lastName)}</div>
@@ -477,7 +488,7 @@ export default function PatientBookingFlow({
                 {office && doctor && <p className="bk-summary-clinic"><DoctorLocation {...doctor} /></p>}
                 {fee && <p className="bk-summary-price">{fee}</p>}
                 <p className="bk-summary-footnote">Not confirmed yet. Review and confirm in step 4.</p>
-              </section>
+              </section>}
             </aside>
           </div>
         ) : null}

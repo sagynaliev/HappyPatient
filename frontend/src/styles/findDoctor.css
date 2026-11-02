@@ -17,7 +17,7 @@
 
 .fd-container {
   width: 100%;
-  max-width: 1232px;
+  max-width: 1280px;
   min-width: 0;
   margin: 0 auto;
 }
@@ -179,12 +179,7 @@
 }
 
 .fd-search .doctor-search-form > .doctor-search-office-field {
-  display: flex;
-  min-width: 0;
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  flex-direction: column;
-  gap: 7px;
+  display: contents;
   margin: 0;
   color: var(--text-primary);
   font-size: 14px;
@@ -193,6 +188,8 @@
 
 .fd-search .doctor-search-office-field select {
   display: block;
+  grid-column: 2;
+  grid-row: 2;
   width: 100%;
   height: 44px;
   min-width: 0;
@@ -803,7 +800,7 @@
 }
 
 .dp-container {
-  max-width: 1232px;
+  max-width: 1280px;
   margin: 0 auto;
 }
 
@@ -1255,15 +1252,20 @@
     grid-row: 2;
   }
 
-  .fd-search .doctor-search-form > .doctor-search-office-field {
+  .fd-search .doctor-search-office-field span {
     grid-column: 1;
     grid-row: 3;
+  }
+
+  .fd-search .doctor-search-office-field select {
+    grid-column: 1;
+    grid-row: 4;
   }
 
   .fd-search .doctor-search-submit {
     width: 100%;
     grid-column: 1;
-    grid-row: 4;
+    grid-row: 5;
   }
 
   .fd-results-toolbar {
