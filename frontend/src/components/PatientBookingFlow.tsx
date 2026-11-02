@@ -39,6 +39,7 @@ type PatientBookingFlowProps = {
   refreshing: boolean;
   error: string;
   bookingSuccess: BookingSuccess | null;
+  rescheduleFrom?: { startAt: string; endAt: string } | null;
   onConfirm: (event: FormEvent<HTMLFormElement>) => void;
   onSlotTaken: () => void;
 };
@@ -97,6 +98,7 @@ export default function PatientBookingFlow({
   refreshing,
   error,
   bookingSuccess,
+  rescheduleFrom,
   onConfirm,
   onSlotTaken,
 }: PatientBookingFlowProps) {
@@ -192,29 +194,7 @@ export default function PatientBookingFlow({
     "Check and confirm",
   ];
 
-  function goBack() {
-    goToStep(Math.max(1, step - 1) as BookingStep);
-  }
-
-  return (
-    <div className="bk-page">
-      <div className="bk-container">
-        <BreadcrumbLabel id="doctor" label={doctor ? doctorName : undefined} />
-        <BreadcrumbLabel id="bookingStage" label={bookingSuccess ? "Confirmation" : undefined} />
-        {!bookingSuccess ? (
-          <Link className="bk-back" to={step === 1 ? `/doctors/${doctor?.id ?? ""}` : "#"} onClick={step === 1 ? undefined : (event) => {
-            event.preventDefault();
-            goBack();
-          }}>
-            ← {step === 1 ? "Back to doctor profile" : "Previous step"}
-          </Link>
-        ) : null}
-        <header className="bk-page-heading">
-          <h1>{bookingSuccess ? "Appointment confirmed" : "Book your appointment"}</h1>
-        </header>
-
-        {bookingSuccess ? (
-          <div className="bk-done">
+  const confirmationCard = bookingSuccess ? (
           <section className="bk-confirmation bk-card" role="status" aria-live="polite" aria-labelledby="bk-confirmation-title">
             <div className="bk-confirm-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="20" rx="3" /><path d="M10 4v6m12-6v6M5 13h22m-16 7 3 3 7-7" /></svg>
@@ -240,7 +220,9 @@ export default function PatientBookingFlow({
             </div>
             <Link className="bk-home-link" to="/search">Book another doctor</Link>
           </section>
-            <aside className="bk-next" aria-label="What happens next">
+  ) : null;
+  const nextCards = bookingSuccess ? (
+    <div className="bk-next">
               <section className="bk-card bk-next-card">
                 <h2>What happens next</h2>
                 <ol className="bk-next-steps">
@@ -270,12 +252,63 @@ export default function PatientBookingFlow({
                 </div>
                 <Link className="button button-outline" to="/appointments">Manage</Link>
               </section>
-            </aside>
-          </div>
-        ) : doctor ? (
+    </div>
+  ) : null;
+  const recapCard = bookingSuccess && step < 4 ? (
+    <section className="bk-card" aria-labelledby="bk-recap-title">
+      <header className="bk-card-heading">
+        <h2 id="bk-recap-title">{step}. {steps[step - 1]}</h2>
+        <p>This is what you chose. Your booking is already confirmed.</p>
+      </header>
+      <div className="bk-review">
+        <dl>
+          {step === 1 && (
+            <>
+              <div><dt>Consultation</dt><dd>In-person · 30 minutes</dd></div>
+              {office && doctor && <div><dt>Clinic</dt><dd><DoctorLocation {...doctor} /></dd></div>}
+              {fee && <div><dt>Price</dt><dd>{fee}</dd></div>}
+            </>
+          )}
+          {step === 2 && (
+            <>
+              <div><dt>Date</dt><dd>{formatFullDate(slotDateInAlmaty(bookingSuccess.slot.startAt))}</dd></div>
+              <div><dt>Time</dt><dd>{formatTimeInAlmaty(bookingSuccess.slot.startAt)}–{formatTimeInAlmaty(bookingSuccess.slot.endAt)}</dd></div>
+              <div><dt>Timezone</dt><dd>Asia/Almaty · UTC+5</dd></div>
+            </>
+          )}
+          {step === 3 && (
+            <>
+              <div><dt>Patient</dt><dd>{patient ? `${patient.firstName} ${patient.lastName}` : ""}</dd></div>
+              <div><dt>Email</dt><dd>{patient?.email || ""}</dd></div>
+              <div><dt>Phone</dt><dd>{patient?.phone || "Not provided"}</dd></div>
+              <div><dt>Reason for visit</dt><dd>{bookingSuccess.purpose || visitPurpose.trim()}</dd></div>
+            </>
+          )}
+        </dl>
+      </div>
+      <button className="button button-outline bk-recap-back" type="button" onClick={() => goToStep(4)}>Back to confirmation</button>
+    </section>
+  ) : null;
+
+  return (
+    <div className="bk-page">
+      <div className="bk-container">
+        <BreadcrumbLabel id="doctor" label={doctor ? doctorName : undefined} />
+        <BreadcrumbLabel id="bookingStage" label={bookingSuccess ? "Confirmation" : undefined} />
+        {!bookingSuccess && step === 1 ? (
+          <Link className="bk-back" to={`/doctors/${doctor?.id ?? ""}`}>← Back to doctor profile</Link>
+        ) : null}
+        <header className="bk-page-heading">
+          <h1>{bookingSuccess ? "Appointment confirmed" : rescheduleFrom ? "Change your appointment" : "Book your appointment"}</h1>
+          {rescheduleFrom && !bookingSuccess && (
+            <p className="bk-reschedule-note">Your current booking: {formatFullDate(slotDateInAlmaty(rescheduleFrom.startAt))} · {formatTimeInAlmaty(rescheduleFrom.startAt)}–{formatTimeInAlmaty(rescheduleFrom.endAt)}. It stays active until you confirm the new time.</p>
+          )}
+        </header>
+
+        {doctor ? (
           <div className="bk-layout">
             <div className="bk-main">
-              <section className="bk-card" aria-labelledby="bk-step-title">
+              {bookingSuccess ? (step === 4 ? confirmationCard : recapCard) : (<section className="bk-card" aria-labelledby="bk-step-title">
                 <header className="bk-card-heading">
                   <h2 id="bk-step-title">{step}. {steps[step - 1]}</h2>
                   <p>{step === 1
@@ -409,7 +442,7 @@ export default function PatientBookingFlow({
                 {error && step !== 4 && (
                   <div className="alert error bk-booking-error" role="alert">{error}</div>
                 )}
-              </section>
+              </section>)}
 
               {!bookingSuccess && <div className="bk-action-bar">
                 <span>{fee ? `${fee} · ` : ""}{step === 4 ? "Final confirmation" : `${consultationType === "in-person" ? "In-person" : ""} · 30 minutes`}</span>
@@ -441,7 +474,7 @@ export default function PatientBookingFlow({
                 <ol>
                   {steps.slice(0, 4).map((label, index) => {
                     const number = (index + 1) as BookingStep;
-                    const status = bookingSuccess || number < step ? "completed" : number === step ? "current" : "upcoming";
+                    const status = number === step ? "current" : bookingSuccess || number < step ? "completed" : "upcoming";
                     const content = (
                       <>
                         <span className="bk-vstep-icon" aria-hidden="true">
@@ -463,8 +496,8 @@ export default function PatientBookingFlow({
                     );
                     return (
                       <li key={label} className={`bk-vstep is-${status}`} aria-current={status === "current" ? "step" : undefined}>
-                        {status === "completed" && !bookingSuccess ? (
-                          <button type="button" className="bk-vstep-row" onClick={() => goToStep(number)} title={`Go back to ${label}`}>{content}</button>
+                        {status === "completed" || (bookingSuccess && number !== step) ? (
+                          <button type="button" className="bk-vstep-row" onClick={() => goToStep(number)} title={bookingSuccess ? `View ${label}` : `Go back to ${label}`}>{content}</button>
                         ) : (
                           <div className="bk-vstep-row">{content}</div>
                         )}
@@ -489,6 +522,7 @@ export default function PatientBookingFlow({
                 {fee && <p className="bk-summary-price">{fee}</p>}
                 <p className="bk-summary-footnote">Not confirmed yet. Review and confirm in step 4.</p>
               </section>}
+              {nextCards}
             </aside>
           </div>
         ) : null}

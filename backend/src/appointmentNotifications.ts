@@ -3,7 +3,7 @@ import { Resend } from 'resend';
 import { prisma } from './prisma';
 import { config } from './config';
 import { brandedEmail } from './email/layout';
-import { appointmentEmail } from './email/appointment';
+import { appointmentEmail, reminderEmail } from './email/appointment';
 import { registrationReceiptPdf, RegistrationReceiptData } from './registrationReceipt';
 
 export type AppointmentEvent = 'BOOKED' | 'CANCELLED' | 'CHECKED_IN';
@@ -60,6 +60,23 @@ export async function notifyUser(input: {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') return null;
     console.error('Notification could not be stored', { type: input.type });
     return null;
+  }
+}
+
+/**
+ * Emails an upcoming-visit reminder whose in-app copy already exists. Never throws and sends nothing
+ * without an address or RESEND_API_KEY. The provider idempotency key keeps retries from duplicating it.
+ */
+export async function sendReminderEmail(input: { eventKey: string; email?: string | null; slotId: string; doctor: string; reference: string; startAt: Date; endAt: Date; office?: string | null }) {
+  if (!input.email || !config.RESEND_API_KEY) return false;
+  try {
+    const content = reminderEmail({ doctor: input.doctor, reference: input.reference, slotId: input.slotId, startAt: input.startAt, endAt: input.endAt, office: input.office, frontendUrl: config.FRONTEND_URL });
+    const result = await new Resend(config.RESEND_API_KEY).emails.send({ from: 'onboarding@resend.dev', to: input.email, subject: content.subject, html: content.html, text: content.text }, { idempotencyKey: input.eventKey });
+    if (result.error) return false;
+    await prisma.notification.updateMany({ where: { eventKey: input.eventKey }, data: { channel: 'email', deliveredAt: new Date() } });
+    return true;
+  } catch {
+    return false;
   }
 }
 
