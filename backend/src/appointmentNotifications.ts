@@ -84,6 +84,8 @@ export async function recordAppointmentNotification(input: {
   reference: string;
   doctor: string;
   startAt: Date;
+  endAt?: Date;
+  office?: string | null;
   doctorUserId?: string | null;
   patientName?: string;
   reason?: string;
@@ -92,7 +94,7 @@ export async function recordAppointmentNotification(input: {
 }) {
   const when = formatAlmaty(input.startAt);
   const eventKey = `${input.event}:${input.slotId}:${input.userId}:${input.occurrenceId ?? input.startAt.toISOString()}`;
-  const content = appointmentEmail(input.event, input);
+  const content = appointmentEmail(input.event, { ...input, frontendUrl: config.FRONTEND_URL });
   const patient = await notifyUser({ eventKey: `${eventKey}:patient`, receipt: input.receipt, ...content, userId: input.userId, email: input.email, slotId: input.slotId, type: input.event, message: patientCopy[input.event](input.reference, input.doctor, when, input.reason).message });
   if (input.doctorUserId) {
     let patientName = input.patientName;

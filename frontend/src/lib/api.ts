@@ -85,6 +85,7 @@ export type PatientAppointment = {
 };
 export type CancelledAppointment = {
   id: string;
+  slotId: string;
   startAt: string;
   endAt: string;
   visitPurpose?: string | null;
@@ -94,7 +95,7 @@ export type CancelledAppointment = {
   reference?: string;
   doctor: { name: string; specialty: string; office: string | null; consultationFee: number };
 };
-export type DoctorCancellation = { id: string; startAt: string; endAt: string; visitPurpose?: string | null; reason: string; cancelledBy: 'PATIENT' | 'CLINIC'; createdAt: string; patientName: string };
+export type DoctorCancellation = { id: string; slotId: string; startAt: string; endAt: string; visitPurpose?: string | null; reason: string; cancelledBy: 'PATIENT' | 'CLINIC'; createdAt: string; patientName: string };
 export type AvailabilityDoctor = { id: string; name: string; specialty: string; office: string | null; consultationFee: number; slots: Array<{ id: string; startAt: string; endAt: string }> };
 export type FrontDeskAppointment = { id: string; startAt: string; endAt: string; status: ScheduleSlot['status']; visitPurpose?: string | null; checkedInAt?: string | null; reference: string; patient: { id: string; name: string; email: string; phone: string | null } | null; doctor: { name: string; specialty: string; office: string | null } };
 export type AppNotification = { id: string; slotId?: string | null; type: string; channel: string; status: string; subject: string; message: string; createdAt: string; readAt?: string | null };
@@ -191,7 +192,7 @@ export const authApi = {
     api<{ created: number; dates: string[] }>('/doctors/me/schedule/working-days', { method: 'POST', body: JSON.stringify(body) }),
   getSchedule: (doctorId: string, date?: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule${date ? `?date=${encodeURIComponent(date)}` : ""}`),
   bookSlot: (doctorId: string, slotId: string, visitPurpose: string) =>
-    api<{ slot: ScheduleSlot }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose }) }),
+    api<{ slot: ScheduleSlot; reference?: string }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose }) }),
   updateSlot: (slotId: string, body: { status: ScheduleSlot['status']; patientId?: string; visitPurpose?: string; releaseBooking?: boolean; cancellationReason?: string }) =>
     api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   slotDetails: (slotId: string) => api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`),

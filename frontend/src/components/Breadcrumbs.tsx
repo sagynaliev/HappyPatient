@@ -16,9 +16,9 @@ export function buildCrumbs(pathname: string, labels: Record<string, string>, ro
   if (parts.length === 0) return [];
   if (pathname === "/search") return [home, { label: "Find a doctor" }];
   if (parts[0] === "doctors" && parts[1] && parts[2] === "schedule") {
-    return [home, findDoctor, { label: doctorLabel, to: `/doctors/${parts[1]}` }, { label: "Book appointment" }];
+    return [home, findDoctor, { label: doctorLabel, to: `/doctors/${parts[1]}` }, { label: labels.bookingStage ?? "Book appointment" }];
   }
-  if (parts[0] === "book" && parts[1]) return [home, findDoctor, { label: doctorLabel, to: `/doctors/${parts[1]}` }, { label: "Book appointment" }];
+  if (parts[0] === "book" && parts[1]) return [home, findDoctor, { label: doctorLabel, to: `/doctors/${parts[1]}` }, { label: labels.bookingStage ?? "Book appointment" }];
   if (parts[0] === "doctors" && parts[1]) return [home, findDoctor, { label: doctorLabel }];
   if (pathname === "/dashboard") return [home, { label: "Dashboard" }];
   if (pathname === "/appointments") return [home, { label: role === "PATIENT" ? "My appointments" : "Appointments" }];

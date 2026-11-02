@@ -49,7 +49,7 @@ function personName(slot: ScheduleSlot) {
 
 export default function DoctorAppointments() {
   const [searchParams] = useSearchParams();
-  const requestedSlotId = searchParams.get("slotId");
+  const requestedSlotId = searchParams.get("appointmentId") ?? searchParams.get("slotId");
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
   const [selected, setSelected] = useState<ScheduleSlot | null>(null);
@@ -157,7 +157,7 @@ export default function DoctorAppointments() {
       <section className="da-metrics" aria-label="Appointment summary">
         <article className="da-metric"><span>Today’s booked visits</span><strong>{loading ? "—" : counts.today}</strong><small>{formatDay(new Date().toISOString())} · confirmed bookings</small></article>
         <article className="da-metric"><span>Upcoming booked visits</span><strong>{loading ? "—" : counts.upcoming}</strong><small>Future booked slots</small></article>
-        <article className="da-metric"><span>This week</span><strong>{loading ? "—" : counts.week}</strong><small>{weekStart} – {new Date(`${weekEnd}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" })}</small></article>
+        <article className="da-metric"><span>This week</span><strong>{loading ? "—" : counts.week}</strong><small>{new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(`${weekStart}T00:00:00Z`))} – {new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(`${weekEnd}T00:00:00Z`))}</small></article>
       </section>
 
       <section className="da-filters" aria-label="Filter appointments">
@@ -186,8 +186,7 @@ export default function DoctorAppointments() {
               </table>
             </div>
           )}
-          <p className="da-privacy">Patient information is visible to the treating doctor through authorized appointment details.</p>
-        </section>
+          </section>
 
         <aside className="da-panel da-inspector" aria-labelledby="da-details-heading">
           <div className="da-panel-heading"><h2 id="da-details-heading">Appointment details</h2>{selected && <span className="da-status">{selected.status === "OCCUPIED" ? "Occupied" : "Booked"}</span>}</div>

@@ -132,8 +132,8 @@ footer.hp-footer, .hp-footer .footer-brand, .hp-footer .footer-brand > span { co
 /* ---------- Shell alignment: top bar and page content share one column ---------- */
 .hp-topbar > * { min-width: 0; }
 .hp-topbar { justify-content: center; }
-.hp-topbar-inner { display: flex; align-items: center; gap: 16px; width: min(100%, 1240px); }
-.hp-content > * { width: min(100%, 1240px); margin-left: auto; margin-right: auto; }
+.hp-topbar-inner { display: flex; align-items: center; gap: 16px; width: min(100%, 1280px); }
+.hp-content > * { width: min(100%, 1280px); margin-left: auto; margin-right: auto; }
 .hp-content .fd-container, .hp-content .bk-container, .hp-content .patient-appointments-container, .hp-content .pt-page { width: 100%; max-width: none; }
 
 /* ---------- Doctor card buttons never wrap ---------- */
@@ -141,7 +141,7 @@ footer.hp-footer, .hp-footer .footer-brand, .hp-footer .footer-brand > span { co
 .fd-card-actions { display: grid; grid-template-columns: 1fr 1fr; }
 .fd-primary-button, .fd-outline-button { padding: 0 10px; font-size: 14px; white-space: nowrap; }
 @media (max-width: 360px) { .fd-card-actions { grid-template-columns: 1fr; } }
-.hp-content > .hm { width: min(100%, 1240px); padding-top: 0; }
+.hp-content > .hm { width: min(100%, 1280px); padding-top: 0; }
 .fd-card-actions { margin-top: auto; padding-top: 6px; }
 
 /* ---------- Doctor weekly schedule (calendar grid) ---------- */
@@ -176,7 +176,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .page-heading .eyebrow, .doctor-portal-eyebrow { display: none; }
 
 /* ---------- Doctor dashboard (Medcare style) ---------- */
-.provider-dashboard { width: min(100%, 1240px); margin: 0 auto; }
+.provider-dashboard { width: min(100%, 1280px); margin: 0 auto; }
 .provider-dashboard .pd-eyebrow { display: none; }
 .provider-dashboard .pd-heading {
   position: relative; overflow: hidden; align-items: center; margin-bottom: 24px; padding: 34px 36px;
@@ -184,7 +184,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 }
 .provider-dashboard .pd-heading::after { content: ""; position: absolute; right: -50px; top: -90px; width: 300px; height: 300px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 22%); box-shadow: 0 0 0 46px rgb(255 255 255 / 6%), 0 0 0 92px rgb(255 255 255 / 4%); pointer-events: none; }
 .provider-dashboard .pd-heading h1 { color: #fff; font-size: clamp(26px, 3vw, 36px); font-weight: 600; letter-spacing: -0.035em; }
-.provider-dashboard .pd-heading p { color: rgb(255 255 255 / 80%); }
+.provider-dashboard .pd-heading p { color: #fff; }
 .provider-dashboard .pd-heading .pd-button { position: relative; z-index: 1; border: 0; border-radius: 999px; background: #fff; color: var(--primary-deep); font-weight: 600; }
 .provider-dashboard .pd-metric { border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
 .provider-dashboard .pd-metric strong { color: var(--text-primary); font-size: 32px; font-weight: 600; letter-spacing: -0.03em; }
@@ -606,15 +606,15 @@ button.bk-vstep-row:hover { background: #f5f8ff; }
 button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .bk-vstep-icon { position: relative; z-index: 1; display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: #eef2fb; color: #9aa6c2; }
 .bk-vstep-copy { display: grid; gap: 2px; min-width: 0; }
-.bk-vstep-label { font-size: 14px; font-weight: 600; color: #9aa6c2; }
-.bk-vstep-hint { overflow: hidden; color: #aab3c9; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.bk-vstep-label { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.bk-vstep-hint { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .bk-vstep.is-completed .bk-vstep-icon { background: var(--accent); color: var(--primary-deep); }
 .bk-vstep.is-completed .bk-vstep-label { color: var(--text-primary); }
 .bk-vstep.is-completed .bk-vstep-hint { color: var(--text-secondary); }
 .bk-vstep.is-current .bk-vstep-row { background: var(--primary); box-shadow: 0 10px 22px rgb(43 99 246 / 28%); }
 .bk-vstep.is-current .bk-vstep-icon { background: rgb(255 255 255 / 18%); color: #fff; }
 .bk-vstep.is-current .bk-vstep-label { color: #fff; }
-.bk-vstep.is-current .bk-vstep-hint { color: rgb(255 255 255 / 80%); }
+.bk-vstep.is-current .bk-vstep-hint { color: #fff; }
 .bk-vstep-dots { display: flex; gap: 5px; margin-top: 5px; }
 .bk-vstep-dots > span { width: 16px; height: 4px; border-radius: 4px; background: rgb(255 255 255 / 35%); }
 .bk-vstep-dots > span.is-done { background: #fff; }
@@ -717,3 +717,10 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 }
 /* Keyboard focus remains visible across inputs, selects, textareas, and custom controls. */
 :root :focus-visible { outline: 3px solid var(--focus-ring) !important; outline-offset: 2px !important; }
+
+.fdk-walkin-layout.has-walkin-notice { padding-bottom: 210px; }
+@media (max-width: 640px) { .fdk-walkin-layout.has-walkin-notice { padding-bottom: 300px; } }
+
+@media (max-width: 700px) { .provider-dashboard { width: min(100% - 32px, 1280px); } }
+
+.bk-consult-option:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }

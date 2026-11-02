@@ -5,6 +5,7 @@ import { authApi, FrontDeskAppointment, Receipt } from "../lib/api";
 import WalkInSlotPicker, { PickedSlot } from "../components/WalkInSlotPicker";
 import "../styles/frontDesk.css";
 import { ReceiptDialog } from "../components/ReceiptView";
+import { FloatingNotice } from "../components/FloatingNotice";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty" }).format(new Date());
 const dateText = (value: string) => new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "Asia/Almaty" }).format(new Date(value));
@@ -26,6 +27,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
   const [purpose, setPurpose] = useState("Walk-in consultation");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [message, setMessage] = useState("");
+  const [walkInConfirmation, setWalkInConfirmation] = useState<{ patientName: string; doctorName: string; specialty: string; office: string; startAt: string; endAt: string; status: string; reference: string; slotId: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -51,7 +53,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
     setBusy(true); setError(""); setMessage(""); setReceipt(null);
     try {
       const result = await authApi.frontDeskWalkIn({ ...patient, phone: patient.phone || undefined, doctorId: picked.doctorId, slotId: picked.slotId, visitPurpose: purpose });
-      setMessage(`${patient.firstName} ${patient.lastName} is booked with ${picked.doctorName} at ${timeText(picked.startAt)} (${result.reference}). ${result.slot.status === "OCCUPIED" ? "Slot marked as Occupied because the visit starts within 30 minutes." : "Slot marked as Booked."} You can find the visit under Front desk.`);
+      setWalkInConfirmation({ patientName: `${patient.firstName} ${patient.lastName}`, doctorName: picked.doctorName, specialty: picked.specialty, office: picked.office || "Location not listed", startAt: picked.startAt, endAt: picked.endAt, status: result.slot.status, reference: result.reference, slotId: result.slot.id });
       setPicked(null);
       setPickerRefresh((value) => value + 1);
       setPatient({ firstName: "", lastName: "", iin: "", email: "", phone: "" });
@@ -86,7 +88,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
     </header>
     {message && <div className="front-desk-alert success" role="status">{message}</div>}
     {error && <div id="fd-form-error" className="front-desk-alert alert error" role="alert">{error}</div>}
-    <div className={view === "walk-in" ? "fdk-walkin-layout" : "fdk-appointments-layout"}>
+    <div className={`${view === "walk-in" ? "fdk-walkin-layout" : "fdk-appointments-layout"}${walkInConfirmation && view === "walk-in" ? " has-walkin-notice" : ""}`}>
       {view === "appointments" && <section className="front-desk-card"><div className="fdk-section-head"><h2>Appointments</h2><Link className="fdk-walkin-link" to="/front-desk/walk-in">+ Walk-in</Link></div><p className="front-desk-muted">Booked and checked-in visits, soonest first.</p><form className="front-desk-search" onSubmit={(event) => { event.preventDefault(); void loadAppointments(); }}><input aria-label="Search appointments" placeholder="Patient, reference, or IIN" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="button" type="submit">Search</button></form>
         {appointments.length > 0 && <div className="fdk-list-head" aria-hidden="true"><span /><span>Patient</span><span>Doctor</span><span>Date &amp; time</span><span>Reference</span><span>Status</span></div>}
         <div className="front-desk-list">{appointments.length ? appointments.map((appointment) => <article className={`front-desk-appointment${selected?.id === appointment.id ? " selected" : ""}`} key={appointment.id} onClick={() => setSelected(appointment)}>
@@ -139,6 +141,18 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
           </fieldset>
         </form></section>}
     </div>
+    {walkInConfirmation && view === "walk-in" && <FloatingNotice
+      title="Walk-in registered"
+      message={`${walkInConfirmation.patientName} · ${walkInConfirmation.doctorName} · ${dateText(walkInConfirmation.startAt)} ${timeText(walkInConfirmation.startAt)}–${timeText(walkInConfirmation.endAt)} · ${walkInConfirmation.office || walkInConfirmation.specialty} · ${walkInConfirmation.status === "OCCUPIED" ? "Checked in" : "Booked"} · Booking ID ${walkInConfirmation.reference}`}
+      actions={[
+        { label: "View receipt", variant: "outline", onClick: () => { if (walkInConfirmation.status !== "OCCUPIED") { setError("The receipt is available after check-in."); return; } void authApi.receipt(walkInConfirmation.slotId).then(({ receipt: result }) => setReceipt(result)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Receipt is not available.")); } },
+        { label: "Register another", variant: "primary", onClick: () => setWalkInConfirmation(null) },
+      ]}
+      timeoutMs={12_000}
+      pauseOnInteraction
+      onClose={() => setWalkInConfirmation(null)}
+      onTimeout={() => setWalkInConfirmation(null)}
+    />}
     {receipt && <ReceiptDialog receipt={receipt} onClose={() => setReceipt(null)} />}
   </main>;
 }
