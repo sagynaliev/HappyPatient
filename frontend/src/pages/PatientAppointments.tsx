@@ -57,6 +57,12 @@ function AppointmentIcon({ kind }: { kind: "calendar" | "clock" | "location" | "
   );
 }
 
+function VisitCost({slotId}:{slotId:string}) {
+ const [cost,setCost]=useState<{consultationKzt:number;totalKzt:number;parking:{durationMinutes:number;amountKzt:number}|null}|null>(null);const [error,setError]=useState(false);
+ useEffect(()=>{let active=true;api<typeof cost>(`/me/appointments/${encodeURIComponent(slotId)}/cost`).then(value=>{if(active)setCost(value)}).catch(()=>{if(active)setError(true)});return()=>{active=false}},[slotId]);
+ return <section className="panel" aria-label="Estimated visit cost">{!cost&&!error?<p className="skeleton">Loading cost…</p>:error?<p className="alert error">Visit cost unavailable.</p>:cost&&<dl><div><dt>Consultation fee</dt><dd>{new Intl.NumberFormat('en-US').format(cost.consultationKzt)} KZT</dd></div><div><dt>Total</dt><dd>{new Intl.NumberFormat('en-US').format(cost.totalKzt)} KZT</dd></div>{cost.parking&&<div><dt>Parking estimate · {Math.ceil(cost.parking.durationMinutes/60)} h</dt><dd>{new Intl.NumberFormat('en-US').format(cost.parking.amountKzt)} KZT</dd></div>}</dl>}</section>
+}
+
 function AppointmentCard({
   appointment,
   onViewDetails,
@@ -115,6 +121,7 @@ function AppointmentCard({
           </div>
         </dl>
 
+        <VisitCost slotId={appointment.id} />
         <div className="patient-appointment-actions">
           {appointment.status === "BOOKED" && isFuture && !canCheckIn(appointment) && (
             <small className="patient-appointment-hint">Check-in opens 30 minutes before your visit</small>
@@ -208,6 +215,16 @@ export default function PatientAppointments() {
   useEffect(() => {
     void loadAppointments();
   }, [loadAppointments]);
+
+  useEffect(() => {
+    const appointmentId=searchParams.get("appointmentId");
+    if(!loading&&appointmentId){const appointment=appointments.find(item=>item.id===appointmentId);if(appointment)setSelectedAppointment(appointment);}
+  },[appointments,loading,searchParams]);
+
+  function closeAppointmentDetails() {
+    setSelectedAppointment(null);
+    if(searchParams.has("appointmentId"))setSearchParams(current=>{const next=new URLSearchParams(current);next.delete("appointmentId");return next;},{replace:true});
+  }
 
   useEffect(() => {
     api<{ categories: Array<{ name: string }> }>("/categories")
@@ -428,10 +445,10 @@ export default function PatientAppointments() {
 
       {selectedAppointment && (
         <div className="patient-appointment-dialog-backdrop" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setSelectedAppointment(null);
+          if (event.target === event.currentTarget) closeAppointmentDetails();
         }}>
           <section className="patient-appointment-dialog" role="dialog" aria-modal="true" aria-labelledby="appointment-detail-title">
-            <button className="patient-appointment-dialog-close" type="button" aria-label="Close appointment details" onClick={() => setSelectedAppointment(null)}>×</button>
+            <button className="patient-appointment-dialog-close" type="button" aria-label="Close appointment details" onClick={closeAppointmentDetails}>×</button>
             <p className="patient-appointments-eyebrow">Appointment details</p>
             <h2 id="appointment-detail-title">{selectedAppointment.doctor.name}</h2>
             <p>{selectedAppointment.doctor.specialty}</p>
@@ -439,7 +456,7 @@ export default function PatientAppointments() {
             <p><strong>Date:</strong> {formatDate(selectedAppointment.startAt)}</p>
             <p><strong>Time:</strong> {formatTime(selectedAppointment.startAt)}–{formatTime(selectedAppointment.endAt)} · Asia/Almaty (UTC+5)</p>
             {selectedAppointment.doctor.office && <p><strong>Location:</strong> {selectedAppointment.doctor.office}</p>}
-            <button className="button" type="button" onClick={() => setSelectedAppointment(null)}>Close</button>
+            <button className="button" type="button" onClick={closeAppointmentDetails}>Close</button>
           </section>
         </div>
       )}

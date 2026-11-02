@@ -4,8 +4,12 @@ import { Role, SlotStatus } from '@prisma/client';
 
 const prismaMock = vi.hoisted(() => ({
   doctor: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+  category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+  referenceDataAudit: { findMany: vi.fn(), create: vi.fn() },
+  location: { findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
   scheduleSlot: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  notification: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
+  notification: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
+  pricingRule: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   receipt: { upsert: vi.fn(), findUnique: vi.fn() },
   cancelledAppointment: { create: vi.fn(), findMany: vi.fn() },
   user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -35,7 +39,15 @@ beforeEach(() => {
   testConfig.RESEND_API_KEY = undefined;
   sendEmail.mockResolvedValue({ error: null });
   prismaMock.notification.updateMany.mockResolvedValue({ count: 1 });
+  prismaMock.notification.findFirst.mockResolvedValue(null);
+  prismaMock.pricingRule.findMany.mockResolvedValue([]);
   prismaMock.doctor.findMany.mockResolvedValue([]);
+  prismaMock.location.findMany.mockResolvedValue([]);
+  prismaMock.category.findFirst.mockResolvedValue(null);
+  prismaMock.category.findUnique.mockResolvedValue(null);
+  prismaMock.category.create.mockResolvedValue({id:'category-new',name:'New specialty',active:true});
+  prismaMock.referenceDataAudit.create.mockResolvedValue({id:'ref-audit'});
+  prismaMock.referenceDataAudit.findMany.mockResolvedValue([]);
   prismaMock.doctor.findUnique.mockResolvedValue({
     id: 'doctor-1',
     userId: 'doctor-user',
@@ -56,7 +68,7 @@ beforeEach(() => {
   prismaMock.notification.findUnique.mockResolvedValue(null);
   prismaMock.notification.create.mockResolvedValue({ id: 'notification-1', status: 'RECORDED', channel: 'in-app' });
   prismaMock.receipt.upsert.mockResolvedValue({ id: 'receipt-1', slotId: 'slot-1', reference: 'HP-SLOT-1', status: 'READY' });
-  prismaMock.$transaction.mockImplementation(async (callback) => callback({ scheduleSlot: prismaMock.scheduleSlot, receipt: prismaMock.receipt, user: prismaMock.user, cancelledAppointment: prismaMock.cancelledAppointment }));
+  prismaMock.$transaction.mockImplementation(async (callback) => callback(prismaMock));
   prismaMock.cancelledAppointment.findMany.mockResolvedValue([]);
   prismaMock.cancelledAppointment.create.mockResolvedValue({ id: 'cancel-1' });
 });
@@ -341,7 +353,10 @@ describe('Sprint 2 doctor endpoints', () => {
     const response = await request(app).get('/api/doctors/locations').expect(200);
     expect(response.body.cities).toEqual(['Almaty', 'Astana', 'Shymkent']);
     expect(prismaMock.doctor.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { city: { not: null } },
+      where: expect.objectContaining({
+        city: { not: null },
+        category: { active: true },
+      }),
       select: { city: true },
       distinct: ['city'],
     }));
@@ -353,7 +368,13 @@ describe('Sprint 2 doctor endpoints', () => {
     expect(query).toEqual(expect.objectContaining({
       where: expect.objectContaining({
         category: { name: { contains: 'Cardiology', mode: 'insensitive' } },
-        city: { equals: 'Almaty', mode: 'insensitive' },
+        AND: expect.arrayContaining([
+          { OR: [
+            { city: { equals: 'Almaty', mode: 'insensitive' } },
+            { locationId: { in: [] } },
+          ] },
+          { category: { active: true } },
+        ]),
       }),
     }));
     expect(query.where.OR).toEqual(expect.arrayContaining([
@@ -806,5 +827,73 @@ describe('manual availability protects active appointments', () => {
     await request(app).patch('/api/doctors/me/schedule/slot-1').set('Authorization', bearer(Role.DOCTOR)).send({ status: 'FREE' }).expect(409);
     expect(prismaMock.scheduleSlot.updateMany.mock.calls[0][0].where).toMatchObject({ patientId: null, checkedInAt: null });
     expect(prismaMock.scheduleSlot.findFirst).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe('Sprint 4 walk-in boundaries', () => {
+  const input = { iin: '990101300123', firstName: 'Walk', lastName: 'In', doctorId: 'doctor-1', slotId: 'slot-9', visitPurpose: 'Consultation' };
+  it.each([[1800000, 'OCCUPIED'], [1801000, 'BOOKED'], [0, 'OCCUPIED'], [-60000, 'OCCUPIED']])('server decides status at %i ms', async (delta, status) => {
+    const now = new Date('2026-11-02T05:00:00Z');
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(now);
+    try {
+      prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-9', startAt: new Date(now.getTime() + delta), doctor: { user: { firstName: 'Sam', lastName: 'Doctor' } } });
+      prismaMock.user.findUnique.mockResolvedValueOnce({ id: 'patient', role: Role.PATIENT, email: 'patient@example.test', firstName: 'Walk', lastName: 'In' });
+      const response = await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK)).send({ ...input, status: 'FREE', now: '2099-01-01' });
+      expect(response.status).toBe(201); expect(response.body.slot.status).toBe(status);
+      expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ status: 'FREE', endAt: { gt: now } }) }));
+    } finally { vi.useRealTimers(); }
+  });
+  it('rejects non-free slots', async () => { await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.ADMIN)).send(input).expect(409); expect(prismaMock.user.create).not.toHaveBeenCalled(); });
+  it('returns conflict when another request claims the slot', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-9', startAt: new Date(Date.now() + 3600000), doctor: { user: { firstName: 'Sam', lastName: 'Doctor' } } });
+    prismaMock.user.findUnique.mockResolvedValueOnce({ id: 'patient', role: Role.PATIENT });
+    prismaMock.scheduleSlot.updateMany.mockResolvedValueOnce({ count: 0 });
+    await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK)).send(input).expect(409);
+  });
+  it.each([Role.PATIENT, Role.DOCTOR])('rejects %s walk-ins', async role => { await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(role)).send(input).expect(403); });
+});
+
+describe('Sprint 5–6 visit cost', () => {
+  it('resolves price rules at the booking event time instead of the slot creation time', async () => {
+    const bookedAt=new Date('2026-11-01T10:00:00.000Z');
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({id:'slot-cost',patientId:'patient-user',doctorId:'doctor-1',createdAt:new Date('2026-10-01T00:00:00.000Z'),updatedAt:new Date('2026-11-02T00:00:00.000Z'),startAt:new Date('2026-11-03T00:00:00.000Z'),endAt:new Date('2026-11-03T00:30:00.000Z'),doctor:{consultationFee:10000,categoryId:'category-1'}});
+    prismaMock.notification.findFirst.mockResolvedValueOnce({createdAt:bookedAt});
+    prismaMock.pricingRule.findMany.mockResolvedValueOnce([{id:'rule',kind:'visit',doctorId:'doctor-1',categoryId:null,consultationType:null,officeId:null,effectiveFrom:new Date('2026-11-01T00:00:00.000Z'),effectiveTo:null,amountKzt:18000,ratePerHourKzt:null,freeMinutes:0,rounding:'per_started_hour',dailyCapKzt:null}]);
+    const response=await request(app).get('/api/me/appointments/slot-cost/cost').set('Authorization',bearer(Role.PATIENT,'patient-user')).expect(200);
+    expect(response.body.consultationKzt).toBe(18000);expect(response.body.totalKzt).toBe(18000);
+    expect(prismaMock.pricingRule.findMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({effectiveFrom:{lte:bookedAt}})}));
+  });
+});
+
+describe('Sprint 5–6 administrator access', () => {
+  it.each([
+    ['GET','/api/admin/pricing'],['GET','/api/admin/statistics'],['POST','/api/admin/integrity/run'],['GET','/api/admin/reference/locations'],
+  ])('%s %s is denied to patients', async (method,path) => {
+    const pending=method==='POST'?request(app).post(path):request(app).get(path);const response=await pending.set('Authorization',bearer(Role.PATIENT));
+    expect(response.status).toBe(403);
+  });
+});
+
+
+describe('Sprint 5–6 reference data management',()=>{
+  it('rejects case-insensitive duplicate categories',async()=>{
+    prismaMock.category.findFirst.mockResolvedValueOnce({id:'existing',name:'Cardiology'});
+    await request(app).post('/api/admin/reference/categories').set('Authorization',bearer(Role.ADMIN)).send({name:'cardiology'}).expect(409);
+    expect(prismaMock.category.create).not.toHaveBeenCalled();
+  });
+  it('creates a category and records its audit atomically',async()=>{
+    await request(app).post('/api/admin/reference/categories').set('Authorization',bearer(Role.ADMIN)).send({name:'New specialty'}).expect(201);
+    expect(prismaMock.category.create).toHaveBeenCalledOnce();
+    expect(prismaMock.referenceDataAudit.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({entity:'category',entityId:'category-new',action:'created'})}));
+  });
+  it('rejects an unconfirmed location move',async()=>{
+    prismaMock.location.findUnique.mockResolvedValueOnce({id:'office',kind:'office',name:'Room 1',parentId:'floor',active:true});
+    await request(app).patch('/api/admin/reference/locations/office').set('Authorization',bearer(Role.ADMIN)).send({parentId:'other-floor'}).expect(400);
+    expect(prismaMock.location.update).not.toHaveBeenCalled();
+  });
+  it('lets admins read reference change audit and denies other roles',async()=>{
+    await request(app).get('/api/admin/reference/audit').set('Authorization',bearer(Role.ADMIN)).expect(200);
+    await request(app).get('/api/admin/reference/audit').set('Authorization',bearer(Role.FRONT_DESK)).expect(403);
   });
 });

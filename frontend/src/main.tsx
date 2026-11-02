@@ -1,9 +1,10 @@
-import { StrictMode } from "react";
+import { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/RouteGuards";
+const MedicalHistoryPage = lazy(() => import("./pages/MedicalHistoryPage"));
 import Home from "./pages/Home";
 import { Login, Register, Forgot, Reset } from "./pages/AuthPages";
 import Search from "./pages/Search";
@@ -14,7 +15,7 @@ import AdminLayout from "./pages/AdminLayout";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminDoctorsPage from "./pages/AdminDoctorsPage";
 import AdminAppointmentsPage from "./pages/AdminAppointmentsPage";
-import AdminReportsPage from "./pages/AdminReportsPage";
+const AdminOperationsPage = lazy(() => import("./pages/AdminOperationsPage"));
 import Schedule from "./pages/Schedule";
 import DoctorProfilePage from "./pages/DoctorProfilePage";
 import ProfilePage from "./pages/ProfilePage";
@@ -41,6 +42,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/profile" element={<ProfilePage />} />
               <Route element={<ProtectedRoute roles={["PATIENT"]} />}>
                 <Route path="/appointments" element={<PatientAppointments />} />
+                <Route path="/medical-history" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><MedicalHistoryPage /></Suspense>} />
               </Route>
               <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
               <Route path="/admin" element={<AdminLayout />}>
@@ -49,7 +51,11 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="users" element={<AdminUsersPage />} />
                 <Route path="doctors" element={<AdminDoctorsPage />} />
                 <Route path="appointments" element={<AdminAppointmentsPage />} />
-                <Route path="reports" element={<AdminReportsPage />} />
+                <Route path="reports" element={<Navigate to="/admin/statistics" replace />} />
+                <Route path="pricing" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="pricing" /></Suspense>} />
+                <Route path="statistics" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="statistics" /></Suspense>} />
+                <Route path="integrity" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="integrity" /></Suspense>} />
+                <Route path="reference-data" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="reference" /></Suspense>} />
               </Route>
             </Route>
             </Route>

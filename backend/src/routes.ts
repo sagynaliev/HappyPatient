@@ -1,6 +1,12 @@
+import { getWalkInSlotStatus } from './visitTime';
+import { medicalHistoryRouter } from './medicalHistory';
+import { resolvePricingRule, calculateParkingCost, calculateVisitCost, PricingRule } from './pricing';
+import { getAdminStatistics, runAndStoreIntegrity } from './adminOperations';
+import { NO_CHECKIN_GRACE_MS } from './visitTime';
 import { brandedEmail } from './email/layout';
 import { appointmentEmail } from './email/appointment';
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { Prisma, Role, SlotStatus } from '@prisma/client';
 import { prisma } from './prisma';
 import { comparePassword, hashPassword, hashToken, randomToken, randomVerificationCode, signToken } from './auth';
@@ -12,7 +18,9 @@ import { clinicDateBounds, generateScheduleSlots, localDateAt, localTimeToUtc } 
 import { sendRegistrationConfirmation } from './registrationNotification';
 import { formatAlmaty, notifyUser, recordAppointmentNotification } from './appointmentNotifications';
 
+class WalkInConflict extends Error {}
 const router = Router();
+router.use(medicalHistoryRouter);
 const parsed = <T>(schema: { parse: (v: unknown) => T }, body: unknown) => schema.parse(body);
 const publicUser = (u: { id: string; email: string; firstName: string; lastName: string; role: Role; phone: string | null }) =>
   ({ id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, role: u.role, phone: u.phone });
@@ -180,7 +188,7 @@ router.get('/categories', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   try {
     const categories = await prisma.category.findMany({
-      where: q ? { name: { contains: q, mode: 'insensitive' } } : undefined,
+      where: { active: true, ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}) },
       orderBy: { name: 'asc' },
     });
     res.json({ categories });
@@ -193,19 +201,25 @@ router.get('/categories', async (req, res) => {
     res.status(500).json({ error: 'The category directory is temporarily unavailable. Please try again shortly.' });
   }
 });
+async function inactiveOfficeIds() {
+  const locations=await prisma.location.findMany({select:{id:true,kind:true,parentId:true,active:true}});
+  const byId=new Map(locations.map(item=>[item.id,item]));
+  return locations.filter(item=>{
+    if(item.kind!=='office')return false;
+    const floor=item.parentId?byId.get(item.parentId):undefined;
+    const city=floor?.parentId?byId.get(floor.parentId):undefined;
+    return !item.active||!floor?.active||!city?.active;
+  }).map(item=>item.id);
+}
 router.get('/doctors/locations', async (_req, res) => {
-  const doctors = await prisma.doctor.findMany({
-    where: { city: { not: null } },
-    select: { city: true },
-    distinct: ['city'],
-    orderBy: { city: 'asc' },
-  });
-  const cities = new Map<string, string>();
-  doctors.forEach(({ city }) => {
-    const name = city?.trim();
-    if (name && !cities.has(name.toLocaleLowerCase())) cities.set(name.toLocaleLowerCase(), name);
-  });
-  res.json({ cities: Array.from(cities.values()).sort((a, b) => a.localeCompare(b)) });
+  const inactive=await inactiveOfficeIds();
+  const [doctors,referenceCities]=await Promise.all([
+    prisma.doctor.findMany({where:{city:{not:null},category:{active:true},OR:[{locationId:null},{locationId:{notIn:inactive}}]},select:{city:true},distinct:['city'],orderBy:{city:'asc'}}),
+    prisma.location.findMany({where:{kind:'city',active:true},select:{name:true},orderBy:{name:'asc'}}),
+  ]);
+  const cities=new Map<string,string>();
+  [...doctors.map(row=>row.city),...referenceCities.map(row=>row.name)].forEach(value=>{const name=value?.trim();if(name&&!cities.has(name.toLocaleLowerCase()))cities.set(name.toLocaleLowerCase(),name);});
+  res.json({cities:Array.from(cities.values()).sort((a,b)=>a.localeCompare(b))});
 });
 router.get('/doctors', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -287,6 +301,17 @@ router.get('/doctors', async (req, res) => {
   };
   if (availability && !availabilityStart) return res.status(400).json({ error: 'Choose a valid availability filter.' });
   if (timeOfDay && !timeRange) return res.status(400).json({ error: 'Choose a valid time filter.' });
+  let cityOfficeIds: string[] = [];
+  if (city) {
+    const cities = await prisma.location.findMany({ where: { kind: 'city', active: true, name: { equals: city, mode: 'insensitive' } }, select: { id: true } });
+    const floors = await prisma.location.findMany({ where: { kind: 'floor', active: true, parentId: { in: cities.map(item => item.id) } }, select: { id: true } });
+    const offices = await prisma.location.findMany({ where: { kind: 'office', active: true, parentId: { in: floors.map(item => item.id) } }, select: { id: true } });
+    cityOfficeIds = offices.map(item => item.id);
+  }
+  const inactiveOffices=await inactiveOfficeIds();
+  const locationConditions: Prisma.DoctorWhereInput[] = [];
+  if (city) locationConditions.push({ OR: [{ city: { equals: city, mode: 'insensitive' } }, { locationId: { in: cityOfficeIds } }] });
+  if (office) locationConditions.push({ OR: [{ office: { contains: office, mode: 'insensitive' } }, { location: { is: { kind: 'office', name: { contains: office, mode: 'insensitive' } } } }] });
   const doctors = await prisma.doctor.findMany({
     where: {
       ...(q ? {
@@ -310,8 +335,7 @@ router.get('/doctors', async (req, res) => {
         ],
       } : {}),
       ...(category ? { category: { name: { contains: category, mode: 'insensitive' } } } : {}),
-      ...(city ? { city: { equals: city, mode: 'insensitive' } } : {}),
-      ...(office ? { office: { contains: office, mode: 'insensitive' } } : {}),
+      AND:[...locationConditions,{category:{active:true}},...(inactiveOffices.length?[{OR:[{locationId:null},{locationId:{notIn:inactiveOffices}}]}]:[])],
       ...(availability || timeOfDay ? { scheduleSlots: { some: slotFilter } } : {}),
     },
     include: {
@@ -568,10 +592,15 @@ router.get('/appointments/:slotId/receipt', requireAuth, requireRole(Role.PATIEN
 
 router.get('/notifications', requireAuth, async (req, res) => {
   const [notifications, unreadCount] = await Promise.all([
-    prisma.notification.findMany({ where: { userId: req.user!.id }, orderBy: { createdAt: 'desc' }, take: 50, select: { id: true, type: true, channel: true, status: true, subject: true, message: true, createdAt: true, deliveredAt: true, readAt: true } }),
+    prisma.notification.findMany({ where: { userId: req.user!.id }, orderBy: { createdAt: 'desc' }, take: 50, select: { id: true, type: true, channel: true, status: true, subject: true, message: true, createdAt: true, deliveredAt: true, readAt: true, slotId: true } }),
     prisma.notification.count({ where: { userId: req.user!.id, readAt: null } }),
   ]);
   res.json({ notifications, unreadCount });
+});
+
+router.post('/notifications/:id/read',requireAuth,async(req,res)=>{
+  const result=await prisma.notification.updateMany({where:{id:String(req.params.id),userId:req.user!.id,readAt:null},data:{readAt:new Date()}});
+  res.json({updated:result.count});
 });
 
 router.post('/notifications/read-all', requireAuth, async (req, res) => {
@@ -608,7 +637,7 @@ router.get('/front-desk/availability', requireAuth, requireRole(Role.FRONT_DESK,
   const q = typeof req.query.q === 'string' ? req.query.q.trim().replace(/^(?:dr\.?|doctor)\s+/i, '') : '';
   const bounds = clinicDateBounds(date);
   const now = new Date();
-  const dayWindow = { status: SlotStatus.FREE, startAt: { gte: bounds.start > now ? bounds.start : now, lt: bounds.end } };
+  const dayWindow = { status: SlotStatus.FREE, startAt: { gte: bounds.start, lt: bounds.end }, endAt: { gt: now } };
   // How many doctors have free time that day, per specialty (shown next to each option in the picker).
   const freeDoctors = await prisma.scheduleSlot.findMany({ where: dayWindow, distinct: ['doctorId'], select: { doctor: { select: { category: { select: { name: true } } } } } });
   const specialtyCounts: Record<string, number> = {};
@@ -649,21 +678,21 @@ router.get('/front-desk/patients/lookup', requireAuth, requireRole(Role.FRONT_DE
 
 router.post('/front-desk/walk-ins', requireAuth, requireRole(Role.FRONT_DESK, Role.ADMIN), async (req, res) => {
   const input = parsed(walkInRegistrationSchema, req.body);
-  const slot = await prisma.scheduleSlot.findFirst({ where: { id: input.slotId, doctorId: input.doctorId, status: SlotStatus.FREE, startAt: { gt: new Date() } }, select: { id: true, startAt: true, doctor: { select: { userId: true, user: { select: { firstName: true, lastName: true } } } } } });
+  const slot = await prisma.scheduleSlot.findFirst({ where: { id: input.slotId, doctorId: input.doctorId, status: SlotStatus.FREE, endAt: { gt: new Date() } }, select: { id: true, startAt: true, doctor: { select: { userId: true, user: { select: { firstName: true, lastName: true } } } } } });
   if (!slot) return res.status(409).json({ error: 'The selected slot is no longer available.' });
   const existing = await prisma.user.findUnique({ where: { iin: input.iin }, select: { id: true, role: true, email: true, firstName: true, lastName: true } });
   if (existing && existing.role !== Role.PATIENT) return res.status(409).json({ error: 'That IIN belongs to a non-patient account.' });
-  const status = slot.startAt.getTime() - Date.now() < 30 * 60_000 ? SlotStatus.OCCUPIED : SlotStatus.BOOKED;
-  const checkedInAt = new Date();
   const result = await prisma.$transaction(async (tx) => {
     const patient = existing ?? await tx.user.create({ data: { firstName: input.firstName, lastName: input.lastName, iin: input.iin, email: input.email || `walkin-${randomToken()}@local.happypatient`, phone: input.phone || null, passwordHash: await hashPassword(randomToken()), role: Role.PATIENT }, select: { id: true, email: true, firstName: true, lastName: true } });
-    const updated = await tx.scheduleSlot.updateMany({ where: { id: slot.id, doctorId: input.doctorId, status: SlotStatus.FREE }, data: { status, patientId: patient.id, visitPurpose: input.visitPurpose, ...(status === SlotStatus.OCCUPIED ? { checkedInAt, checkedInById: req.user!.id } : {}) } });
-    if (!updated.count) return null;
+    const checkedInAt = new Date();
+    const status = getWalkInSlotStatus(slot.startAt, checkedInAt) === 'occupied' ? SlotStatus.OCCUPIED : SlotStatus.BOOKED;
+    const updated = await tx.scheduleSlot.updateMany({ where: { id: slot.id, doctorId: input.doctorId, status: SlotStatus.FREE, endAt: { gt: checkedInAt } }, data: { status, patientId: patient.id, visitPurpose: input.visitPurpose, ...(status === SlotStatus.OCCUPIED ? { checkedInAt, checkedInById: req.user!.id } : {}) } });
+    if (!updated.count) throw new WalkInConflict();
     const receipt = status === SlotStatus.OCCUPIED ? await tx.receipt.upsert({ where: { slotId: slot.id }, create: { slotId: slot.id, patientId: patient.id, reference: appointmentReference(slot.id) }, update: {} }) : undefined;
-    return { patient, receipt };
-  });
+    return { patient, receipt, status, checkedInAt };
+  }).catch((error: unknown) => { if (error instanceof WalkInConflict) return null; throw error; });
   if (!result) return res.status(409).json({ error: 'The selected slot was booked by someone else.' });
-  const { patient, receipt } = result;
+  const { patient, receipt, status, checkedInAt } = result;
   void recordAppointmentNotification({ slotId: slot.id, userId: patient.id, email: patient.email, event: status === SlotStatus.OCCUPIED ? 'CHECKED_IN' : 'BOOKED', occurrenceId: receipt?.id ?? checkedInAt.toISOString(), receipt: receipt ? { id: receipt.id, reference: receipt.reference, patientName: `${patient.firstName} ${patient.lastName}`, doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, startAt: slot.startAt, checkedInAt } : undefined, reference: appointmentReference(slot.id), doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, startAt: slot.startAt, doctorUserId: slot.doctor.userId, patientName: `${patient.firstName} ${patient.lastName} (walk-in)` }).catch(() => undefined);
   res.status(201).json({ patient: { id: patient.id, firstName: patient.firstName, lastName: patient.lastName }, slot: { id: slot.id, status }, reference: appointmentReference(slot.id), receipt });
 });
@@ -837,6 +866,7 @@ router.get('/admin/doctors', requireAuth, requireRole(Role.ADMIN), async (_req, 
     include: {
       user: { select: { id: true, firstName: true, lastName: true, email: true, createdAt: true } },
       category: true,
+      location: { select: { id: true, name: true } },
       scheduleSlots: { take: 5, orderBy: { startAt: 'asc' }, select: { startAt: true, endAt: true, status: true } },
     },
     orderBy: { createdAt: 'desc' },
@@ -850,11 +880,22 @@ router.get('/admin/doctors', requireAuth, requireRole(Role.ADMIN), async (_req, 
       email: doctor.user.email,
       specialty: doctor.category.name,
       office: doctor.office,
+      locationId: doctor.locationId,
+      location: doctor.location,
       status: doctor.office ? 'verified' : 'pending',
       createdAt: doctor.createdAt,
       scheduleSlots: doctor.scheduleSlots,
     })),
   });
+});
+
+router.patch('/admin/doctors/:id/location',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const parsedLocation=z.object({locationId:z.string().nullable()}).safeParse(req.body);if(!parsedLocation.success)return res.status(400).json({error:'Choose a valid office location.'});
+  const doctorId=String(req.params.id);const doctor=await prisma.doctor.findUnique({where:{id:doctorId},select:{id:true,locationId:true}});if(!doctor)return res.status(404).json({error:'Doctor not found.'});
+  const location=parsedLocation.data.locationId?await prisma.location.findUnique({where:{id:parsedLocation.data.locationId},include:{parent:{include:{parent:true}}}}):null;
+  if(parsedLocation.data.locationId&&(!location||location.kind!=='office'||!location.active||!location.parent?.active||!location.parent.parent?.active))return res.status(400).json({error:'Choose an active office under an active floor and city.'});
+  const updated=await prisma.$transaction(async tx=>{const saved=await tx.doctor.update({where:{id:doctorId},data:{locationId:location?.id??null,office:location?.name??null,city:location?.parent?.parent?.name??null},include:{location:true}});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'doctor-office',entityId:doctorId,action:'assigned',oldValue:{locationId:doctor.locationId},newValue:{locationId:location?.id??null}}});return saved;});
+  res.json({doctor:updated});
 });
 
 router.get('/admin/appointments', requireAuth, requireRole(Role.ADMIN), async (_req, res) => {
@@ -909,5 +950,152 @@ router.post('/admin/doctors/:id/reject', requireAuth, requireRole(Role.ADMIN), a
       reason: req.body?.reason ?? 'Please provide a valid professional license.',
     },
   });
+});
+
+const pricingInput = z.object({
+  kind:z.enum(['visit','treatment','parking']), amountKzt:z.number().int().min(0),
+  ratePerHourKzt:z.number().int().min(0).nullable().optional(), freeMinutes:z.number().int().min(0).default(0),
+  rounding:z.enum(['per_started_hour','per_minute']).default('per_started_hour'), dailyCapKzt:z.number().int().min(0).nullable().optional(),
+  doctorId:z.string().nullable().optional(), categoryId:z.string().nullable().optional(),
+  consultationType:z.string().trim().max(80).nullable().optional(), serviceCode:z.string().trim().max(80).nullable().optional(),
+  serviceName:z.string().trim().max(120).nullable().optional(), officeId:z.string().nullable().optional(),
+  effectiveFrom:z.coerce.date(), effectiveTo:z.coerce.date().nullable().optional(),
+});
+router.get('/admin/pricing',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const kind=typeof req.query.kind==='string'?req.query.kind:undefined;
+  const active=typeof req.query.active==='string'?req.query.active:undefined;
+  const rules=await prisma.pricingRule.findMany({where:{...(kind&&['visit','treatment','parking'].includes(kind)?{kind:kind as 'visit'|'treatment'|'parking'}:{}),...(active==='true'?{active:true}:active==='false'?{active:false}:{})},include:{category:{select:{name:true}},office:{select:{name:true}},createdBy:{select:{firstName:true,lastName:true}},audits:{orderBy:{createdAt:'desc'},take:10}},orderBy:[{kind:'asc'},{effectiveFrom:'desc'}]});
+  res.json({rules});
+});
+router.post('/admin/pricing',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const parsedInput=pricingInput.safeParse(req.body);if(!parsedInput.success)return res.status(400).json({error:'Pricing values are invalid.'});
+  const input=parsedInput.data;if(input.effectiveTo&&input.effectiveTo<=input.effectiveFrom)return res.status(400).json({error:'End date must follow start date.'});
+  if(input.kind==='parking'&&input.ratePerHourKzt===undefined)return res.status(400).json({error:'A parking hourly rate is required.'});
+  const scope={kind:input.kind,doctorId:input.doctorId??null,categoryId:input.categoryId??null,consultationType:input.consultationType??null,serviceCode:input.serviceCode??null,officeId:input.officeId??null};
+  const collision=await prisma.pricingRule.findFirst({where:{...scope,active:true,effectiveFrom:{lt:input.effectiveTo??new Date('9999-12-31')},OR:[{effectiveTo:null},{effectiveTo:{gt:input.effectiveFrom}}]}});
+  if(collision)return res.status(409).json({error:'An active rule already overlaps this scope and date range.'});
+  const rule=await prisma.pricingRule.create({data:{...input,...scope,createdById:req.user!.id}});
+  await prisma.pricingRuleAudit.create({data:{ruleId:rule.id,actorId:req.user!.id,action:'created',newValue:rule as unknown as Prisma.InputJsonValue}});
+  res.status(201).json({rule});
+});
+router.patch('/admin/pricing/:id',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const id=String(req.params.id);const old=await prisma.pricingRule.findUnique({where:{id}});if(!old)return res.status(404).json({error:'Pricing rule not found.'});
+  if(req.body?.active===false){const effectiveTo=old.effectiveFrom>new Date()?old.effectiveFrom:new Date();const [rule]=await prisma.$transaction([prisma.pricingRule.update({where:{id},data:{active:false,effectiveTo}}),prisma.pricingRuleAudit.create({data:{ruleId:id,actorId:req.user!.id,action:'deactivated',oldValue:old as unknown as Prisma.InputJsonValue,newValue:{active:false,effectiveTo:effectiveTo.toISOString()}}})]);return res.json({rule});}
+  const parsedInput=pricingInput.safeParse({...old,...req.body});if(!parsedInput.success)return res.status(400).json({error:'Pricing values are invalid.'});
+  const input=parsedInput.data;if(input.effectiveTo&&input.effectiveTo<=input.effectiveFrom)return res.status(400).json({error:'End date must follow start date.'});
+  if(input.effectiveFrom<=old.effectiveFrom)return res.status(400).json({error:'A new version must start after the existing version.'});
+  const scope={kind:input.kind,doctorId:input.doctorId??null,categoryId:input.categoryId??null,consultationType:input.consultationType??null,serviceCode:input.serviceCode??null,officeId:input.officeId??null};
+  const collision=await prisma.pricingRule.findFirst({where:{...scope,id:{not:id},active:true,effectiveFrom:{lt:input.effectiveTo??new Date('9999-12-31')},OR:[{effectiveTo:null},{effectiveTo:{gt:input.effectiveFrom}}]}});
+  if(collision)return res.status(409).json({error:'An active rule already overlaps this scope and date range.'});
+  const version=await prisma.$transaction(async tx=>{const rule=await tx.pricingRule.create({data:{kind:input.kind,doctorId:input.doctorId??null,categoryId:input.categoryId??null,consultationType:input.consultationType??null,serviceCode:input.serviceCode??null,officeId:input.officeId??null,serviceName:input.serviceName??null,scopeKey:old.scopeKey,amountKzt:input.amountKzt,ratePerHourKzt:input.ratePerHourKzt??null,freeMinutes:input.freeMinutes,rounding:input.rounding,dailyCapKzt:input.dailyCapKzt??null,effectiveFrom:input.effectiveFrom,effectiveTo:input.effectiveTo??null,createdById:req.user!.id,versionOfId:id}});await tx.pricingRule.update({where:{id},data:{effectiveTo:input.effectiveFrom}});await tx.pricingRuleAudit.create({data:{ruleId:rule.id,actorId:req.user!.id,action:'versioned',oldValue:old as unknown as Prisma.InputJsonValue,newValue:rule as unknown as Prisma.InputJsonValue}});return rule;});
+  res.status(201).json({rule:version});
+});
+router.get('/me/appointments/:slotId/cost',requireAuth,requireRole(Role.PATIENT),async(req,res)=>{
+  const slot=await prisma.scheduleSlot.findFirst({where:{id:String(req.params.slotId),patientId:req.user!.id},include:{doctor:{select:{consultationFee:true,categoryId:true,locationId:true}}}});
+  if(!slot)return res.status(404).json({error:'Visit not found.'});
+  const bookingEvent=await prisma.notification.findFirst({where:{slotId:slot.id,userId:req.user!.id,type:'BOOKED'},orderBy:{createdAt:'desc'},select:{createdAt:true}});
+  const bookedAt=bookingEvent?.createdAt??slot.updatedAt;
+  // The existing BOOKED notification timestamps the booking event; updatedAt is the fallback if that delivery row is absent.
+  const rules=await prisma.pricingRule.findMany({where:{kind:{in:['visit','parking']},effectiveFrom:{lte:bookedAt},OR:[{effectiveTo:null},{effectiveTo:{gt:bookedAt}}]}});
+  const visit=resolvePricingRule(rules as PricingRule[],'visit',bookedAt,slot.doctorId,slot.doctor.categoryId);
+  const parking=resolvePricingRule(rules as PricingRule[],'parking',bookedAt,slot.doctorId,slot.doctor.categoryId,undefined,slot.doctor.locationId);
+  const cost=calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined);
+  const duration=(slot.endAt.getTime()-slot.startAt.getTime())/60000;
+  res.json({...cost,bookedAt,parking:parking?{durationMinutes:duration,amountKzt:calculateParkingCost(duration,parking)}:null});
+});
+router.get('/admin/statistics',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const from=typeof req.query.from==='string'?new Date(req.query.from):new Date(Date.now()-7*86_400_000);
+  const to=typeof req.query.to==='string'?new Date(req.query.to):new Date();
+  if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||from>=to)return res.status(400).json({error:'Invalid date range.'});
+  const period=typeof req.query.period==='string'?req.query.period:'day';if(!['day','week','month'].includes(period))return res.status(400).json({error:'Invalid report period.'});res.json(await getAdminStatistics(from,to,period as 'day'|'week'|'month'));
+});
+router.post('/admin/integrity/run',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>{
+  try{res.json(await runAndStoreIntegrity());}catch{res.status(500).json({error:'Integrity checks could not be completed.'});}
+});
+router.get('/admin/integrity/runs',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>res.json({runs:await prisma.integrityRun.findMany({orderBy:{startedAt:'desc'},take:30})}));
+router.get('/admin/reference/categories',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>res.json({categories:await prisma.category.findMany({include:{_count:{select:{doctors:true}}},orderBy:{name:'asc'}})}));
+router.get('/admin/reference/locations',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>{
+  const locations=await prisma.location.findMany({include:{_count:{select:{doctors:true}},children:true,parent:true},orderBy:[{kind:'asc'},{name:'asc'}]});
+  const usage=await prisma.$queryRawUnsafe<Array<{id:string;doctors:number;slots:number}>>(`SELECT l."id",COUNT(DISTINCT d."id")::int AS doctors,COUNT(DISTINCT s."id")::int AS slots
+    FROM "Location" l
+    LEFT JOIN "Location" f ON (l."kind"='city' AND f."kind"='floor' AND f."parentId"=l."id") OR (l."kind"='floor' AND f."id"=l."id") OR (l."kind"='office' AND f."id"=l."parentId")
+    LEFT JOIN "Location" o ON (l."kind"='office' AND o."id"=l."id") OR (l."kind" IN ('city','floor') AND o."kind"='office' AND o."parentId"=f."id")
+    LEFT JOIN "Doctor" d ON d."locationId"=o."id" LEFT JOIN "ScheduleSlot" s ON s."doctorId"=d."id"
+    GROUP BY l."id"`);
+  const byId=new Map(usage.map(row=>[row.id,{doctors:Number(row.doctors),slots:Number(row.slots)}]));
+  res.json({locations:locations.map(location=>({...location,usage:byId.get(location.id)??{doctors:0,slots:0}}))});
+});
+router.get('/admin/reference/audit',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>{
+  const audits=await prisma.referenceDataAudit.findMany({orderBy:{createdAt:'desc'},take:50,include:{actor:{select:{firstName:true,lastName:true}}}});
+  res.json({audits});
+});
+router.post('/admin/reference/locations',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const parsedInput=z.object({name:z.string().trim().min(1).max(120),kind:z.enum(['city','floor','office']),parentId:z.string().nullable().optional()}).safeParse(req.body);
+  if(!parsedInput.success)return res.status(400).json({error:'Location values are invalid.'});
+  const input=parsedInput.data;
+  if((input.kind==='city'&&input.parentId)||(input.kind!=='city'&&!input.parentId))return res.status(400).json({error:'A city has no parent; floors and offices require their parent.'});
+  if(input.parentId){const parent=await prisma.location.findUnique({where:{id:input.parentId}});const expected=input.kind==='floor'?'city':'floor';if(!parent||parent.kind!==expected||!parent.active)return res.status(400).json({error:'Choose an active parent of the correct type.'});}
+  const duplicate=await prisma.location.findFirst({where:{parentId:input.parentId??null,name:{equals:input.name,mode:'insensitive'}}});
+  if(duplicate)return res.status(409).json({error:'A location with this name already exists under that parent.'});
+  const location=await prisma.$transaction(async tx=>{const created=await tx.location.create({data:{...input,parentId:input.parentId??null}});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'location',entityId:created.id,action:'created',newValue:{name:created.name,kind:created.kind,parentId:created.parentId}}});return created;});
+  res.status(201).json({location});
+});
+router.patch('/admin/reference/locations/:id',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const parsedInput=z.object({name:z.string().trim().min(1).max(120).optional(),active:z.boolean().optional(),parentId:z.string().nullable().optional(),confirmMove:z.boolean().optional()}).safeParse(req.body);
+  if(!parsedInput.success)return res.status(400).json({error:'Location values are invalid.'});
+  const input=parsedInput.data;const id=String(req.params.id);
+  const old=await prisma.location.findUnique({where:{id}});
+  if(!old)return res.status(404).json({error:'Location not found.'});
+  const moving=input.parentId!==undefined&&input.parentId!==old.parentId;
+  if(moving&&!input.confirmMove)return res.status(400).json({error:'Confirm the location move explicitly.'});
+  if(input.name!==undefined){const duplicate=await prisma.location.findFirst({where:{id:{not:id},parentId:input.parentId??old.parentId,name:{equals:input.name,mode:'insensitive'}}});if(duplicate)return res.status(409).json({error:'A location with this name already exists under that parent.'});}
+  if(input.active===false){const children=await prisma.location.count({where:{parentId:id,active:true}});if(children>0)return res.status(409).json({error:'Deactivate active child locations first.'});}
+  if(input.active===true&&old.parentId){const parent=await prisma.location.findUnique({where:{id:old.parentId},select:{active:true}});if(!parent?.active)return res.status(409).json({error:'Reactivate the parent location first.'});}
+  if(moving){
+    if(input.parentId===id)return res.status(400).json({error:'A location cannot be its own parent.'});
+    const parent=input.parentId?await prisma.location.findUnique({where:{id:input.parentId}}):null;
+    const expected=old.kind==='floor'?'city':old.kind==='office'?'floor':null;
+    if((expected&&!parent)||(expected&&parent?.kind!==expected)||(input.parentId&&!parent?.active)||(!expected&&input.parentId))return res.status(400).json({error:'Choose an active parent of the correct type.'});
+  }
+  const location=await prisma.$transaction(async tx=>{
+    const updated=await tx.location.update({where:{id},data:{...(input.name!==undefined?{name:input.name}:{}),...(input.active!==undefined?{active:input.active}:{}),...(moving?{parentId:input.parentId}: {})}});
+    let officeIds:string[]=[];let cityId:string|null=null;
+    if(old.kind==='city'&&input.name!==undefined){
+      cityId=id;const floors=await tx.location.findMany({where:{kind:'floor',parentId:id},select:{id:true}});
+      const offices=await tx.location.findMany({where:{kind:'office',parentId:{in:floors.map(item=>item.id)}},select:{id:true}});officeIds=offices.map(item=>item.id);
+    }else if(old.kind==='floor'&&(moving||input.name!==undefined)){
+      cityId=moving?(input.parentId??null):old.parentId;
+      const offices=await tx.location.findMany({where:{kind:'office',parentId:id},select:{id:true}});officeIds=offices.map(item=>item.id);
+    }else if(old.kind==='office'&&(moving||input.name!==undefined)){
+      officeIds=[id];const floor=await tx.location.findUnique({where:{id:moving?(input.parentId??''):old.parentId??''},select:{parentId:true}});cityId=floor?.parentId??null;
+    }
+    const city=cityId?await tx.location.findUnique({where:{id:cityId},select:{name:true}}):null;
+    if(officeIds.length){
+      const office=old.kind==='office'&&input.name!==undefined?input.name:undefined;
+      const cityName=old.kind==='city'&&input.name!==undefined?input.name:city?.name;
+      await tx.doctor.updateMany({where:{locationId:{in:officeIds}},data:{...(office!==undefined?{office}:{}),...(cityName?{city:cityName}:{})}});
+    }
+    await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'location',entityId:id,action:moving?'moved':input.active!==undefined&&input.active!==old.active?(input.active?'reactivated':'deactivated'):input.name!==undefined?'renamed':'updated',oldValue:{name:old.name,active:old.active,parentId:old.parentId},newValue:{name:updated.name,active:updated.active,parentId:updated.parentId}}});
+    return updated;
+  });
+  res.json({location});
+});
+router.post('/admin/reference/categories',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const parsedInput=z.object({name:z.string().trim().min(2).max(80)}).safeParse(req.body);
+  if(!parsedInput.success)return res.status(400).json({error:'Category name is invalid.'});
+  const name=parsedInput.data.name;
+  const duplicate=await prisma.category.findFirst({where:{name:{equals:name,mode:'insensitive'}}});
+  if(duplicate)return res.status(409).json({error:'A category with this name already exists.'});
+  const category=await prisma.$transaction(async tx=>{const created=await tx.category.create({data:{name}});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'category',entityId:created.id,action:'created',newValue:{name:created.name,active:created.active}}});return created;});
+  res.status(201).json({category});
+});
+router.patch('/admin/reference/categories/:id',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
+  const parsedInput=z.object({name:z.string().trim().min(2).max(80).optional(),active:z.boolean().optional()}).safeParse(req.body);
+  if(!parsedInput.success)return res.status(400).json({error:'Category values are invalid.'});
+  const input=parsedInput.data;const id=String(req.params.id);
+  const old=await prisma.category.findUnique({where:{id}});if(!old)return res.status(404).json({error:'Category not found.'});
+  if(input.name!==undefined){const duplicate=await prisma.category.findFirst({where:{id:{not:id},name:{equals:input.name,mode:'insensitive'}}});if(duplicate)return res.status(409).json({error:'A category with this name already exists.'});}
+  const category=await prisma.$transaction(async tx=>{const updated=await tx.category.update({where:{id},data:input});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'category',entityId:id,action:input.active!==undefined&&input.active!==old.active?(input.active?'reactivated':'deactivated'):input.name!==undefined?'renamed':'updated',oldValue:{name:old.name,active:old.active},newValue:{name:updated.name,active:updated.active}}});return updated;});
+  res.json({category});
 });
 export default router;

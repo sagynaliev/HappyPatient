@@ -300,7 +300,7 @@
 .bk-calendar-weekdays {
   margin-bottom: 5px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -863,7 +863,7 @@
   }
 
   .bk-step-label {
-    font-size: 10px;
+    font-size: 12px;
     white-space: normal;
     line-height: 1.25;
   }
@@ -914,7 +914,7 @@
 
   .bk-action-bar > span {
     max-width: 42%;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.35;
   }
 

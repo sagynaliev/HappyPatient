@@ -75,7 +75,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 @media (max-width: 900px) {
   .bk-stepper { border-radius: 20px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .bk-step { padding: 0 6px; }
-  .bk-step-label { font-size: 11px; }
+  .bk-step-label { font-size: 12px; }
 }
 @media (max-width: 540px) { .bk-summary > h2 { margin: 0 -17px 16px; padding: 14px 17px; } }
 
@@ -225,7 +225,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .front-desk-status.booked { background: #fff3dc; color: #95600a; }
 .front-desk-status.occupied { background: #e2f6ea; color: #17633f; }
 @media (max-width: 760px) { .fdk-stats { width: 100%; } .fdk-stats div { flex: 1; min-width: 0; } }
-.front-desk-page .fdk-banner p, .front-desk-page .fdk-banner h1 { color: #fff; } .front-desk-page .fdk-banner p { opacity: .82; }
+.front-desk-page .fdk-banner p, .front-desk-page .fdk-banner h1 { color: #fff; } .front-desk-page .fdk-banner p { opacity: .92; }
 
 /* ---------- Admin dashboard (Holistic style) ---------- */
 .admin-shell { padding: 0; background: transparent; }
@@ -246,7 +246,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .ad-stat-label { color: var(--text-secondary); font-size: 13.5px; }
 .ad-stat small { color: var(--text-secondary); }
 .ad-stat-icon { display: grid; width: 42px; height: 42px; margin-bottom: 6px; place-items: center; border-radius: 12px; }
-.ad-stat-icon.is-blue { background: var(--accent); color: var(--primary); }
+.ad-stat-icon.is-blue { background: var(--accent); color: var(--primary-deep); }
 .ad-stat-icon.is-violet { background: #efeafe; color: #6a4fd8; }
 .ad-stat-icon.is-green { background: #e3f7ee; color: #0f8a63; }
 .ad-stat-icon.is-pink { background: #fdebef; color: #d43f5e; }
@@ -373,7 +373,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .fd-card-actions { margin-top: auto; }
 
 /* ---------- Booking confirmation ---------- */
-.bk-step-check { display: inline-grid; width: 18px; height: 18px; margin-right: 6px; place-items: center; border-radius: 50%; background: var(--primary); color: #fff; font-size: 11px; font-weight: 700; vertical-align: -3px; }
+.bk-step-check { display: inline-grid; width: 18px; height: 18px; margin-right: 6px; place-items: center; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; vertical-align: -3px; }
 .bk-confirmation { display: grid; justify-items: center; gap: 0; width: min(100%, 620px); margin: 8px auto 0; padding: 36px 36px 28px; text-align: center; }
 .bk-confirm-icon { display: grid; width: 76px; height: 76px; margin-bottom: 16px; place-items: center; border-radius: 50%; background: #e3f7ee; color: #0f8a63; box-shadow: 0 0 0 8px #f1fbf6; }
 .bk-confirm-icon svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -574,7 +574,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .sms-option { position: relative; display: grid !important; grid-template-columns: 32px minmax(0, 1fr) auto 22px; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; color: var(--text-primary); font-size: 14px !important; font-weight: 500 !important; cursor: pointer; }
 .sms-option:hover { background: #f5f8ff; }
 .sms-option-icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 9px; background: #f1f4fa; color: var(--text-secondary); }
-.sms-option.is-selected .sms-option-icon { background: var(--accent); color: var(--primary); }
+.sms-option.is-selected .sms-option-icon { background: var(--accent); color: var(--primary-deep); }
 .sms-option-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sms-count { min-width: 26px; padding: 2px 8px; border-radius: 999px; background: #e3f7ee; color: #17633f; font-size: 12px; font-weight: 600; text-align: center; }
 .sms-option.is-empty .sms-count { background: #f1f4fa; color: #8b95b0; }
@@ -608,7 +608,7 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 .bk-vstep-copy { display: grid; gap: 2px; min-width: 0; }
 .bk-vstep-label { font-size: 14px; font-weight: 600; color: #9aa6c2; }
 .bk-vstep-hint { overflow: hidden; color: #aab3c9; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.bk-vstep.is-completed .bk-vstep-icon { background: var(--accent); color: var(--primary); }
+.bk-vstep.is-completed .bk-vstep-icon { background: var(--accent); color: var(--primary-deep); }
 .bk-vstep.is-completed .bk-vstep-label { color: var(--text-primary); }
 .bk-vstep.is-completed .bk-vstep-hint { color: var(--text-secondary); }
 .bk-vstep.is-current .bk-vstep-row { background: var(--primary); box-shadow: 0 10px 22px rgb(43 99 246 / 28%); }
@@ -642,7 +642,7 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
   .bk-vsteps ol::before { top: 23px; bottom: auto; left: 12%; right: 12%; width: auto; height: 2px; }
   .bk-vstep-row { flex-direction: column; gap: 4px; padding: 6px 4px; text-align: center; }
   .bk-vstep-copy { justify-items: center; }
-  .bk-vstep-label { font-size: 11px; }
+  .bk-vstep-label { font-size: 12px; }
   .bk-vstep-hint, .bk-vstep-dots { display: none; }
   .bk-side .bk-summary { order: 2; }
 }
@@ -683,7 +683,7 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 }
 .wi-empty { display: grid; justify-items: center; gap: 8px; margin-top: 8px; padding: 36px 20px; border: 1.5px dashed var(--accent-strong); border-radius: 20px; background: #f8faff; color: var(--text-secondary); font-size: 14px; text-align: center; }
 .wi-empty strong { color: var(--text-primary); font-size: 16px; font-weight: 600; }
-.wi-empty-icon { display: grid; width: 56px; height: 56px; margin-bottom: 4px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--primary); }
+.wi-empty-icon { display: grid; width: 56px; height: 56px; margin-bottom: 4px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--primary-deep); }
 .wi-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
 
 /* Specialty search: one field with the icon inside (beats the generic form label/input rules) */
@@ -715,3 +715,5 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
   .bk-next-card { display: flex; flex-direction: column; }
   .bk-next-steps { flex: 1; align-content: space-evenly; }
 }
+/* Keyboard focus remains visible across inputs, selects, textareas, and custom controls. */
+:root :focus-visible { outline: 3px solid var(--focus-ring) !important; outline-offset: 2px !important; }

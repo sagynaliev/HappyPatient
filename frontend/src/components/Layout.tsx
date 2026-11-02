@@ -31,6 +31,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: "/dashboard", label: "Dashboard", icon: "grid" },
     { to: "/search", label: "Find a Doctor", icon: "search" },
     { to: "/appointments", label: "Appointments", icon: "calendar" },
+    { to: "/medical-history", label: "Medical History", icon: "calendar" },
   ],
   DOCTOR: [
     { to: "/doctor/dashboard", label: "Dashboard", icon: "grid" },
@@ -47,7 +48,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: "/admin/users", label: "Users", icon: "users" },
     { to: "/admin/doctors", label: "Doctors", icon: "stethoscope" },
     { to: "/admin/appointments", label: "Appointments", icon: "calendar" },
-    { to: "/admin/reports", label: "Reports", icon: "chart" },
+    { to: "/admin/statistics", label: "Statistics", icon: "chart" },
     { to: "/front-desk", label: "Front desk", icon: "desk", end: true },
     { to: "/front-desk/walk-in", label: "Walk-in", icon: "user" },
   ],
