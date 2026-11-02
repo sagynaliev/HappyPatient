@@ -1,0 +1,8 @@
+ALTER TABLE "Category" ADD COLUMN "active" BOOLEAN NOT NULL DEFAULT true;
+CREATE TYPE "PricingKind" AS ENUM ('visit','treatment','parking');
+CREATE TYPE "ParkingRounding" AS ENUM ('per_started_hour','per_minute');
+CREATE TABLE "PricingRule"("id" TEXT PRIMARY KEY,"kind" "PricingKind" NOT NULL,"doctorId" TEXT,"categoryId" TEXT,"scopeKey" TEXT NOT NULL DEFAULT 'global',"serviceName" TEXT,"amountKzt" INTEGER NOT NULL DEFAULT 0,"ratePerHourKzt" INTEGER,"freeMinutes" INTEGER NOT NULL DEFAULT 0,"rounding" "ParkingRounding" NOT NULL DEFAULT 'per_started_hour',"dailyCapKzt" INTEGER,"effectiveFrom" TIMESTAMP(3) NOT NULL,"effectiveTo" TIMESTAMP(3),"active" BOOLEAN NOT NULL DEFAULT true,"createdById" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY("categoryId") REFERENCES "Category"("id"),FOREIGN KEY("createdById") REFERENCES "User"("id") ON DELETE SET NULL);
+CREATE INDEX "PricingRule_kind_active_effectiveFrom_idx" ON "PricingRule"("kind","active","effectiveFrom");
+CREATE TABLE "HistoryAccessAudit"("id" TEXT PRIMARY KEY,"actorId" TEXT,"actorRole" "Role","targetPatientId" TEXT NOT NULL,"endpoint" TEXT NOT NULL,"outcome" TEXT NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY("actorId") REFERENCES "User"("id") ON DELETE SET NULL);
+CREATE INDEX "HistoryAccessAudit_targetPatientId_createdAt_idx" ON "HistoryAccessAudit"("targetPatientId","createdAt");
+CREATE TABLE "ReminderSent"("id" TEXT PRIMARY KEY,"appointmentId" TEXT NOT NULL,"kind" TEXT NOT NULL,"sentAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE("appointmentId","kind"));

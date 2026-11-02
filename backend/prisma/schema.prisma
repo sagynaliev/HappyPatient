@@ -32,6 +32,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  medicalEntries MedicalEntry[] @relation("PatientMedicalEntries")
+  createdPricingRules PricingRule[]
+  pricingRuleAudits PricingRuleAudit[]
+  historyAccessAudits HistoryAccessAudit[]
+  referenceDataAudits ReferenceDataAudit[]
   doctor      Doctor?
   resetTokens ResetToken[]
   bookedSlots ScheduleSlot[] @relation("BookedSlots")
@@ -48,6 +53,7 @@ model Doctor {
   categoryId      String
   office          String?
   city            String?
+  locationId      String?
   clinicName      String?
   streetAddress   String?
   officeNumber    String?
@@ -57,8 +63,10 @@ model Doctor {
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   category      Category       @relation(fields: [categoryId], references: [id])
+  location      Location?      @relation(fields: [locationId], references: [id], onDelete: SetNull)
   scheduleSlots ScheduleSlot[]
   cancellations CancelledAppointment[]
+  medicalEntries MedicalEntry[]
 }
 
 model Category {
@@ -67,6 +75,8 @@ model Category {
   createdAt DateTime @default(now())
 
   doctors Doctor[]
+  active Boolean @default(true)
+  pricingRules PricingRule[]
 }
 
 model ResetToken {
@@ -100,6 +110,8 @@ model ScheduleSlot {
   patient User?  @relation("BookedSlots", fields: [patientId], references: [id], onDelete: SetNull)
   checkedInBy User? @relation("CheckInsPerformed", fields: [checkedInById], references: [id], onDelete: SetNull)
   notifications Notification[]
+  reminders ReminderSent[]
+  medicalEntries MedicalEntry[]
   receipt       Receipt?
   cancellations CancelledAppointment[]
 
@@ -167,4 +179,156 @@ model CancelledAppointment {
 
   @@index([patientId, createdAt])
   @@index([doctorId, createdAt])
+}
+
+// Expired visits retain the appointment snapshot when a reusable slot is freed.
+// This is also the release audit: appointment/slot IDs, reason and timestamp.
+model ExpiredAppointment {
+  id String @id @default(cuid())
+  appointmentId String
+  slotId String
+  doctorId String
+  patientId String?
+  startAt DateTime
+  endAt DateTime
+  bookingVersion DateTime
+  status String @default("expired")
+  reason String @default("auto_release_no_checkin")
+  createdAt DateTime @default(now())
+  @@unique([slotId, bookingVersion])
+}
+
+enum MedicalEntryCategory {
+  test
+  anamnesis
+  conclusion
+}
+
+model MedicalEntry {
+  id String @id @default(cuid())
+  patientId String
+  doctorId String
+  appointmentId String?
+  category MedicalEntryCategory
+  title String @db.VarChar(120)
+  body String @db.VarChar(5000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  patientSequence Int @default(0)
+  patient User @relation("PatientMedicalEntries", fields: [patientId], references: [id], onDelete: Restrict)
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  appointment ScheduleSlot? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  @@index([patientId, createdAt, id])
+  @@unique([patientId, patientSequence])
+}
+
+enum PricingKind {
+ visit
+ treatment
+ parking
+}
+enum ParkingRounding {
+ per_started_hour
+ per_minute
+}
+model PricingRule {
+ id String @id @default(cuid())
+ kind PricingKind
+ doctorId String?
+ categoryId String?
+ consultationType String?
+ serviceCode String?
+ officeId String?
+ scopeKey String @default("global")
+ serviceName String?
+ amountKzt Int @default(0)
+ ratePerHourKzt Int?
+ freeMinutes Int @default(0)
+ rounding ParkingRounding @default(per_started_hour)
+ dailyCapKzt Int?
+ effectiveFrom DateTime
+ effectiveTo DateTime?
+ active Boolean @default(true)
+ createdById String?
+ createdAt DateTime @default(now())
+ versionOfId String?
+ category Category? @relation(fields:[categoryId],references:[id])
+ createdBy User? @relation(fields:[createdById],references:[id])
+ office Location? @relation(fields:[officeId],references:[id],onDelete:SetNull)
+ previousVersion PricingRule? @relation("PricingVersions",fields:[versionOfId],references:[id],onDelete:SetNull)
+ nextVersions PricingRule[] @relation("PricingVersions")
+ audits PricingRuleAudit[]
+ @@index([kind,active,effectiveFrom])
+ @@index([versionOfId])
+}
+model PricingRuleAudit {
+ id String @id @default(cuid())
+ ruleId String
+ actorId String?
+ action String
+ oldValue Json?
+ newValue Json?
+ createdAt DateTime @default(now())
+ rule PricingRule @relation(fields:[ruleId],references:[id],onDelete:Restrict)
+ actor User? @relation(fields:[actorId],references:[id],onDelete:SetNull)
+ @@index([ruleId,createdAt])
+}
+model HistoryAccessAudit {
+ id String @id @default(cuid())
+ actorId String?
+ actorRole Role?
+ targetPatientId String
+ endpoint String
+ outcome String
+ createdAt DateTime @default(now())
+ actor User? @relation(fields:[actorId],references:[id],onDelete:SetNull)
+ @@index([targetPatientId,createdAt])
+}
+model ReminderSent {
+ id String @id @default(cuid())
+ appointmentId String
+ bookingVersion DateTime @default(now())
+ kind String
+ sentAt DateTime @default(now())
+ appointment ScheduleSlot @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+ @@unique([appointmentId,bookingVersion,kind])
+}
+
+enum LocationKind {
+ city
+ floor
+ office
+}
+model Location {
+ id String @id @default(cuid())
+ name String @db.VarChar(120)
+ kind LocationKind
+ parentId String?
+ active Boolean @default(true)
+ createdAt DateTime @default(now())
+ parent Location? @relation("LocationTree",fields:[parentId],references:[id],onDelete:Restrict)
+ children Location[] @relation("LocationTree")
+ doctors Doctor[]
+ pricingRules PricingRule[]
+ @@unique([parentId,name])
+ @@index([parentId,active])
+}
+model ReferenceDataAudit {
+ id String @id @default(cuid())
+ actorId String?
+ entity String
+ entityId String
+ action String
+ oldValue Json?
+ newValue Json?
+ createdAt DateTime @default(now())
+ actor User? @relation(fields:[actorId],references:[id],onDelete:SetNull)
+ @@index([entity,entityId,createdAt])
+}
+model IntegrityRun {
+ id String @id @default(cuid())
+ startedAt DateTime @default(now())
+ finishedAt DateTime?
+ status String @default("running")
+ results Json?
 }

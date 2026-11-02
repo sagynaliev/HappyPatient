@@ -49,7 +49,7 @@
 .availability-dialog-header .availability-dialog-eyebrow {
   margin: 0 0 8px;
   color: var(--primary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -254,7 +254,7 @@
   .availability-dialog-form { gap: 18px; padding: 20px 20px max(20px, env(safe-area-inset-bottom)); }
   .availability-working-days { padding: 13px 10px; }
   .availability-dialog .schedule-weekday-options { gap: 5px; }
-  .availability-dialog .schedule-weekday-option { gap: 4px; min-height: 40px; padding: 5px 2px; font-size: 11px; }
+  .availability-dialog .schedule-weekday-option { gap: 4px; min-height: 40px; padding: 5px 2px; font-size: 12px; }
   .availability-dialog-actions { display: grid; grid-template-columns: 1fr 1.3fr; }
   .availability-dialog-actions .button { min-width: 0; width: 100%; }
   .availability-dialog-add .availability-dialog-header { padding: 22px 20px 17px; }
@@ -314,7 +314,7 @@
   border-radius: 999px;
   background: var(--accent);
   color: var(--status-success);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;

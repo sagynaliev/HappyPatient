@@ -68,7 +68,7 @@ describe("shared header", () => {
 
     expect(screen.getAllByRole("link", { name: "Dashboard" })).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Users" })).toHaveAttribute("href", "/admin/users");
-    expect(screen.getByRole("link", { name: "Reports" })).toHaveAttribute("href", "/admin/reports");
+    expect(screen.getByRole("link", { name: "Statistics" })).toHaveAttribute("href", "/admin/statistics");
     expect(screen.getByRole("link", { name: "Profile: Alikhan S." })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     expect(auth.logout).toHaveBeenCalledOnce();

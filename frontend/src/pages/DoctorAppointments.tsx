@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+const MedicalHistory = lazy(() => import("../components/MedicalHistory"));
 import { Link, useSearchParams } from "react-router-dom";
 import { ScheduleSlot, DoctorProfile, authApi } from "../lib/api";
 import "../styles/doctorAppointments.css";
@@ -70,7 +71,7 @@ export default function DoctorAppointments() {
       const result = await authApi.getSchedule(profile.id);
       if (id !== requestId.current) return;
       setDoctor(result.doctor ?? profile);
-      setSlots(result.slots.filter((slot) => slot.status === "BOOKED").sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt)));
+      setSlots(result.slots.filter((slot) => (slot.status === "BOOKED" || slot.status === "OCCUPIED")).sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt)));
       setSelected((current) => current ? result.slots.find((slot) => slot.id === current.id) ?? null : null);
     } catch (caught) {
       if (id === requestId.current) setError(caught instanceof Error ? caught.message : "Unable to load appointments.");
@@ -162,7 +163,7 @@ export default function DoctorAppointments() {
       <section className="da-filters" aria-label="Filter appointments">
         <label className="da-search">Search patient or slot ID<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name or slot ID" /></label>
         <label>Date<input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} /></label>
-        <p className="da-filter-note">Showing booked visits only</p>
+        <p className="da-filter-note">Showing booked and occupied visits</p>
         <button className="da-reset" type="button" onClick={() => { setQuery(""); setDateFilter(""); setView("today"); }}>Reset</button>
       </section>
 
@@ -179,7 +180,7 @@ export default function DoctorAppointments() {
                 <tbody>{visibleSlots.map((slot) => <tr key={slot.id} className={selected?.id === slot.id ? "is-selected" : ""}>
                   <td><strong>{personName(slot)}</strong><small>{slot.id}</small></td>
                   <td>{formatDay(slot.startAt)}<small>{formatTime(slot.startAt)}–{formatTime(slot.endAt)}</small></td>
-                  <td>{slot.visitPurpose || "Not provided"}</td><td><span className="da-status">Booked</span></td>
+                  <td>{slot.visitPurpose || "Not provided"}</td><td><span className="da-status">{slot.status === "OCCUPIED" ? "Occupied" : "Booked"}</span></td>
                   <td><button className="da-link" type="button" aria-pressed={selected?.id === slot.id} onClick={() => void showDetails(slot)}>{selected?.id === slot.id ? "Selected" : "Details →"}</button></td>
                 </tr>)}</tbody>
               </table>
@@ -189,7 +190,7 @@ export default function DoctorAppointments() {
         </section>
 
         <aside className="da-panel da-inspector" aria-labelledby="da-details-heading">
-          <div className="da-panel-heading"><h2 id="da-details-heading">Appointment details</h2>{selected && <span className="da-status">Booked</span>}</div>
+          <div className="da-panel-heading"><h2 id="da-details-heading">Appointment details</h2>{selected && <span className="da-status">{selected.status === "OCCUPIED" ? "Occupied" : "Booked"}</span>}</div>
           {!selected ? <div className="da-empty da-empty-compact"><strong>Select a booked visit</strong><p>Appointment details will appear here.</p></div> : <>
             {detailLoading && <p className="da-detail-loading" role="status">Loading authorized details…</p>}
             <h3>{personName(selected)}</h3><p className="da-reference">Slot · {selected.id}</p>
@@ -200,6 +201,11 @@ export default function DoctorAppointments() {
               <div><dt>Patient email</dt><dd>{selected.patient?.email || "Not available"}</dd></div>
               <div><dt>Reason for visit</dt><dd>{selected.visitPurpose || "Not provided"}</dd></div>
             </dl>
+            {selected.patient && selected.status === "OCCUPIED" && Date.parse(selected.startAt) <= Date.now()
+              ? <Suspense fallback={<p className="skeleton" role="status">Loading medical history…</p>}><MedicalHistory key={selected.id} patientId={selected.patient.id} appointmentId={selected.id} /></Suspense>
+              : selected.patient && selected.status === "BOOKED" && Date.parse(selected.startAt) > Date.now()
+                ? <Suspense fallback={<p className="skeleton" role="status">Loading medical history…</p>}><MedicalHistory key={selected.id} patientId={selected.patient.id} /></Suspense>
+                : <div className="mh-history"><button className="button" disabled aria-describedby="mh-precondition">Add note</button><p id="mh-precondition">Notes become available after this visit starts and the patient checks in.</p></div>}
           </>}
         </aside>
       </div>

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppNotification, authApi } from "../lib/api";
 import { onNotificationsChanged } from "../lib/notificationEvents";
@@ -70,6 +71,10 @@ export function NotificationBell() {
     if (next) await load();
   }
 
+  async function markOneRead(id: string) {
+    try { await authApi.markNotificationRead(id); const now = new Date().toISOString(); setNotifications(items => items.map(item => item.id === id ? { ...item, readAt: item.readAt ?? now } : item)); setUnreadCount(count => Math.max(0, count - (notifications.some(item => item.id === id && !item.readAt) ? 1 : 0))); } catch { /* preserve the unread state */ }
+  }
+
   async function markAllRead() {
     try {
       await authApi.markNotificationsRead();
@@ -110,8 +115,9 @@ export function NotificationBell() {
                 <li key={item.id} className={`notification-item notification-item--${kindOf(item.type)}${item.readAt ? "" : " is-unread"}`}>
                   <span className="notification-item-icon" aria-hidden="true">{KIND_ICON[kindOf(item.type)]}</span>
                   <div>
-                    <strong>{item.subject}</strong>
+                    {item.slotId ? <Link to={"/appointments?appointmentId="+encodeURIComponent(item.slotId)} onClick={() => { void markOneRead(item.id); setOpen(false); }}><strong>{item.subject}</strong></Link> : <strong>{item.subject}</strong>}
                     <p>{item.message}</p>
+                    {!item.readAt && <button type="button" className="notification-mark-read" onClick={() => void markOneRead(item.id)}>Mark as read</button>}
                     <small>{relativeTime(item.createdAt)} · {item.channel === "email" ? (item.status === "DELIVERED" ? "Sent by email" : "Email failed") : "In-app"}</small>
                   </div>
                 </li>

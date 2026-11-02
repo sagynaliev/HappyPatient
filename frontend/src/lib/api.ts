@@ -97,7 +97,7 @@ export type CancelledAppointment = {
 export type DoctorCancellation = { id: string; startAt: string; endAt: string; visitPurpose?: string | null; reason: string; cancelledBy: 'PATIENT' | 'CLINIC'; createdAt: string; patientName: string };
 export type AvailabilityDoctor = { id: string; name: string; specialty: string; office: string | null; consultationFee: number; slots: Array<{ id: string; startAt: string; endAt: string }> };
 export type FrontDeskAppointment = { id: string; startAt: string; endAt: string; status: ScheduleSlot['status']; visitPurpose?: string | null; checkedInAt?: string | null; reference: string; patient: { id: string; name: string; email: string; phone: string | null } | null; doctor: { name: string; specialty: string; office: string | null } };
-export type AppNotification = { id: string; type: string; channel: string; status: string; subject: string; message: string; createdAt: string; readAt?: string | null };
+export type AppNotification = { id: string; slotId?: string | null; type: string; channel: string; status: string; subject: string; message: string; createdAt: string; readAt?: string | null };
 export type Receipt = {
   id: string;
   reference: string;
@@ -204,6 +204,7 @@ export const authApi = {
   receipt: (slotId: string) => api<{ receipt: Receipt }>(`/appointments/${encodeURIComponent(slotId)}/receipt`),
   notifications: () => api<{ notifications: AppNotification[]; unreadCount: number }>('/notifications'),
   markNotificationsRead: () => api<{ updated: number }>('/notifications/read-all', { method: 'POST' }),
+  markNotificationRead: (id: string) => api<{ updated: number }>('/notifications/' + encodeURIComponent(id) + '/read', { method: 'POST' }),
   frontDeskLookup: (iin: string) => api<{ patient: { id: string; firstName: string; lastName: string; email: string; phone: string | null; iin: string } }>(`/front-desk/patients/lookup?iin=${encodeURIComponent(iin)}`),
   frontDeskAppointments: (query = '') => api<{ appointments: FrontDeskAppointment[] }>(`/front-desk/appointments${query ? `?q=${encodeURIComponent(query)}` : ''}`),
   frontDeskAvailability: (params: { date: string; categories?: string[]; q?: string }) =>

@@ -27,7 +27,7 @@
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
   color: #fff;
   font-size: 20px;
 }
@@ -60,8 +60,8 @@
 }
 
 .admin-nav a.active {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--accent);
+  color: var(--primary-hover);
 }
 
 .admin-user-tools {
@@ -96,7 +96,7 @@
   height: 28px;
   border-radius: 50%;
   background: #dbeafe;
-  color: #1d4ed8;
+  color: var(--primary-hover);
   font-size: 0.7rem;
   font-weight: 800;
 }
@@ -104,7 +104,7 @@
 .admin-signout {
   border: 0;
   background: transparent;
-  color: #1d4ed8;
+  color: var(--primary-hover);
   font-weight: 700;
   cursor: pointer;
 }
@@ -139,7 +139,7 @@
 
 .admin-eyebrow {
   margin: 0;
-  color: #2563eb;
+  color: var(--primary);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -219,7 +219,7 @@
 }
 
 .admin-panel-header a {
-  color: #2563eb;
+  color: var(--primary);
   font-weight: 700;
   text-decoration: none;
 }
@@ -249,7 +249,7 @@
 }
 
 .admin-chart-bar[data-active="true"] {
-  background: linear-gradient(180deg, #60a5fa, #2563eb);
+  background: linear-gradient(180deg, var(--accent-strong), var(--primary));
 }
 
 .admin-chart-bar-wrap small {
@@ -399,13 +399,13 @@
 }
 
 .admin-primary-button {
-  background: #2563eb;
+  background: var(--primary);
   color: #fff;
 }
 
 .admin-secondary-button {
   background: #eef2ff;
-  color: #1d4ed8;
+  color: var(--primary-hover);
 }
 
 .admin-danger-button {
@@ -443,7 +443,7 @@
 .admin-link-button {
   border: 0;
   background: transparent;
-  color: #2563eb;
+  color: var(--primary);
   font-weight: 700;
   cursor: pointer;
 }
@@ -474,8 +474,8 @@
   padding: 12px 14px;
   border: 1px solid #bfdbfe;
   border-radius: 12px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--accent);
+  color: var(--primary-hover);
   font-size: 0.8rem;
 }
 
@@ -555,7 +555,7 @@
 }
 
 .admin-footer a {
-  color: #2563eb;
+  color: var(--primary);
   font-weight: 700;
   text-decoration: none;
 }

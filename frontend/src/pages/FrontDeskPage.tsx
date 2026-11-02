@@ -1,3 +1,4 @@
+import FrontDeskSlotStatus from "../components/FrontDeskSlotStatus";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { authApi, FrontDeskAppointment, Receipt } from "../lib/api";
@@ -50,7 +51,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
     setBusy(true); setError(""); setMessage(""); setReceipt(null);
     try {
       const result = await authApi.frontDeskWalkIn({ ...patient, phone: patient.phone || undefined, doctorId: picked.doctorId, slotId: picked.slotId, visitPurpose: purpose });
-      setMessage(`${patient.firstName} ${patient.lastName} is booked with ${picked.doctorName} at ${timeText(picked.startAt)} (${result.reference}, ${result.slot.status === "OCCUPIED" ? "checked in" : "booked"}). You can find the visit under Front desk.`);
+      setMessage(`${patient.firstName} ${patient.lastName} is booked with ${picked.doctorName} at ${timeText(picked.startAt)} (${result.reference}). ${result.slot.status === "OCCUPIED" ? "Slot marked as Occupied because the visit starts within 30 minutes." : "Slot marked as Booked."} You can find the visit under Front desk.`);
       setPicked(null);
       setPickerRefresh((value) => value + 1);
       setPatient({ firstName: "", lastName: "", iin: "", email: "", phone: "" });
@@ -84,7 +85,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
       </dl>}
     </header>
     {message && <div className="front-desk-alert success" role="status">{message}</div>}
-    {error && <div className="front-desk-alert error" role="alert">{error}</div>}
+    {error && <div id="fd-form-error" className="front-desk-alert alert error" role="alert">{error}</div>}
     <div className={view === "walk-in" ? "fdk-walkin-layout" : "fdk-appointments-layout"}>
       {view === "appointments" && <section className="front-desk-card"><div className="fdk-section-head"><h2>Appointments</h2><Link className="fdk-walkin-link" to="/front-desk/walk-in">+ Walk-in</Link></div><p className="front-desk-muted">Booked and checked-in visits, soonest first.</p><form className="front-desk-search" onSubmit={(event) => { event.preventDefault(); void loadAppointments(); }}><input aria-label="Search appointments" placeholder="Patient, reference, or IIN" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="button" type="submit">Search</button></form>
         {appointments.length > 0 && <div className="fdk-list-head" aria-hidden="true"><span /><span>Patient</span><span>Doctor</span><span>Date &amp; time</span><span>Reference</span><span>Status</span></div>}
@@ -108,7 +109,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
         </article>) : <p className="front-desk-empty">No booked or checked-in appointments found.</p>}</div>
       </section>}
       {view === "walk-in" && <section className="front-desk-card fdk-walkin" aria-label="Register walk-in patient">
-        <form onSubmit={register} className="front-desk-form">
+        <form onSubmit={register} className="front-desk-form" aria-describedby={error ? "fd-form-error" : undefined}>
           <fieldset className="fdk-step">
             <legend className="sr-only">Patient</legend>
             <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">1</span>Patient</h3>
@@ -121,6 +122,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
             <legend className="sr-only">Doctor and time</legend>
             <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">2</span>Doctor and time</h3>
             <WalkInSlotPicker value={picked} onChange={setPicked} refreshKey={pickerRefresh} disabled={busy} />
+            {picked && <FrontDeskSlotStatus key={picked.doctorId + picked.startAt} doctorId={picked.doctorId} startAt={picked.startAt} />}
           </fieldset>
           <fieldset className="fdk-step">
             <legend className="sr-only">Confirm</legend>

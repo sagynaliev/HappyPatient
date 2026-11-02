@@ -7,7 +7,7 @@ HappyPatient is a small patient/doctor directory and authentication MVP. It is a
 
 ## Local development
 
-1. Copy `.env.example` to `.env` and replace `JWT_SECRET` with a long random value.
+1. Copy `.env.example` to the repository-root `.env` and replace `JWT_SECRET` with a long random value. Keep local configuration in this single file; do not duplicate its variables in `backend/.env`, because Prisma Studio rejects conflicting environment files.
 2. Start PostgreSQL:
 
    ```bash
@@ -37,7 +37,14 @@ The deterministic Prisma seed command is `npm run seed` (equivalently `npm run d
 
 Doctors can update their office location and publish daily availability from their dashboard. Schedule ranges are interpreted in UTC and generated as non-overlapping 30-minute slots. Signed-in patients can book future free slots with a visit purpose; doctors can mark slots occupied or free and view booked patient details. Patient schedule responses include slot status but never another patient's details.
 
-The doctor directory provides debounced suggestions for doctor names, specialties, and offices. Patients can filter by specialty, location, published availability, and time of day; selecting a listed appointment opens that exact slot in the existing booking flow. Consultation fees are stored for later pricing configuration; ratings, experience, languages, and online-visit modes are not currently stored.
+The doctor directory provides debounced suggestions for doctor names, specialties, and offices. Patients can filter by specialty, location, published availability, and time of day; selecting a listed appointment opens that exact slot in the existing booking flow. Doctor consultation fees remain available as the fallback price; administrators can configure effective-dated visit and parking rules in the operations area. Ratings, experience, languages, and online-visit modes are not currently stored.
+
+
+## Sprint 5–6 operations
+
+The existing admin area now includes pricing rules, statistics, data quality/integrity, and reference data. Medical history is chronological and role-restricted; patients receive in-app upcoming-visit reminders. The office hierarchy is city → floor → office. See the [Sprint 5–6 implementation report](docs/sprint56-status.md) for rule definitions, migrations, verification and product-data limits.
+
+Reminder polling is configured by REMINDER_INTERVAL_MS and REMINDER_LEAD_HOURS; persisted integrity checks use INTEGRITY_INTERVAL_MS. Defaults are 60 seconds, 24 and 2 hours, and one day respectively. No reminder email or SMS delivery is claimed.
 
 ## Docker
 
@@ -60,3 +67,5 @@ No real credentials or secrets are committed; use `.env.example` as the configur
 ## Branded email notifications and check-in receipts
 
 Appointment emails now share Happy Patient branding and include plain-text fallbacks. Successful check-in attaches a registration PDF with real appointment details in Asia/Almaty time. Existing authenticated receipt download/printing remains available. See [notification configuration, local previews, verification and failure handling](docs/notifications.md).
+
+To inspect local database tables, run `npm run db:studio` from the repository root and open the localhost URL printed by Prisma. Backend workspace commands also load the root `.env`; externally supplied environment variables retain precedence.
