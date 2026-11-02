@@ -143,6 +143,12 @@ function AppointmentCard({
           <button className="button button-outline" type="button" aria-expanded={expanded} aria-controls={`pa-details-${appointment.id}`} aria-label={`${expanded ? "Hide" : "View"} details for ${appointment.doctor.name}`} onClick={() => onToggleDetails(appointment)}>
             {expanded ? "Hide details" : "View details"}
           </button>
+          {appointment.status === "BOOKED" && isFuture && appointment.doctor.id && (
+            <Link className="button button-outline pa-change" to={`/doctors/${appointment.doctor.id}/schedule?reschedule=${encodeURIComponent(appointment.id)}`} aria-label={`Change booking with ${appointment.doctor.name}`}>Change booking</Link>
+          )}
+          {appointment.status === "BOOKED" && isFuture && (
+            <button className="button button-outline pa-cancel" type="button" disabled={busy || pendingCancel} aria-label={`Cancel appointment with ${appointment.doctor.name}`} onClick={(event) => onCancel(appointment, event.currentTarget)}>{pendingCancel ? "Cancelling…" : "Cancel"}</button>
+          )}
           {canCheckIn(appointment) && (
             <button className="button" type="button" disabled={busy} onClick={() => onCheckIn(appointment)}>Confirm arrival</button>
           )}
@@ -161,7 +167,6 @@ function AppointmentCard({
           <VisitCost slotId={appointment.id} visible={expanded} />
           {appointment.status === "BOOKED" && isFuture && <p className="patient-appointment-hint">Check-in opens 30 minutes before your visit.</p>}
           <div className="pa-detail-actions">
-            {appointment.status === "BOOKED" && isFuture && <button className="button button-outline pa-cancel" type="button" disabled={busy || pendingCancel} onClick={(event) => onCancel(appointment, event.currentTarget)}>{pendingCancel ? "Cancelling…" : "Cancel appointment"}</button>}
             {appointment.status === "OCCUPIED" && <button className="button" type="button" onClick={() => onViewReceipt(appointment)}>View receipt</button>}
           </div>
         </section>

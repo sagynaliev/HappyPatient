@@ -68,6 +68,19 @@ export default function Schedule() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { doctorId } = useParams();
+  const rescheduleId = searchParams.get("reschedule");
+  const [rescheduleFrom, setRescheduleFrom] = useState<{ startAt: string; endAt: string; visitPurpose?: string | null } | null>(null);
+  useEffect(() => {
+    if (!rescheduleId) { setRescheduleFrom(null); return; }
+    let active = true;
+    authApi.myAppointments().then(({ appointments }) => {
+      const current = appointments.find((item) => item.id === rescheduleId && item.status === "BOOKED");
+      if (!active || !current) return;
+      setRescheduleFrom({ startAt: current.startAt, endAt: current.endAt, visitPurpose: current.visitPurpose });
+      setVisitPurpose((value) => value || current.visitPurpose || "");
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [rescheduleId]);
   const isDoctor = user?.role === "DOCTOR";
   const routeState = location.state as {
     doctorName?: string;
@@ -305,7 +318,9 @@ export default function Schedule() {
     bookingInFlight.current = true;
     setBusy(true);
     try {
-      const result = await authApi.bookSlot(doctorId, selected.id, visitPurpose);
+      const result = rescheduleId && rescheduleFrom
+        ? await authApi.rescheduleMyAppointment(rescheduleId, selected.id)
+        : await authApi.bookSlot(doctorId, selected.id, visitPurpose);
       notifyNotificationsChanged();
       setSlots((current) => current.map((slot) => slot.id === selected.id ? { ...slot, ...result.slot } : slot));
       const chosenTime = `${displayTime(selected.startAt)} – ${displayTime(selected.endAt)}`;
@@ -408,6 +423,7 @@ export default function Schedule() {
         busy={busy}
         error={error}
         bookingSuccess={bookingSuccess}
+        rescheduleFrom={rescheduleFrom}
         onConfirm={bookSelectedSlot}
         onSlotTaken={refreshAvailability}
       />

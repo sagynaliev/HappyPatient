@@ -1,4 +1,4 @@
-import { brandedEmail } from './email/layout';
+import { brandedEmail, platformUrl } from './email/layout';
 import { Resend } from 'resend';
 
 export type RegistrationNotification = {
@@ -23,7 +23,7 @@ function getFrontendUrl(value?: string): string | undefined {
 }
 
 function createRegistrationEmail(firstName: string, frontendUrl?: string) {
-  const destination = getFrontendUrl(frontendUrl);
+  const destination = getFrontendUrl(platformUrl(frontendUrl));
   const content = brandedEmail({
     title: 'Welcome to HappyPatient!',
     action: destination ? { label: 'Go to HappyPatient', url: destination } : undefined,

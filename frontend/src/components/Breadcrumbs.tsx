@@ -23,6 +23,7 @@ export function buildCrumbs(pathname: string, labels: Record<string, string>, ro
   if (pathname === "/dashboard") return [home, { label: "Dashboard" }];
   if (pathname === "/appointments") return [home, { label: role === "PATIENT" ? "My appointments" : "Appointments" }];
   if (pathname === "/profile") return [home, { label: "Profile" }];
+  if (pathname === "/medical-history") return [home, { label: "Health records" }];
   if (parts[0] === "doctor") {
     const section = parts[1] === "schedule" ? "My schedule" : parts[1] === "appointments" ? "Appointments" : "Dashboard";
     return [home, { label: section }];

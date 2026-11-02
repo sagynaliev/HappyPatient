@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appointmentEmail, PatientEmailEvent } from './appointment';
+import { reminderEmail, appointmentEmail, PatientEmailEvent } from './appointment';
 const data = { doctor: 'Dr. Әлия <script>alert(1)</script>', reference: 'HP-REAL-123', slotId: 'slot/123', startAt: new Date('2026-10-29T20:30:00Z'), endAt: new Date('2026-10-29T21:00:00Z'), office: 'Central clinic, room 4', frontendUrl: 'https://happy.example/', reason: '<img src=x> unavailable & away' };
 describe('branded appointment templates', () => {
   it.each<PatientEmailEvent>(['BOOKED', 'CANCELLED', 'DOCTOR_CANCELLED', 'CHECKED_IN'])('renders %s with escaped values, real details and Almaty dates', event => {
@@ -37,9 +37,20 @@ describe('branded appointment templates', () => {
 
 
 describe('appointment email links', () => {
-  it('omits actions when frontend URL is not configured', () => {
+  it('still links to the platform when frontend URL is not configured', () => {
     const { html, text } = appointmentEmail('BOOKED', { ...data, frontendUrl: undefined });
-    expect(html).not.toContain('Manage appointment');
-    expect(text).not.toContain('/appointments?appointmentId=');
+    expect(html).toContain('Open Happy Patient');
+    expect(text).toMatch(/Open Happy Patient: https?:\/\//);
+  });
+});
+
+describe('reminder email', () => {
+  it('carries the visit facts, escapes the doctor name and links to the booking', () => {
+    const { subject, html, text } = reminderEmail({ ...data, frontendUrl: 'https://happypatient-f.onrender.com' });
+    expect(subject).toContain('Reminder');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('Your visit is coming up');
+    expect(text).toContain('Booking ID: HP-REAL-123');
+    expect(text).toContain('https://happypatient-f.onrender.com/appointments?appointmentId=slot%2F123');
   });
 });

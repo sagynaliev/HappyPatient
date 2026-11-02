@@ -79,7 +79,7 @@ export type PatientAppointment = {
   endAt: string;
   status: 'FREE' | 'BOOKED' | 'OCCUPIED';
   visitPurpose?: string | null;
-  doctor: { name: string; specialty: string; office: string | null; consultationFee: number };
+  doctor: { id?: string; name: string; specialty: string; office: string | null; consultationFee: number };
   reference?: string;
   checkedInAt?: string | null;
 };
@@ -200,6 +200,7 @@ export const authApi = {
   updateProfile: (body: ProfileUpdate) => api<{ user: ProfileUser }>('/me', { method: 'PATCH', body: JSON.stringify(body) }),
   myAppointments: () => api<{ appointments: PatientAppointment[]; cancelled?: CancelledAppointment[] }>('/me/appointments'),
   doctorCancellations: () => api<{ cancellations: DoctorCancellation[] }>('/doctors/me/cancellations'),
+  rescheduleMyAppointment: (slotId: string, newSlotId: string) => api<{ slot: ScheduleSlot; reference?: string; previousReference?: string }>(`/appointments/${encodeURIComponent(slotId)}/reschedule`, { method: 'POST', body: JSON.stringify({ newSlotId }) }),
   cancelAppointment: (slotId: string, reason: string) => api<{ cancelled: boolean; reference: string }>(`/appointments/${slotId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   checkInAppointment: (slotId: string) => api<{ checkedIn: boolean; reference: string; receipt: { id: string } }>(`/appointments/${slotId}/check-in`, { method: 'POST' }),
   receipt: (slotId: string) => api<{ receipt: Receipt }>(`/appointments/${encodeURIComponent(slotId)}/receipt`),

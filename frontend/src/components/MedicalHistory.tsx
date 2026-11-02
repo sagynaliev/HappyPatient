@@ -62,7 +62,7 @@ export default function MedicalHistory({ patientId, appointmentId }: { patientId
   const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
   const filtered = entries;
   return <section className="mh-history" aria-label="Medical history" aria-busy={loading}>
-    <div className="mh-heading"><h2>Medical History timeline</h2><button className="button button-outline" onClick={()=>setDirection(value=>value==='asc'?'desc':'asc')}>{direction==='asc'?'Oldest first':'Newest first'}</button>{appointmentId && !adding && <button className="button" onClick={() => { setAdding(true); setSuccess(false); }}>Add note</button>}</div>
+    <div className="mh-heading"><h2>Timeline</h2><button className="button button-outline" onClick={()=>setDirection(value=>value==='asc'?'desc':'asc')}>{direction==='asc'?'Oldest first':'Newest first'}</button>{appointmentId && !adding && <button className="button" onClick={() => { setAdding(true); setSuccess(false); }}>Add note</button>}</div>
     {adding && appointmentId && <MedicalNoteForm appointmentId={appointmentId} onCancel={() => setAdding(false)} onSave={() => { setFilter('all'); setAdding(false); setSuccess(true); setRetry(value => value + 1); }} />}
     {success && <p className="alert success" role="status">Medical note saved.</p>}
     <div className="mh-filters" role="group" aria-label="Filter medical entries">{(['all', 'test', 'anamnesis', 'conclusion'] as const).map(key => <button className={`filter-chip${filter === key ? ' active' : ''}`} aria-pressed={filter === key} key={key} onClick={() => setFilter(key)}>{key === 'all' ? 'All' : categoryLabels[key]} ({key === 'all' ? total : counts[key] ?? 0})</button>)}</div>

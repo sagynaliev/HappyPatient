@@ -1,4 +1,4 @@
-import { brandedEmail } from './layout';
+import { brandedEmail, platformUrl } from './layout';
 export const appointmentDate = (value: Date) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'Asia/Almaty' }).format(value);
 export const appointmentTime = (value: Date) => new Intl.DateTimeFormat('en-GB', { timeStyle: 'short', timeZone: 'Asia/Almaty' }).format(value);
 export type PatientEmailEvent = 'BOOKED' | 'CANCELLED' | 'DOCTOR_CANCELLED' | 'CHECKED_IN';
@@ -16,11 +16,32 @@ export function appointmentEmail(event: PatientEmailEvent, data: AppointmentEmai
   if (data.office) details.push(['Office / location', data.office]);
   details.push(['Booking ID', data.reference], ['Status', content.status]);
   if ((event === 'DOCTOR_CANCELLED' || event === 'CANCELLED') && data.reason) details.push(['Cancellation reason', data.reason]);
-  const baseUrl = data.frontendUrl?.replace(/\/$/, '');
+  const baseUrl = platformUrl(data.frontendUrl);
   const action = baseUrl ? event === 'BOOKED' && data.slotId
     ? { label: 'Manage appointment', url: `${baseUrl}/appointments?appointmentId=${encodeURIComponent(data.slotId)}` }
     : event === 'CANCELLED' || event === 'DOCTOR_CANCELLED'
       ? { label: 'Book another appointment', url: `${baseUrl}/search` }
       : undefined : undefined;
   return { subject: content.subject, ...brandedEmail({ ...content, details, action }) };
+}
+
+/** Reminder sent before a booked visit; same facts as the in-app reminder plus a link to manage the booking. */
+export function reminderEmail(data: AppointmentEmailData) {
+  const timeRange = data.endAt ? `${appointmentTime(data.startAt)} to ${appointmentTime(data.endAt)}` : appointmentTime(data.startAt);
+  const details: Array<[string, string]> = [['Doctor', data.doctor], ['Appointment date', appointmentDate(data.startAt)], ['Appointment time', `${timeRange} (Asia/Almaty)`]];
+  if (data.office) details.push(['Office / location', data.office]);
+  details.push(['Booking ID', data.reference]);
+  const baseUrl = platformUrl(data.frontendUrl);
+  const action = data.slotId ? { label: 'Manage appointment', url: `${baseUrl}/appointments?appointmentId=${encodeURIComponent(data.slotId)}` } : undefined;
+  return {
+    subject: 'Upcoming Appointment Reminder | Happy Patient',
+    ...brandedEmail({
+      title: 'Your visit is coming up',
+      message: 'This is a reminder about your upcoming appointment.',
+      details,
+      nextStep: 'Please arrive 10 minutes early. Check-in at the front desk opens 30 minutes before your visit. If your plans changed, you can cancel or change the booking in Happy Patient.',
+      tone: 'blue',
+      action,
+    }),
+  };
 }

@@ -148,6 +148,7 @@ router.get('/me/appointments', requireAuth, requireRole(Role.PATIENT), async (re
         checkedInAt: true,
       doctor: {
         select: {
+          id: true,
           office: true,
           consultationFee: true,
           category: { select: { name: true } },
@@ -176,6 +177,7 @@ router.get('/me/appointments', requireAuth, requireRole(Role.PATIENT), async (re
       ...appointment,
       reference: appointmentReference(appointment.id),
       doctor: {
+        id: doctor.id,
         name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`,
         specialty: doctor.category.name,
         office: doctor.office,
@@ -538,6 +540,42 @@ router.post('/appointments/:slotId/cancel', requireAuth, requireRole(Role.PATIEN
   if (!cancelled) return res.status(409).json({ error: 'This appointment changed while it was being cancelled. Refresh and try again.' });
   void recordAppointmentNotification({ slotId: slot.id, userId: req.user!.id, email: req.user!.email, event: 'CANCELLED', occurrenceId: slot.updatedAt?.toISOString(), reference: appointmentReference(slot.id), doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, startAt: slot.startAt, endAt: slot.endAt, office: slot.doctor.office, doctorUserId: slot.doctor.userId, reason }).catch(() => undefined);
   res.json({ cancelled: true, reference: appointmentReference(slot.id) });
+});
+
+class SlotUnavailableError extends Error {}
+class AppointmentChangedError extends Error {}
+const rescheduleSchema = z.object({ newSlotId: z.string().trim().min(1).max(100) });
+
+/** Moves a booked visit to another free slot of the same doctor in one transaction: the new time is taken and the old one released together. */
+router.post('/appointments/:slotId/reschedule', requireAuth, requireRole(Role.PATIENT), async (req, res) => {
+  const slotId = Array.isArray(req.params.slotId) ? req.params.slotId[0] : req.params.slotId;
+  const { newSlotId } = parsed(rescheduleSchema, req.body ?? {});
+  if (newSlotId === slotId) return res.status(400).json({ error: 'Choose a different time.' });
+  const old = await prisma.scheduleSlot.findFirst({ where: { id: slotId, patientId: req.user!.id }, select: { id: true, status: true, startAt: true, endAt: true, doctorId: true, visitPurpose: true, updatedAt: true, doctor: { select: { userId: true, office: true, user: { select: { firstName: true, lastName: true } } } } } });
+  if (!old) return res.status(404).json({ error: 'Appointment not found.' });
+  if (old.status !== SlotStatus.BOOKED) return res.status(409).json({ error: 'Only booked appointments can be changed.' });
+  if (old.startAt <= new Date()) return res.status(409).json({ error: 'Past or started appointments cannot be changed.' });
+  const target = await prisma.scheduleSlot.findFirst({ where: { id: newSlotId, doctorId: old.doctorId }, select: { id: true } });
+  if (!target) return res.status(404).json({ error: 'That time was not found for this doctor.' });
+  const reason = 'Rescheduled to another time';
+  try {
+    await prisma.$transaction(async (tx) => {
+      const booked = await tx.scheduleSlot.updateMany({ where: { id: newSlotId, doctorId: old.doctorId, status: SlotStatus.FREE, startAt: { gt: new Date() } }, data: { status: SlotStatus.BOOKED, patientId: req.user!.id, visitPurpose: old.visitPurpose } });
+      if (!booked.count) throw new SlotUnavailableError();
+      const freed = await tx.scheduleSlot.updateMany({ where: { id: old.id, patientId: req.user!.id, status: SlotStatus.BOOKED }, data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null } });
+      if (!freed.count) throw new AppointmentChangedError();
+      await tx.cancelledAppointment.create({ data: { slotId: old.id, patientId: req.user!.id, doctorId: old.doctorId, startAt: old.startAt, endAt: old.endAt, visitPurpose: old.visitPurpose, reason, cancelledById: req.user!.id, cancelledByRole: Role.PATIENT } });
+    });
+  } catch (error) {
+    if (error instanceof SlotUnavailableError) return res.status(409).json({ error: 'This slot is no longer available.' });
+    if (error instanceof AppointmentChangedError) return res.status(409).json({ error: 'This appointment changed while it was being updated. Refresh and try again.' });
+    throw error;
+  }
+  const slot = await prisma.scheduleSlot.findFirst({ where: { id: newSlotId, doctorId: old.doctorId }, select: { id: true, startAt: true, endAt: true, status: true, visitPurpose: true, updatedAt: true } });
+  const doctorName = `Dr. ${old.doctor.user.firstName} ${old.doctor.user.lastName}`;
+  void recordAppointmentNotification({ slotId: old.id, userId: req.user!.id, email: req.user!.email, event: 'CANCELLED', occurrenceId: old.updatedAt?.toISOString(), reference: appointmentReference(old.id), doctor: doctorName, startAt: old.startAt, endAt: old.endAt, office: old.doctor.office, doctorUserId: old.doctor.userId, reason }).catch(() => undefined);
+  if (slot) void recordAppointmentNotification({ slotId: slot.id, userId: req.user!.id, email: req.user!.email, event: 'BOOKED', occurrenceId: slot.updatedAt?.toISOString(), reference: appointmentReference(slot.id), doctor: doctorName, startAt: slot.startAt, endAt: slot.endAt, office: old.doctor.office, doctorUserId: old.doctor.userId }).catch(() => undefined);
+  res.status(201).json({ slot, reference: slot ? appointmentReference(slot.id) : undefined, previousReference: appointmentReference(old.id) });
 });
 
 router.post('/appointments/:slotId/check-in', requireAuth, requireRole(Role.PATIENT, Role.FRONT_DESK, Role.ADMIN), async (req, res) => {
