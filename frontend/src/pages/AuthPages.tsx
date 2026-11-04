@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ApiError, authApi } from "../lib/api";
+import { isValidIin, isValidPhone } from "../lib/iin";
 
 type FieldErrors = Record<string, string>;
 
@@ -197,12 +198,12 @@ export function Register() {
       firstName: String(values.firstName || "").trim(),
       lastName: String(values.lastName || "").trim(),
       email: String(values.email || "").trim(),
-      phone: String(values.phone || "").trim() || undefined,
+      phone: String(values.phone || "").trim(),
       iin: String(values.iin || "").replace(/\D/g, ""),
       password: String(values.password || ""),
     };
     const next: FieldErrors = {};
-    ["firstName", "lastName", "email", "iin"].forEach((field) => {
+    ["firstName", "lastName", "email", "phone", "iin"].forEach((field) => {
       if (!String(payload[field] || "").trim()) {
         next[field] = field === "firstName"
           ? "First name is required."
@@ -210,12 +211,15 @@ export function Register() {
             ? "Last name is required."
             : field === "email"
               ? "Email address is required."
-              : "IIN is required.";
+              : field === "phone"
+                ? "Phone number is required."
+                : "IIN is required.";
       }
     });
     if (payload.iin && !/^\d{12}$/.test(String(payload.iin))) next.iin = "IIN must contain exactly 12 digits.";
+    else if (payload.iin && !isValidIin(String(payload.iin))) next.iin = "Enter a valid IIN.";
     if (payload.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(payload.email))) next.email = "Enter a valid email address.";
-    if (payload.phone && !/^[+()\d\s-]{7,30}$/.test(String(payload.phone))) next.phone = "Enter a valid phone number.";
+    if (payload.phone && !isValidPhone(String(payload.phone))) next.phone = "Enter a valid phone number.";
     if (String(payload.password || "").length < 8) next.password = "Password must contain at least 8 characters.";
     if (Object.keys(next).length) {
       setFields(next);
@@ -248,7 +252,7 @@ export function Register() {
           <div className="two-col"><Field label="First name" name="firstName" autoComplete="given-name" error={fields.firstName} /><Field label="Last name" name="lastName" autoComplete="family-name" error={fields.lastName} /></div>
           <Field label="IIN" name="iin" inputMode="numeric" maxLength={12} onInput={(value) => value.replace(/\D/g, "").slice(0, 12)} error={fields.iin} />
           <Field label="Email address" name="email" type="email" autoComplete="email" error={fields.email} />
-          <Field label="Phone number" name="phone" required={false} autoComplete="tel" error={fields.phone} />
+          <Field label="Phone number" name="phone" type="tel" autoComplete="tel" error={fields.phone} />
           <PasswordField label="Password" name="password" error={fields.password} />
           <label className="checkbox terms">
             <input

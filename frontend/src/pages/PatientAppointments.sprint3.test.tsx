@@ -57,7 +57,7 @@ describe("Sprint 3 patient check-in and receipt (US16, US18)", () => {
     vi.mocked(authApi.cancelAppointment).mockResolvedValue({ cancelled: true, reference: "HP-1" });
     render(<MemoryRouter><PatientAppointments /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: "View details for Dr. Sam Doctor" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel appointment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel appointment with Dr. Sam Doctor" }));
     expect(screen.getByRole("dialog", { name: "Why are you cancelling?" })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Schedule conflict"));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -68,7 +68,7 @@ describe("Sprint 3 patient check-in and receipt (US16, US18)", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Appointment cancelled.");
     expect(authApi.cancelAppointment).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel appointment" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel appointment with Dr. Sam Doctor" })).toBeEnabled());
     expect(authApi.cancelAppointment).not.toHaveBeenCalled();
   });
 });

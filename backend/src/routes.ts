@@ -12,7 +12,7 @@ import { prisma } from './prisma';
 import { comparePassword, hashPassword, hashToken, randomToken, randomVerificationCode, signToken } from './auth';
 import { config } from './config';
 import { requireAuth, requireRole } from './middleware';
-import { bookingSchema, cancelSchema, doctorLocationSchema, officeSchema, registrationSchema, loginSchema, profileUpdateSchema, recoverySchema, resetSchema, scheduleBatchSchema, scheduleDateSchema, slotUpdateSchema, verificationCodeSchema, walkInLookupSchema, walkInRegistrationSchema } from './validation';
+import { bookingSchema, cancelSchema, doctorLocationSchema, officeSchema, registrationSchema, loginSchema, profileUpdateSchema, recoverySchema, resetSchema, scheduleBatchSchema, scheduleDateSchema, slotUpdateSchema, verificationCodeSchema, walkInLookupSchema, walkInRegistrationSchema, isValidIin } from './validation';
 import { Resend } from 'resend';
 import { clinicDateBounds, generateScheduleSlots, localDateAt, localTimeToUtc } from './schedule';
 import { sendRegistrationConfirmation } from './registrationNotification';
@@ -722,6 +722,7 @@ router.post('/front-desk/walk-ins', requireAuth, requireRole(Role.FRONT_DESK, Ro
   if (!slot) return res.status(409).json({ error: 'The selected slot is no longer available.' });
   const existing = await prisma.user.findUnique({ where: { iin: input.iin }, select: { id: true, role: true, email: true, firstName: true, lastName: true } });
   if (existing && existing.role !== Role.PATIENT) return res.status(409).json({ error: 'That IIN belongs to a non-patient account.' });
+  if (!existing && !isValidIin(input.iin)) return res.status(400).json({ error: 'Enter a valid IIN.', details: [{ path: ['iin'], message: 'Enter a valid IIN.' }] });
   const result = await prisma.$transaction(async (tx) => {
     const patient = existing ?? await tx.user.create({ data: { firstName: input.firstName, lastName: input.lastName, iin: input.iin, email: input.email || `walkin-${randomToken()}@local.happypatient`, phone: input.phone || null, passwordHash: await hashPassword(randomToken()), role: Role.PATIENT }, select: { id: true, email: true, firstName: true, lastName: true } });
     const checkedInAt = new Date();

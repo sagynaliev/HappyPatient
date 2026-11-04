@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { authApi, FrontDeskAppointment, Receipt } from "../lib/api";
 import WalkInSlotPicker, { PickedSlot } from "../components/WalkInSlotPicker";
 import "../styles/frontDesk.css";
+import { isValidPhone } from "../lib/iin";
 import { ReceiptDialog } from "../components/ReceiptView";
 import { FloatingNotice } from "../components/FloatingNotice";
 
@@ -50,6 +51,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
   async function register(event: FormEvent) {
     event.preventDefault();
     if (!picked) { setError("Choose a free time with a doctor first."); return; }
+    if (patient.phone && !isValidPhone(patient.phone)) { setError("Enter a valid phone number."); return; }
     setBusy(true); setError(""); setMessage(""); setReceipt(null);
     try {
       const result = await authApi.frontDeskWalkIn({ ...patient, phone: patient.phone || undefined, doctorId: picked.doctorId, slotId: picked.slotId, visitPurpose: purpose });

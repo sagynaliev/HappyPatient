@@ -1,14 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { bookingSchema, doctorLocationSchema, officeSchema, registrationSchema, scheduleBatchSchema, scheduleSchema, slotUpdateSchema, verificationCodeSchema, walkInRegistrationSchema } from './validation';
+import { bookingSchema, doctorLocationSchema, officeSchema, registrationSchema, scheduleBatchSchema, scheduleSchema, slotUpdateSchema, verificationCodeSchema, walkInRegistrationSchema, isValidIin } from './validation';
 
 describe('registration validation', () => {
-  it('normalizes email', () => expect(registrationSchema.parse({ email: 'USER@Example.COM', password: 'password123', firstName: 'A', lastName: 'B', iin: '123456789012' }).email).toBe('user@example.com'));
-  it('rejects short passwords', () => expect(() => registrationSchema.parse({ email: 'a@b.com', password: 'short', firstName: 'A', lastName: 'B', iin: '123456789012' })).toThrow());
+  it('normalizes email', () => expect(registrationSchema.parse({ email: 'USER@Example.COM', password: 'password123', firstName: 'A', lastName: 'B', phone: '+7 700 123 45 67', iin: '881230500711' }).email).toBe('user@example.com'));
+  it('rejects short passwords', () => expect(() => registrationSchema.parse({ email: 'a@b.com', password: 'short', firstName: 'A', lastName: 'B', phone: '+7 700 123 45 67', iin: '881230500711' })).toThrow());
   it('requires an IIN with exactly 12 digits', () => {
-    const base = { email: 'a@b.com', password: 'password123', firstName: 'A', lastName: 'B' };
-    expect(registrationSchema.parse({ ...base, iin: '123456789012' }).iin).toBe('123456789012');
+    const base = { email: 'a@b.com', password: 'password123', firstName: 'A', lastName: 'B', phone: '+7 700 123 45 67' };
+    expect(registrationSchema.parse({ ...base, iin: '881230500711' }).iin).toBe('881230500711');
     expect(() => registrationSchema.parse({ ...base, iin: '12345678901' })).toThrow();
     expect(() => registrationSchema.parse({ ...base, iin: '12345678901a' })).toThrow();
+  });
+  it('verifies the IIN birth date and check digit', () => {
+    const base = { email: 'a@b.com', password: 'password123', firstName: 'A', lastName: 'B', phone: '+7 700 123 45 67' };
+    expect(isValidIin('990101300122')).toBe(true);
+    expect(isValidIin('950515400569')).toBe(true);
+    expect(isValidIin('990101300123')).toBe(false); // wrong check digit
+    expect(isValidIin('123456789012')).toBe(false); // month 34
+    expect(isValidIin('990231300122')).toBe(false); // 31 February
+    expect(() => registrationSchema.parse({ ...base, iin: '123456789012' })).toThrow();
+  });
+  it('requires a valid phone number', () => {
+    const base = { email: 'a@b.com', password: 'password123', firstName: 'A', lastName: 'B', iin: '881230500711' };
+    expect(registrationSchema.parse({ ...base, phone: '+7 (700) 123-45-67' }).phone).toBe('+7 (700) 123-45-67');
+    expect(() => registrationSchema.parse(base)).toThrow();
+    expect(() => registrationSchema.parse({ ...base, phone: '12345' })).toThrow();
+    expect(() => registrationSchema.parse({ ...base, phone: 'call me' })).toThrow();
   });
   it('accepts only six-digit recovery codes', () => {
     expect(verificationCodeSchema.parse({ email: 'a@b.com', code: '482913' }).code).toBe('482913');
@@ -91,11 +107,11 @@ describe('schedule validation', () => {
     expect(walkInRegistrationSchema.parse({
       firstName: 'Amina',
       lastName: 'Patient',
-      iin: '123456789012',
+      iin: '881230500711',
       doctorId: 'doctor-1',
       slotId: 'slot-1',
       visitPurpose: 'Walk-in consultation',
-    }).iin).toBe('123456789012');
+    }).iin).toBe('881230500711');
     expect(() => walkInRegistrationSchema.parse({
       firstName: 'Amina', lastName: 'Patient', iin: '123', doctorId: 'doctor-1', slotId: 'slot-1', visitPurpose: 'Visit',
     })).toThrow();
