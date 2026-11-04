@@ -72,7 +72,8 @@ export function MedicalNoteForm({ appointmentId, onSave, onCancel }: { appointme
   </form>;
 }
 
-export default function MedicalHistory({ patientId, appointmentId }: { patientId?: string; appointmentId?: string }) {
+/** appointmentId enables adding notes to that visit; scope limits the list to one visit (only) or everything but one visit (except). */
+export default function MedicalHistory({ patientId, appointmentId, scope, emptyText }: { patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string } }) {
   const [direction,setDirection]=useState<'asc'|'desc'>('desc');
   const [entries, setEntries] = useState<MedicalEntry[]>([]);
   const [counts, setCounts] = useState<HistoryResponse['counts']>({});
@@ -80,7 +81,7 @@ export default function MedicalHistory({ patientId, appointmentId }: { patientId
   const [error, setError] = useState(''); const [success, setSuccess] = useState(false);
   const [filter, setFilter] = useState<MedicalCategory | 'all'>('all'); const [adding, setAdding] = useState(false);
   const [retry, setRetry] = useState(0);
-  const path = `/medical-history?${patientId ? `patientId=${encodeURIComponent(patientId)}&` : ''}direction=${direction}&${filter !== 'all' ? `category=${filter}&` : ''}`;
+  const path = `/medical-history?${patientId ? `patientId=${encodeURIComponent(patientId)}&` : ''}direction=${direction}&${filter !== 'all' ? `category=${filter}&` : ''}${scope?.only ? `appointmentId=${encodeURIComponent(scope.only)}&` : ''}${scope?.except ? `excludeAppointmentId=${encodeURIComponent(scope.except)}&` : ''}`;
   useEffect(() => {
     let active = true; setLoading(true); setError('');
     api<HistoryResponse>(path).then(result => { if (active) { setEntries(result.entries); setCounts(result.counts); setHasMore(result.hasMore); } }).catch(() => { if (active) setError('Unable to load medical history.'); }).finally(() => { if (active) setLoading(false); });
@@ -121,8 +122,8 @@ export default function MedicalHistory({ patientId, appointmentId }: { patientId
       {loading && entries.length === 0 && <div role="status" className="mh-loading"><span className="sr-only">Loading medical history…</span><div className="skeleton mh-skeleton" /><div className="skeleton mh-skeleton" /></div>}
       {!loading && !error && entries.length === 0 && <div className="mh-empty">
         <span className="mh-empty-icon"><Icon name="file" size={26} /></span>
-        <h3>{filter === 'all' ? 'No records yet' : `No ${categoryLabels[filter].toLowerCase()} yet`}</h3>
-        <p>{filter === 'all' ? 'No medical records yet. Entries added by your doctor after a visit will appear here.' : 'No entries in this category.'}</p>
+        <h3>{filter === 'all' ? emptyText?.title ?? 'No records yet' : `No ${categoryLabels[filter].toLowerCase()} yet`}</h3>
+        <p>{filter === 'all' ? emptyText?.body ?? 'No medical records yet. Entries added by your doctor after a visit will appear here.' : 'No entries in this category.'}</p>
       </div>}
       <MedicalEntryList entries={entries} />
       {hasMore && <button className="button button-outline mh-load-more" type="button" disabled={loading} onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load more'}</button>}

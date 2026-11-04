@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DoctorVisitPage from "./DoctorVisitPage";
-import { authApi } from "../lib/api";
+import { api, authApi } from "../lib/api";
 
 vi.mock("../lib/api", () => ({ authApi: { doctorProfile: vi.fn(), getSchedule: vi.fn(), slotDetails: vi.fn(), updateSlot: vi.fn() }, api: vi.fn(() => Promise.resolve({ entries: [], hasMore: false, counts: {} })) }));
 afterEach(cleanup);
@@ -26,7 +26,7 @@ describe("doctor visit page", () => {
     expect(screen.getByText("Visit · HP-ABCDEFGH")).toBeTruthy();
     expect(screen.getByText("jamie@example.test")).toBeTruthy();
     expect(screen.getByText("Headache")).toBeTruthy();
-    expect(screen.getByText(/Notes open after the visit starts/)).toBeTruthy();
+    expect(screen.getByText(/Notes for this visit open after it starts/)).toBeTruthy();
   });
 
   it("cancels a future visit only with a reason", async () => {
@@ -39,5 +39,14 @@ describe("doctor visit page", () => {
     fireEvent.change(screen.getByLabelText(/Why are you cancelling/), { target: { value: "Doctor unavailable" } });
     fireEvent.click(submit);
     await waitFor(() => expect(authApi.updateSlot).toHaveBeenCalledWith("slot-abcdefgh", { status: "FREE", releaseBooking: true, cancellationReason: "Doctor unavailable" }));
+  });
+  it("shows only this visit's notes and switches to earlier visits", async () => {
+    renderPage();
+    await screen.findByRole("tab", { name: "This visit" });
+    await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) => String(path).includes("appointmentId=slot-abcdefgh"))).toBe(true));
+    expect(await screen.findByText("No notes for this visit yet")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /Earlier visits/ }));
+    await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) => String(path).includes("excludeAppointmentId=slot-abcdefgh"))).toBe(true));
+    expect(await screen.findByText("No earlier records")).toBeTruthy();
   });
 });

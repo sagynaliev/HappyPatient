@@ -13,6 +13,8 @@ export const medicalEntrySchema = z.object({
 });
 const querySchema = z.object({
   offset: z.coerce.number().int().min(0).max(100000).default(0), direction: z.enum(['asc','desc']).default('asc'), category: z.enum(['test','anamnesis','conclusion']).optional(),
+  // Visit scope: only one visit's notes, or everything except one visit (earlier history on a visit page).
+  appointmentId: z.string().min(1).max(100).optional(), excludeAppointmentId: z.string().min(1).max(100).optional(),
 });
 const include = { doctor: { select: { user: { select: { firstName: true, lastName: true } } } } };
 // OCCUPIED is this project's checked-in/in-progress visit. After endAt it is
@@ -52,9 +54,11 @@ medicalHistoryRouter.get('/medical-history', privateRoute(async (req, res) => {
       FROM "MedicalEntry" e LEFT JOIN "ScheduleSlot" s ON s."id"=e."appointmentId"
       JOIN "Doctor" d ON d."id"=e."doctorId" JOIN "User" u ON u."id"=d."userId"
       WHERE e."patientId"=${patientId} ${query.data.category ? Prisma.sql`AND e."category"=${query.data.category}::"MedicalEntryCategory"` : Prisma.empty}
+        ${query.data.appointmentId ? Prisma.sql`AND e."appointmentId"=${query.data.appointmentId}` : Prisma.empty}
+        ${query.data.excludeAppointmentId ? Prisma.sql`AND e."appointmentId" IS DISTINCT FROM ${query.data.excludeAppointmentId}` : Prisma.empty}
       ORDER BY COALESCE(s."startAt",e."createdAt") ${Prisma.raw(query.data.direction.toUpperCase())}, e."createdAt" ${Prisma.raw(query.data.direction.toUpperCase())}, e."id" ${Prisma.raw(query.data.direction.toUpperCase())}
       OFFSET ${query.data.offset} LIMIT 21`),
-    prisma.medicalEntry.groupBy({ by: ['category'], where: { patientId }, _count: true }),
+    prisma.medicalEntry.groupBy({ by: ['category'], where: { patientId, ...(query.data.appointmentId ? { appointmentId: query.data.appointmentId } : {}), ...(query.data.excludeAppointmentId ? { OR: [{ appointmentId: null }, { appointmentId: { not: query.data.excludeAppointmentId } }] } : {}) }, _count: true }),
   ]);
   return res.json({ entries: entries.slice(0, 20).map(({doctorFirstName,doctorLastName,...entry})=>({...entry,doctor:{user:{firstName:doctorFirstName,lastName:doctorLastName}}})), hasMore: entries.length > 20, counts: Object.fromEntries(grouped.map(row => [row.category, row._count])) });
 }));
