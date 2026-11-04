@@ -734,7 +734,14 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 /* ---------- Booking: confirmation and recap stay inside the booking layout ---------- */
 .bk-main .bk-confirmation { width: 100%; margin: 0; }
 .bk-recap-back { margin-top: 20px; }
-.bk-side .bk-next { margin-top: 16px; }
+/* Next steps sit under the confirmation in the main column, so they are visible without scrolling the sidebar. */
+.bk-main .bk-next { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+.bk-main .bk-next-card { display: block; }
+@media (min-width: 1101px) {
+  .bk-main .bk-next-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .bk-main .bk-next-steps::before { top: 17px; bottom: auto; left: 36px; right: 36px; width: auto; height: 2px; }
+  .bk-main .bk-next-steps li { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+}
 .patient-appointment-actions { flex-wrap: wrap; }
 
 .bk-reschedule-note { margin: 8px 0 0; color: var(--text-secondary); font-size: 14px; }

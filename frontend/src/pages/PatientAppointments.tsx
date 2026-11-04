@@ -7,6 +7,7 @@ import { MiniCalendar } from "../components/MiniCalendar";
 import { Icon } from "../components/Icons";
 import { FloatingNotice } from "../components/FloatingNotice";
 import "../styles/patientAppointments.css";
+import { toast } from "../lib/toast";
 
 type AppointmentTab = "upcoming" | "past" | "cancelled";
 
@@ -341,10 +342,11 @@ export default function PatientAppointments() {
     try {
       await authApi.cancelAppointment(pending.appointment.id, pending.reason);
       setActionMessage("Appointment cancelled. The doctor has been told why, and the visit is now in your Cancelled tab.");
+      toast.neutral("Appointment cancelled", "The time is free for other patients. Find it in the Cancelled tab.");
       notifyNotificationsChanged();
       await loadAppointments();
     }
-    catch (cause: unknown) { setActionMessage(cause instanceof Error ? cause.message : "Cancellation failed."); }
+    catch (cause: unknown) { setActionMessage(cause instanceof Error ? cause.message : "Cancellation failed."); toast.error("Cancellation failed", cause instanceof Error ? cause.message : undefined); }
     finally { setActionBusy(false); }
   }
 
@@ -361,6 +363,7 @@ export default function PatientAppointments() {
     // Cancellation is intentionally deferred in this page only; closing or navigating away unmounts the timer, so no request is sent.
     setPendingCancellation(null);
     setActionMessage("Cancellation undone. Your appointment remains booked.");
+    toast.info("Cancellation undone", "Your appointment remains booked.");
   }
 
   function beginCancellation(appointment: PatientAppointment, trigger: HTMLButtonElement) {
@@ -373,11 +376,12 @@ export default function PatientAppointments() {
     try {
       const result = await authApi.checkInAppointment(appointment.id);
       setActionMessage(`Arrival confirmed for ${result.reference}. Your status is now “Checked in”.`);
+      toast.success("You’re checked in", `${result.reference} · your receipt is ready.`);
       notifyNotificationsChanged();
       await loadAppointments();
       setReceipt((await authApi.receipt(appointment.id)).receipt);
     }
-    catch (cause: unknown) { setActionMessage(cause instanceof Error ? cause.message : "Check-in failed."); }
+    catch (cause: unknown) { setActionMessage(cause instanceof Error ? cause.message : "Check-in failed."); toast.error("Check-in failed", cause instanceof Error ? cause.message : undefined); }
     finally { setActionBusy(false); }
   }
 

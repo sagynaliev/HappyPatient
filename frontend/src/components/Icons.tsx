@@ -1,6 +1,6 @@
 /* Small stroke icon set shared by the app shell and pages. */
 import type { ReactNode } from "react";
-type IconName = "grid" | "home" | "search" | "calendar" | "clock" | "user" | "users" | "chart" | "stethoscope" | "logout" | "desk" | "menu" | "close" | "file" | "pin" | "heart" | "arrow-right" | "check" | "shield" | "spark";
+type IconName = "grid" | "home" | "search" | "calendar" | "clock" | "user" | "users" | "chart" | "stethoscope" | "logout" | "desk" | "menu" | "close" | "file" | "pin" | "heart" | "arrow-right" | "check" | "shield" | "spark" | "info" | "bell" | "check-double" | "warning" | "ban";
 
 const paths: Record<IconName, ReactNode> = {
   grid: <><rect x="3" y="3" width="7.5" height="7.5" rx="2" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="2" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="2" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" /></>,
@@ -22,6 +22,11 @@ const paths: Record<IconName, ReactNode> = {
   "arrow-right": <><path d="M5 12h14M13 6l6 6-6 6" /></>,
   check: <><path d="m5 12.5 4.5 4.5L19 7.5" /></>,
   shield: <><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z" /><path d="m9 12 2 2 4-4" /></>,
+  info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
+  bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
+  "check-double": <><path d="m2.5 12.5 4 4L14 9" /><path d="m11.5 15.5 1 1L20 9" /></>,
+  warning: <><path d="M10.3 4.2 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z" /><path d="M12 10v4M12 17.5h.01" /></>,
+  ban: <><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>,
   spark: <><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" /></>,
 };
 

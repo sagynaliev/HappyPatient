@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ApiError, authApi } from "../lib/api";
 import { isValidIin, isValidPhone } from "../lib/iin";
+import { toast } from "../lib/toast";
 
 type FieldErrors = Record<string, string>;
 
@@ -149,6 +150,7 @@ export function Login() {
     const data = new FormData(event.currentTarget);
     try {
       await login(String(data.get("email")).trim(), String(data.get("password")));
+      toast.success("Signed in", "Welcome back to HappyPatient.");
       const returnState = location.state as { from?: string; returnState?: unknown } | null;
       navigate(returnState?.from || "/dashboard", returnState?.returnState ? { state: returnState.returnState } : undefined);
     } catch (err) {
@@ -230,6 +232,7 @@ export function Register() {
     try {
       setConfirmationMessage(await register(payload));
       setSuccess(true);
+      toast.success("Account created", "Welcome to HappyPatient.");
       window.setTimeout(() => {
         const returnState = location.state as { from?: string; returnState?: unknown } | null;
         navigate(returnState?.from || "/dashboard", returnState?.returnState ? { state: returnState.returnState } : undefined);
@@ -328,6 +331,7 @@ export function Forgot() {
     try {
       await authApi.reset({ token: resetToken, password });
       setStage("success");
+      toast.success("Password reset", "Sign in with your new password.");
     } catch (err) {
       setMessage(errorsFromApi(err).form);
     } finally {

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Icon } from './Icons';
 import '../styles/medicalHistory.css';
+import { toast } from '../lib/toast';
 
 export const categoryLabels = { test: 'Tests', anamnesis: 'Anamnesis', conclusion: 'Conclusions' };
 export type MedicalCategory = keyof typeof categoryLabels;
@@ -114,7 +115,7 @@ export default function MedicalHistory({ patientId, appointmentId }: { patientId
           {appointmentId && !adding && <button className="button small" type="button" onClick={() => { setAdding(true); setSuccess(false); }}>Add note</button>}
         </div>
       </header>
-      {adding && appointmentId && <MedicalNoteForm appointmentId={appointmentId} onCancel={() => setAdding(false)} onSave={() => { setFilter('all'); setAdding(false); setSuccess(true); setRetry(value => value + 1); }} />}
+      {adding && appointmentId && <MedicalNoteForm appointmentId={appointmentId} onCancel={() => setAdding(false)} onSave={() => { setFilter('all'); setAdding(false); setSuccess(true); setRetry(value => value + 1); toast.success('Medical note saved', 'It is now in the patient’s timeline.'); }} />}
       {success && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> Medical note saved.</p>}
       {error && <div className="mh-alert is-error" role="alert"><span>{error}</span> <button className="button button-outline small" type="button" onClick={() => { if (entries.length) void loadMore(); else setRetry(value => value + 1); }}>Retry</button></div>}
       {loading && entries.length === 0 && <div role="status" className="mh-loading"><span className="sr-only">Loading medical history…</span><div className="skeleton mh-skeleton" /><div className="skeleton mh-skeleton" /></div>}
