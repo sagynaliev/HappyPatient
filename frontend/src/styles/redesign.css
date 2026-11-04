@@ -123,6 +123,10 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 }
 
 /* ---------- Public footer & header ---------- */
+/* global.css paints the footer dark blue; keep the light app-shell footer so its dark text stays readable. */
+footer.hp-footer { align-items: center; padding: 32px max(24px, calc((100vw - 1232px) / 2)); border-top: 1px solid var(--border); background: var(--surface); }
+.hp-footer .footer-brand .brand-mark { background: var(--primary); color: #fff; }
+.hp-footer .footer-links a:hover { color: var(--primary); }
 footer.hp-footer, .hp-footer .footer-brand, .hp-footer .footer-brand > span { color: var(--text-primary); font-size: 17px; font-weight: 600; }
 .hp-footer .footer-brand > span > span { color: var(--primary); }
 .hp-footer .footer-links a, .hp-footer small { color: var(--text-secondary); font-size: 14px; font-weight: 400; }
@@ -134,7 +138,7 @@ footer.hp-footer, .hp-footer .footer-brand, .hp-footer .footer-brand > span { co
 .hp-topbar { justify-content: center; }
 .hp-topbar-inner { display: flex; align-items: center; gap: 16px; width: min(100%, 1280px); }
 .hp-content > * { width: min(100%, 1280px); margin-left: auto; margin-right: auto; }
-.hp-content .fd-container, .hp-content .bk-container, .hp-content .patient-appointments-container, .hp-content .pt-page { width: 100%; max-width: none; }
+.hp-content .fd-container, .hp-content .bk-container, .hp-content .patient-appointments-container { width: 100%; max-width: none; }
 
 /* ---------- Doctor card buttons never wrap ---------- */
 .fd-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
