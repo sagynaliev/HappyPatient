@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from './prisma';
 import { requireAuth } from './middleware';
 import { canAccessMedicalHistory } from './medicalHistoryPolicy';
+import { clockOffsetMs } from './clock';
 
 export const medicalEntrySchema = z.object({
   appointmentId: z.string().min(1),
@@ -82,6 +83,8 @@ medicalHistoryRouter.post('/medical-history', privateRoute(async (req, res) => {
   const input = medicalEntrySchema.safeParse(req.body);
   if (!input.success) return res.status(400).json({ error: 'Choose a category and enter a title (1–120) and note (1–5000 characters).' });
   const entry = await prisma.$transaction(async tx => {
+    // Demo clock: the database trigger stamps the entry with this time instead of its own clock.
+    if (clockOffsetMs() !== 0) await tx.$executeRaw`SELECT set_config('app.now', ${new Date().toISOString()}, true)`;
     const visit = await tx.scheduleSlot.findFirst({ where: { id: input.data.appointmentId, doctor: {userId:req.user!.id}, status:'OCCUPIED', startAt:{lte:new Date()}, patient: {role:Role.PATIENT} }, select: { id: true, patientId: true, doctorId: true } });
     if (!visit?.patientId) return null;
     if (!await canAccessMedicalHistory(req.user, visit.patientId)) return null;

@@ -1,3 +1,6 @@
+import { installAppClock } from './clock';
+// Before anything handles a request: all time checks read the shiftable app clock.
+installAppClock();
 import { app } from './app';
 import { config } from './config';
 import { prisma } from './prisma';

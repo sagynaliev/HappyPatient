@@ -8,6 +8,7 @@ const tools = [
   { to: "/admin/statistics", label: "Statistics" },
   { to: "/admin/integrity", label: "Data quality" },
   { to: "/admin/reference-data", label: "Reference data" },
+  { to: "/admin/time", label: "Demo time" },
 ];
 
 export default function AdminLayout() {

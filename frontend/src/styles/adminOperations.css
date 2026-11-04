@@ -84,6 +84,14 @@
 .ad-ops .ad-mini-chart li { grid-template-columns: minmax(110px, 1fr) minmax(80px, 2fr) 32px; font-size: 14px; }
 .ad-ops .ad-bar-track { height: 10px; background: var(--accent); }
 
+/* Demo time */
+.ad-time-steps { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.ad-time-step { display: grid; gap: 4px; justify-items: start; min-height: 78px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 16px; background: #f6f8ff; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.ad-time-step:hover:not(:disabled) { border-color: var(--primary); background: var(--accent); }
+.ad-time-step:disabled { opacity: .55; cursor: default; }
+.ad-time-step strong { font-size: 18px; font-weight: 600; }
+.ad-time-step small { color: var(--text-secondary); font-size: 12.5px; }
+
 /* Location tree */
 .ad-ops .ad-location-tree ul { margin: 0; padding-left: 18px; list-style: none; }
 .ad-ops .ad-location-tree > ul { padding-left: 0; }

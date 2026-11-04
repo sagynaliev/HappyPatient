@@ -910,3 +910,17 @@ describe('Sprint 5–6 reference data management',()=>{
     await request(app).get('/api/admin/reference/audit').set('Authorization',bearer(Role.FRONT_DESK)).expect(403);
   });
 });
+
+describe('demo clock', () => {
+  it('lets only an admin move app time and reports it to everyone', async () => {
+    const initial = await request(app).get('/api/time').expect(200);
+    expect(initial.body.offsetMinutes).toBe(0);
+    await request(app).post('/api/admin/time').set('Authorization', bearer(Role.DOCTOR)).send({ offsetMinutes: 30 }).expect(403);
+    await request(app).post('/api/admin/time').set('Authorization', bearer(Role.ADMIN)).send({ offsetMinutes: 99999999 }).expect(400);
+    const moved = await request(app).post('/api/admin/time').set('Authorization', bearer(Role.ADMIN)).send({ offsetMinutes: 90 }).expect(200);
+    expect(moved.body.offsetMinutes).toBe(90);
+    expect((await request(app).get('/api/time')).body.offsetMinutes).toBe(90);
+    const reset = await request(app).post('/api/admin/time').set('Authorization', bearer(Role.ADMIN)).send({ offsetMinutes: 0 }).expect(200);
+    expect(reset.body.offsetMinutes).toBe(0);
+  });
+});
