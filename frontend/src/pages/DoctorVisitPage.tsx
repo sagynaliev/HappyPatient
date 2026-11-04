@@ -1,10 +1,11 @@
 import { FormEvent, lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { authApi, DoctorProfile, ScheduleSlot } from "../lib/api";
-import { clock, dayKey, formatInClinic } from "../lib/almaty";
+import { clock, formatInClinic } from "../lib/almaty";
 import { toast } from "../lib/toast";
 import { Icon } from "../components/Icons";
 import { patientName, slotKind } from "./DoctorSchedulePage";
+import "../styles/medicalHistory.css";
 import "../styles/doctorWorkspace.css";
 
 const MedicalHistory = lazy(() => import("../components/MedicalHistory"));
@@ -64,7 +65,7 @@ export default function DoctorVisitPage() {
   if (error || !slot) {
     return (
       <div className="dw-page">
-        <Link className="dw-back" to="/doctor/schedule">← Schedule</Link>
+        <Link className="dw-back" to="/doctor/visits">← Visits</Link>
         <div className="dw-alert" role="alert"><span>{error || "Visit not found."}</span><button type="button" className="dw-mini" onClick={() => void load()}>Retry</button></div>
       </div>
     );
@@ -87,7 +88,7 @@ export default function DoctorVisitPage() {
 
   return (
     <div className="dw-page">
-      <Link className="dw-back" to={`/doctor/schedule?date=${dayKey(slot.startAt)}`}>← Schedule</Link>
+      <Link className="dw-back" to="/doctor/visits">← Visits</Link>
 
       <header className="dw-card dw-visit-head">
         <div className="dw-visit-title">
@@ -146,12 +147,21 @@ export default function DoctorVisitPage() {
         </aside>
 
         <section className="dw-notes" aria-label="Medical notes">
-          {notesHint && <p className="dw-notice"><Icon name="info" size={18} /> {notesHint}</p>}
-          {slot.patient && canReadHistory ? (
+          {slot.patient && canReadHistory ? <>
+            {notesHint && <p className="dw-notice"><Icon name="info" size={18} /> {notesHint}</p>}
             <Suspense fallback={<p className="dw-muted" role="status">Loading medical history…</p>}>
               <MedicalHistory key={slot.id} patientId={slot.patient.id} appointmentId={canWriteNotes ? slot.id : undefined} />
             </Suspense>
-          ) : !notesHint && <p className="dw-notice"><Icon name="info" size={18} /> Medical history is available for booked and checked-in visits only.</p>}
+          </> : (
+            <div className="mh-card dw-notes-locked">
+              <header className="mh-heading"><h2>Timeline</h2></header>
+              <div className="mh-empty">
+                <span className="mh-empty-icon"><Icon name="file" size={26} /></span>
+                <h3>{slot.status === "BOOKED" ? "Waiting for check-in" : "Notes are not available"}</h3>
+                <p>{notesHint || "Medical history is available for booked and checked-in visits only."}</p>
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </div>

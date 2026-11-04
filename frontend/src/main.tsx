@@ -22,6 +22,7 @@ import DoctorProfilePage from "./pages/DoctorProfilePage";
 import ProfilePage from "./pages/ProfilePage";
 import DoctorSchedulePage from "./pages/DoctorSchedulePage";
 import DoctorVisitPage from "./pages/DoctorVisitPage";
+import DoctorVisitsPage from "./pages/DoctorVisitsPage";
 import { LegacyDoctorAppointments } from "./components/RouteGuards";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import FrontDeskPage from "./pages/FrontDeskPage";
@@ -73,6 +74,7 @@ createRoot(document.getElementById("root")!).render(
             <Route element={<ProtectedRoute roles={["DOCTOR"]} />}>
               <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
               <Route path="/doctor/schedule" element={<DoctorSchedulePage />} />
+              <Route path="/doctor/visits" element={<DoctorVisitsPage />} />
               <Route path="/doctor/visits/:slotId" element={<DoctorVisitPage />} />
               <Route path="/doctor/appointments" element={<LegacyDoctorAppointments />} />
             </Route>
