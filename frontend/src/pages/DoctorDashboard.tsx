@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { AppNotification, DoctorCancellation, DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
+import { DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
 import { addDays, clock, dayKey, formatDayKey, formatInClinic, weekOf } from "../lib/almaty";
-import { NotificationItem } from "../components/NotificationItem";
 import { Icon } from "../components/Icons";
-import { onNotificationsChanged } from "../lib/notificationEvents";
 import { patientName, slotKind } from "./DoctorSchedulePage";
 import "../styles/patientDashboard.css";
 import "../styles/doctorWorkspace.css";
@@ -23,8 +21,6 @@ export default function DoctorDashboard() {
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [notes, setNotes] = useState<AppNotification[]>([]);
-  const [cancellations, setCancellations] = useState<DoctorCancellation[]>([]);
   const request = useRef(0);
 
   const load = useCallback(async () => {
@@ -46,15 +42,6 @@ export default function DoctorDashboard() {
 
   useEffect(() => { void load(); return () => { request.current += 1; }; }, [load]);
 
-  useEffect(() => {
-    const fetchAlerts = () => {
-      authApi.notifications?.()?.then((result) => setNotes(result.notifications.slice(0, 4))).catch(() => setNotes([]));
-      authApi.doctorCancellations?.()?.then((result) => setCancellations(result.cancellations.slice(0, 3))).catch(() => setCancellations([]));
-    };
-    fetchAlerts();
-    return onNotificationsChanged(fetchAlerts);
-  }, []);
-
   const today = dayKey(new Date());
   const now = Date.now();
   const week = weekOf(today);
@@ -67,7 +54,7 @@ export default function DoctorDashboard() {
   const arrivedToday = todayVisits.filter((slot) => slot.status === "OCCUPIED").length;
   const perDay = week.map((key) => ({ key, visits: slots.filter((slot) => slot.patient && dayKey(slot.startAt) === key).length }));
   const maxPerDay = Math.max(1, ...perDay.map((item) => item.visits));
-  const upcomingVisits = slots.filter((slot) => slot.patient && dayKey(slot.startAt) > today && dayKey(slot.startAt) <= addDays(today, 7)).length;
+  const upcomingVisits = slots.filter((slot) => slot.patient && slot.status === "BOOKED" && Date.parse(slot.startAt) > now && dayKey(slot.startAt) <= addDays(today, 7)).length;
 
   const firstName = doctor?.user?.firstName || user?.firstName || "Doctor";
   const fullName = doctor?.user ? `Dr. ${doctor.user.firstName} ${doctor.user.lastName}` : `Dr. ${firstName}`;
@@ -102,7 +89,7 @@ export default function DoctorDashboard() {
 
           <div className="dw-dash-grid">
             <section className="pt-card dw-today" aria-labelledby="dw-today-title">
-              <header className="pt-section-head"><h2 id="dw-today-title">Today’s appointments</h2><Link to="/doctor/schedule" className="pt-link">Full schedule</Link></header>
+              <header className="pt-section-head"><h2 id="dw-today-title">Today’s appointments</h2><Link to="/doctor/visits" className="pt-link">All visits</Link></header>
               {!loading && todayVisits.length > 0 && <p className="dw-muted dw-today-note">{todaySlots.filter((slot) => slot.status === "FREE" && Date.parse(slot.startAt) > now).length} free slots still open today</p>}
               {loading ? <div className="pt-empty" role="status">Loading today’s schedule…</div> : todayVisits.length === 0 ? (
                 todaySlots.length === 0
@@ -135,7 +122,7 @@ export default function DoctorDashboard() {
                   </div>
                 ))}
               </div>
-              <p className="dw-muted">{upcomingVisits} booked {upcomingVisits === 1 ? "visit" : "visits"} in the next 7 days.</p>
+              <p className="dw-muted">{upcomingVisits} upcoming {upcomingVisits === 1 ? "visit" : "visits"} in the next 7 days, today included.</p>
             </section>
           </div>
         </div>
@@ -153,18 +140,6 @@ export default function DoctorDashboard() {
             </dl>
           </section>
 
-          <section className="pt-card dw-alerts" aria-labelledby="dw-alerts-title">
-            <header className="pt-section-head"><h2 id="dw-alerts-title">Alerts</h2></header>
-            {cancellations.length === 0 && notes.length === 0 ? <p className="dw-muted">New bookings, cancellations and arrivals will appear here.</p> : (
-              <ul className="notification-panel-list">
-                {cancellations.map((item) => {
-                  const notification: AppNotification = { id: item.id, slotId: item.slotId, type: "CANCELLED", channel: "in-app", status: "RECORDED", subject: `${item.patientName} cancelled`, message: `${formatInClinic(item.startAt, { day: "numeric", month: "short" })}, ${clock(item.startAt)} · ${item.reason}`, createdAt: item.createdAt };
-                  return <NotificationItem key={`c-${item.id}`} item={notification} role="DOCTOR" />;
-                })}
-                {notes.map((note) => <NotificationItem key={note.id} item={note} role="DOCTOR" />)}
-              </ul>
-            )}
-          </section>
         </aside>
       </div>
     </div>
