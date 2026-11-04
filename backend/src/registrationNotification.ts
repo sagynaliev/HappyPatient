@@ -26,6 +26,8 @@ function createRegistrationEmail(firstName: string, frontendUrl?: string) {
   const destination = getFrontendUrl(platformUrl(frontendUrl));
   const content = brandedEmail({
     title: 'Welcome to HappyPatient!',
+    tone: 'success',
+    status: 'Account created',
     action: destination ? { label: 'Go to HappyPatient', url: destination } : undefined,
     message: `Hello ${firstName},\n\nYour account has been successfully created.\n\nSearch for doctors and specialists.\nView doctors' schedules.\nBook and manage appointments.\nReceive important notifications.`,
     nextStep: 'Thank you for choosing HappyPatient. We are happy to have you with us!',

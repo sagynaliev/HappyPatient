@@ -7,7 +7,7 @@ import { MiniCalendar } from "../components/MiniCalendar";
 import { Icon } from "../components/Icons";
 import { FloatingNotice } from "../components/FloatingNotice";
 import "../styles/patientAppointments.css";
-import { toast } from "../lib/toast";
+import { showToast, toast } from "../lib/toast";
 
 type AppointmentTab = "upcoming" | "past" | "cancelled";
 
@@ -342,7 +342,7 @@ export default function PatientAppointments() {
     try {
       await authApi.cancelAppointment(pending.appointment.id, pending.reason);
       setActionMessage("Appointment cancelled. The doctor has been told why, and the visit is now in your Cancelled tab.");
-      toast.neutral("Appointment cancelled", "The time is free for other patients. Find it in the Cancelled tab.");
+      showToast({ tone: "error", title: "Appointment cancelled", message: "The time is free for other patients. Find it in the Cancelled tab.", durationMs: 5000 });
       notifyNotificationsChanged();
       await loadAppointments();
     }

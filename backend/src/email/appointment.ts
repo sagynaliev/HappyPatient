@@ -4,17 +4,28 @@ export const appointmentTime = (value: Date) => new Intl.DateTimeFormat('en-GB',
 export type PatientEmailEvent = 'BOOKED' | 'CANCELLED' | 'DOCTOR_CANCELLED' | 'CHECKED_IN';
 export type AppointmentEmailData = { doctor: string; reference: string; slotId?: string; startAt: Date; endAt?: Date; office?: string | null; frontendUrl?: string; reason?: string };
 const copy = {
-  BOOKED: { subject: 'Appointment Confirmed | Happy Patient', title: 'Your appointment is confirmed!', message: 'Your visit has been booked successfully. We look forward to welcoming you.', nextStep: 'Please arrive on time. You can manage your appointment in Happy Patient.', status: 'Confirmed', tone: 'blue' },
-  CANCELLED: { subject: 'Appointment Cancelled | Happy Patient', title: 'Your appointment has been cancelled', message: 'Your cancellation has been confirmed. The appointment details below are for your records.', nextStep: 'You can book another appointment whenever you are ready.', status: 'Cancelled by patient', tone: 'neutral' },
-  DOCTOR_CANCELLED: { subject: 'Appointment Cancelled by Doctor | Happy Patient', title: 'Your doctor has cancelled the appointment', message: 'Your doctor has cancelled the visit listed below. We understand this may affect your plans.', nextStep: 'Please visit Happy Patient to book another appointment at a convenient time.', status: 'Cancelled by doctor', tone: 'neutral' },
-  CHECKED_IN: { subject: 'Visit Check-in Confirmed | Happy Patient', title: "You're checked in!", message: 'Your arrival has been successfully confirmed. Please wait for the medical staff to call you.', nextStep: 'Your visit registration receipt is attached as a PDF. Keep it as proof of registration.', status: 'Checked In', tone: 'success' },
+  BOOKED: { subject: 'Appointment Confirmed | Happy Patient', title: 'Your appointment is confirmed', message: 'Your visit is booked. We look forward to seeing you.', status: 'Confirmed', tone: 'success', steps: [
+    { title: 'Arrive 10 minutes early', text: 'Bring your ID card so the front desk can find you by IIN.' },
+    { title: 'Check in at the front desk', text: 'Check-in opens 30 minutes before your visit.' },
+    { title: 'Get your receipt', text: 'After check-in you can download or print it in Happy Patient.' },
+  ] },
+  CANCELLED: { subject: 'Appointment Cancelled | Happy Patient', title: 'Your appointment is cancelled', message: 'Your cancellation is confirmed. The details below are for your records.', status: 'Cancelled by patient', tone: 'danger', steps: [
+    { title: 'The time is free again', text: 'Other patients can now book this slot.' },
+    { title: 'Book again any time', text: 'Choose a doctor and a new time whenever you are ready.' },
+  ] },
+  DOCTOR_CANCELLED: { subject: 'Appointment Cancelled by Doctor | Happy Patient', title: 'Your doctor cancelled the visit', message: 'We are sorry, your doctor could not keep this appointment.', status: 'Cancelled by doctor', tone: 'danger', steps: [
+    { title: 'Your booking is removed', text: 'This time is no longer reserved for you, so there is nothing more to do for it.' },
+    { title: 'Choose a new time', text: 'Book another time with this doctor or a different specialist.' },
+  ] },
+  CHECKED_IN: { subject: 'Visit Check-in Confirmed | Happy Patient', title: "You're checked in!", message: 'Your arrival is confirmed. Please take a seat, the medical staff will call you.', status: 'Checked in', tone: 'success', steps: [
+    { title: 'Wait to be called', text: 'Your doctor will invite you in at your appointment time.' },
+    { title: 'Keep your receipt', text: 'Your visit registration receipt is attached as a PDF as proof of registration.' },
+  ] },
 } as const;
 export function appointmentEmail(event: PatientEmailEvent, data: AppointmentEmailData) {
   const content = copy[event];
-  const timeRange = data.endAt ? `${appointmentTime(data.startAt)} to ${appointmentTime(data.endAt)}` : appointmentTime(data.startAt);
-  const details: Array<[string, string]> = [['Doctor', data.doctor], ['Appointment date', appointmentDate(data.startAt)], ['Appointment time', `${timeRange} (Asia/Almaty)`]];
-  if (data.office) details.push(['Office / location', data.office]);
-  details.push(['Booking ID', data.reference], ['Status', content.status]);
+  const visit = { doctor: data.doctor, startAt: data.startAt, endAt: data.endAt, office: data.office };
+  const details: Array<[string, string]> = [['Booking ID', data.reference]];
   if ((event === 'DOCTOR_CANCELLED' || event === 'CANCELLED') && data.reason) details.push(['Cancellation reason', data.reason]);
   const baseUrl = platformUrl(data.frontendUrl);
   const action = baseUrl ? event === 'BOOKED' && data.slotId
@@ -22,26 +33,31 @@ export function appointmentEmail(event: PatientEmailEvent, data: AppointmentEmai
     : event === 'CANCELLED' || event === 'DOCTOR_CANCELLED'
       ? { label: 'Book another appointment', url: `${baseUrl}/search` }
       : undefined : undefined;
-  return { subject: content.subject, ...brandedEmail({ ...content, details, action }) };
+  const secondary = event === 'BOOKED' || event === 'CHECKED_IN' ? { label: 'View all appointments', url: `${baseUrl}/appointments` } : undefined;
+  return { subject: content.subject, ...brandedEmail({ ...content, steps: [...content.steps], details, action, secondary, visit }) };
 }
 
 /** Reminder sent before a booked visit; same facts as the in-app reminder plus a link to manage the booking. */
 export function reminderEmail(data: AppointmentEmailData) {
-  const timeRange = data.endAt ? `${appointmentTime(data.startAt)} to ${appointmentTime(data.endAt)}` : appointmentTime(data.startAt);
-  const details: Array<[string, string]> = [['Doctor', data.doctor], ['Appointment date', appointmentDate(data.startAt)], ['Appointment time', `${timeRange} (Asia/Almaty)`]];
-  if (data.office) details.push(['Office / location', data.office]);
-  details.push(['Booking ID', data.reference]);
+  const visit = { doctor: data.doctor, startAt: data.startAt, endAt: data.endAt, office: data.office };
+  const details: Array<[string, string]> = [['Booking ID', data.reference]];
   const baseUrl = platformUrl(data.frontendUrl);
   const action = data.slotId ? { label: 'Manage appointment', url: `${baseUrl}/appointments?appointmentId=${encodeURIComponent(data.slotId)}` } : undefined;
   return {
     subject: 'Upcoming Appointment Reminder | Happy Patient',
     ...brandedEmail({
       title: 'Your visit is coming up',
-      message: 'This is a reminder about your upcoming appointment.',
+      message: 'A quick reminder about your upcoming appointment.',
       details,
-      nextStep: 'Please arrive 10 minutes early. Check-in at the front desk opens 30 minutes before your visit. If your plans changed, you can cancel or change the booking in Happy Patient.',
-      tone: 'blue',
+      visit,
+      status: 'Reminder',
+      tone: 'info',
       action,
+      steps: [
+        { title: 'Arrive 10 minutes early', text: 'Bring your ID card so the front desk can find you by IIN.' },
+        { title: 'Check in at the front desk', text: 'Check-in opens 30 minutes before your visit.' },
+        { title: 'Plans changed?', text: 'Cancel or change the booking in Happy Patient so the time goes to another patient.' },
+      ],
     }),
   };
 }
