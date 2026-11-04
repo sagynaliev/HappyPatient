@@ -63,9 +63,9 @@ export default function DoctorDashboard() {
   return (
     <div className="pt-page dw-dashboard" aria-label="Doctor dashboard">
       {error && <div className="dw-alert" role="alert"><span>{error}</span><button type="button" className="dw-mini" onClick={() => void load()}>Retry</button></div>}
-      <div className="pt-layout">
-        <div className="pt-main">
-          <section className="pt-banner">
+      {/* Banner and profile share one row and end at the same line; everything below spans the full width. */}
+      <div className="dw-dash-top">
+        <section className="pt-banner">
             <div className="pt-banner-copy">
               <span className="pt-date-chip"><Icon name="calendar" size={16} /> {formatInClinic(new Date(), { weekday: "long", day: "numeric", month: "long" })}</span>
               <h1>{greeting()}, Dr. {doctor?.user?.lastName ?? firstName}!</h1>
@@ -80,13 +80,24 @@ export default function DoctorDashboard() {
               <span className="pt-art-pill pt-art-pill-2"><Icon name="check" size={14} /> {arrivedToday} checked in</span>
             </div>
           </section>
-
-          <div className="pt-stats">
+          <section className="pt-card pt-profile">
+            <header className="pt-profile-head"><h2>My profile</h2><Link to="/profile" className="pt-round" aria-label="Edit profile"><Icon name="file" size={16} /></Link></header>
+            <div className="pt-profile-body">
+              <span className="pt-avatar">{initials}</span>
+              <div><strong>{fullName}</strong><span>{doctor?.category.name ?? "Doctor"}</span></div>
+            </div>
+            <dl className="pt-profile-facts">
+              <div><dt>Office</dt><dd>{doctor?.office || "Not listed"}</dd></div>
+              <div><dt>Next patient</dt><dd>{nextVisit ? `${patientName(nextVisit)} · ${dayKey(nextVisit.startAt) === today ? "" : `${formatInClinic(nextVisit.startAt, { day: "numeric", month: "short" })}, `}${clock(nextVisit.startAt)}` : "None booked"}</dd></div>
+            </dl>
+          </section>
+      </div>
+          <div className="pt-stats dw-stats-4">
             <div className="pt-card pt-stat"><span className="pt-stat-icon is-blue"><Icon name="users" /></span><div><strong>{loading ? "–" : todayVisits.length}</strong><span>Patients today</span></div></div>
             <div className="pt-card pt-stat"><span className="pt-stat-icon is-violet"><Icon name="calendar" /></span><div><strong>{loading ? "–" : weekVisits.length}</strong><span>Visits this week</span></div></div>
             <div className="pt-card pt-stat"><span className="pt-stat-icon is-green"><Icon name="clock" /></span><div><strong>{loading ? "–" : freeWeek}</strong><span>Free slots this week</span></div></div>
+            <div className="pt-card pt-stat"><span className="pt-stat-icon is-pink"><Icon name="check" /></span><div><strong>{loading ? "–" : arrivedToday}</strong><span>Checked in today</span></div></div>
           </div>
-
           <div className="dw-dash-grid">
             <section className="pt-card dw-today" aria-labelledby="dw-today-title">
               <header className="pt-section-head"><h2 id="dw-today-title">Today’s appointments</h2><Link to="/doctor/visits" className="pt-link">All visits</Link></header>
@@ -125,23 +136,6 @@ export default function DoctorDashboard() {
               <p className="dw-muted">{upcomingVisits} upcoming {upcomingVisits === 1 ? "visit" : "visits"} in the next 7 days, today included.</p>
             </section>
           </div>
-        </div>
-
-        <aside className="pt-side">
-          <section className="pt-card pt-profile">
-            <header className="pt-profile-head"><h2>My profile</h2><Link to="/profile" className="pt-round" aria-label="Edit profile"><Icon name="file" size={16} /></Link></header>
-            <div className="pt-profile-body">
-              <span className="pt-avatar">{initials}</span>
-              <div><strong>{fullName}</strong><span>{doctor?.category.name ?? "Doctor"}</span></div>
-            </div>
-            <dl className="pt-profile-facts">
-              <div><dt>Office</dt><dd>{doctor?.office || "Not listed"}</dd></div>
-              <div><dt>Next patient</dt><dd>{nextVisit ? `${patientName(nextVisit)} · ${dayKey(nextVisit.startAt) === today ? "" : `${formatInClinic(nextVisit.startAt, { day: "numeric", month: "short" })}, `}${clock(nextVisit.startAt)}` : "None booked"}</dd></div>
-            </dl>
-          </section>
-
-        </aside>
-      </div>
     </div>
   );
 }
