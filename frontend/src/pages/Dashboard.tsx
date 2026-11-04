@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, roleLabel } from "../context/AuthContext";
-import { AppNotification, authApi, PatientAppointment, Receipt } from "../lib/api";
+import { authApi, PatientAppointment } from "../lib/api";
 import { Icon } from "../components/Icons";
-import { NotificationItem } from "../components/NotificationItem";
-import { ReceiptDialog } from "../components/ReceiptView";
-import { downloadReceiptPdf } from "../lib/receiptPdf";
 import DoctorDashboard from "./DoctorDashboard";
 import { MiniCalendar } from "../components/MiniCalendar";
 import "../styles/patientDashboard.css";
@@ -36,12 +33,6 @@ export default function Dashboard() {
   const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [latestReceipt, setLatestReceipt] = useState<Receipt | null>(null);
-  const [receiptError, setReceiptError] = useState("");
-  const [receiptBusy, setReceiptBusy] = useState(false);
-  const [receiptDialog, setReceiptDialog] = useState<Receipt | null>(null);
-  const [printReceipt, setPrintReceipt] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true); setError("");
@@ -53,11 +44,6 @@ export default function Dashboard() {
 
   useEffect(() => { if (user?.role === "PATIENT") load(); }, [user?.role, load]);
 
-  useEffect(() => {
-    if (user?.role !== "PATIENT") return;
-    authApi.notifications().then((result) => setNotifications(result.notifications.slice(0, 4))).catch(() => setNotifications([]));
-  }, [user?.role]);
-
   const { upcoming, past, marked } = useMemo(() => {
     const now = Date.now();
     const active = appointments.filter((item) => item.status === "BOOKED" || item.status === "OCCUPIED");
@@ -67,29 +53,6 @@ export default function Dashboard() {
       marked: new Set(active.map((item) => dayKey(item.startAt))),
     };
   }, [appointments]);
-
-  const latestCheckedIn = useMemo(() => appointments.filter((item) => item.status === "OCCUPIED").sort((a, b) => Date.parse(b.checkedInAt ?? b.startAt) - Date.parse(a.checkedInAt ?? a.startAt))[0], [appointments]);
-  useEffect(() => {
-    if (!latestCheckedIn) { setLatestReceipt(null); setReceiptError(""); return; }
-    let active = true;
-    setReceiptBusy(true); setReceiptError("");
-    authApi.receipt(latestCheckedIn.id).then(({ receipt }) => { if (active) setLatestReceipt(receipt); }).catch((cause: unknown) => { if (active) setReceiptError(cause instanceof Error ? cause.message : "Receipt is unavailable."); }).finally(() => { if (active) setReceiptBusy(false); });
-    return () => { active = false; };
-  }, [latestCheckedIn?.id]);
-
-  useEffect(() => {
-    if (!receiptDialog || !printReceipt) return;
-    const timer = window.setTimeout(() => { document.body.classList.add("hp-printing-receipt"); window.print(); setPrintReceipt(false); }, 180);
-    return () => window.clearTimeout(timer);
-  }, [receiptDialog, printReceipt]);
-
-  async function downloadLatestReceipt() {
-    if (!latestReceipt) return;
-    setReceiptBusy(true); setReceiptError("");
-    try { await downloadReceiptPdf(latestReceipt); }
-    catch (cause: unknown) { setReceiptError(cause instanceof Error ? cause.message : "Unable to download this receipt."); }
-    finally { setReceiptBusy(false); }
-  }
 
   if (!user) return null;
   if (user.role === "DOCTOR") return <DoctorDashboard />;
@@ -195,30 +158,6 @@ export default function Dashboard() {
             )}
           </section>
 
-          <section className="pt-card pt-latest-receipt" aria-labelledby="pt-receipt-title">
-            <header className="pt-section-head"><h2 id="pt-receipt-title">Latest receipt</h2></header>
-            {!latestCheckedIn ? <p className="pt-receipt-empty">You’ll find your receipt here after check-in. <Link to="/search">Find a doctor</Link></p> : receiptBusy && !latestReceipt ? <p role="status">Loading your latest receipt…</p> : receiptError && !latestReceipt ? <div role="alert"><p>{receiptError}</p><Link to="/appointments">Open appointments</Link></div> : latestReceipt ? <>
-              <dl className="pt-receipt-summary">
-                <div><dt>Doctor</dt><dd>{latestReceipt.doctor}</dd></div>
-                <div><dt>Date</dt><dd>{shortDate.format(new Date(latestReceipt.startAt))}</dd></div>
-                <div><dt>Time</dt><dd>{clock.format(new Date(latestReceipt.startAt))}–{clock.format(new Date(latestReceipt.endAt))}</dd></div>
-                <div><dt>Amount</dt><dd>{typeof latestReceipt.consultationFee === "number" ? `${new Intl.NumberFormat("en-US").format(latestReceipt.consultationFee)} KZT` : "Not listed"}</dd></div>
-                <div><dt>Booking ID</dt><dd>{latestReceipt.reference}</dd></div>
-              </dl>
-              {receiptError && <p role="alert">{receiptError}</p>}
-              <div className="pt-receipt-actions">
-                <button className="button button-outline small" type="button" onClick={() => setReceiptDialog(latestReceipt)}>View</button>
-                <button className="button button-outline small" type="button" disabled={receiptBusy} onClick={() => void downloadLatestReceipt()}>{receiptBusy ? "Preparing…" : "Download PDF"}</button>
-                <button className="button button-outline small" type="button" onClick={() => { setReceiptDialog(latestReceipt); setPrintReceipt(true); }}>Print</button>
-              </div>
-            </> : null}
-          </section>
-
-          <section className="pt-card pt-notifications" aria-labelledby="pt-notifications-title">
-            <header className="pt-section-head"><h2 id="pt-notifications-title">Notifications</h2></header>
-            {notifications.length ? <ul className="notification-panel-list">{notifications.map((item) => <NotificationItem key={item.id} item={item} role="PATIENT" />)}</ul> : <p className="pt-receipt-empty">Booking and cancellation updates will appear here.</p>}
-          </section>
-
           <section className="pt-quick" aria-label="Quick actions">
             <Link className="pt-card pt-quick-item" to="/search"><span className="pt-stat-icon is-blue"><Icon name="search" /></span><span><strong>Find a doctor</strong><small>Search by name or specialty</small></span></Link>
             <Link className="pt-card pt-quick-item" to="/appointments"><span className="pt-stat-icon is-violet"><Icon name="calendar" /></span><span><strong>Manage visits</strong><small>Cancel, check in, receipts</small></span></Link>
@@ -247,7 +186,6 @@ export default function Dashboard() {
           <MiniCalendar marked={marked} />
         </aside>
       </div>
-      {receiptDialog && <ReceiptDialog receipt={receiptDialog} onClose={() => { setReceiptDialog(null); setPrintReceipt(false); }} />}
     </div>
   );
 }

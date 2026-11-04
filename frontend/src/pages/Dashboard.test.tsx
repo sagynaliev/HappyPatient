@@ -43,22 +43,17 @@ describe("patient dashboard appointments", () => {
     expect(screen.getByText("Booked")).toBeTruthy();
   });
 
-  it("shows the latest checked-in receipt from the existing receipt endpoint", async () => {
+  it("keeps receipts and notifications off the dashboard", async () => {
     vi.mocked(authApi.myAppointments).mockResolvedValue({ appointments: [{
       id: "checked-in-slot", startAt: "2026-10-30T05:00:00.000Z", endAt: "2026-10-30T05:30:00.000Z", status: "OCCUPIED", reference: "HP-RECEIPT-1",
       doctor: { name: "Dr. Sam Doctor", specialty: "Cardiology", office: "Central Clinic", consultationFee: 18000 },
     }] });
-    vi.mocked(authApi.receipt).mockResolvedValue({ receipt: {
-      id: "receipt-1", reference: "HP-RECEIPT-1", status: "OCCUPIED", patientDisplayName: "Casey Patient", doctor: "Dr. Sam Doctor", specialty: "Cardiology",
-      startAt: "2026-10-30T05:00:00.000Z", endAt: "2026-10-30T05:30:00.000Z", consultationFee: 18000,
-    } });
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
-    expect(await screen.findByText("Latest receipt")).toBeInTheDocument();
-    expect(await screen.findByText("HP-RECEIPT-1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Download PDF" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Print" })).toBeInTheDocument();
-    expect(authApi.receipt).toHaveBeenCalledWith("checked-in-slot");
+    expect(await screen.findByText("Upcoming appointment")).toBeInTheDocument();
+    expect(screen.queryByText("Latest receipt")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Notifications" })).not.toBeInTheDocument();
+    expect(authApi.receipt).not.toHaveBeenCalled();
+    expect(authApi.notifications).not.toHaveBeenCalled();
   });
 
   it("shows an empty state when the patient has no appointments", async () => {
