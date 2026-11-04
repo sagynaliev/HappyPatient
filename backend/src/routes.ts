@@ -3,6 +3,8 @@ import { medicalHistoryRouter } from './medicalHistory';
 import { resolvePricingRule, calculateParkingCost, calculateVisitCost, PricingRule } from './pricing';
 import { getAdminStatistics, runAndStoreIntegrity } from './adminOperations';
 import { NO_CHECKIN_GRACE_MS } from './visitTime';
+import { clockOffsetMs, realNow, setClockOffset, timeControlEnabled } from './clock';
+import { releaseUnattendedSlots, sendUpcomingReminders } from './appointmentLifecycle';
 import { brandedEmail } from './email/layout';
 import { appointmentEmail } from './email/appointment';
 import { Router, Request, Response } from 'express';
@@ -1052,6 +1054,27 @@ router.get('/me/appointments/:slotId/cost',requireAuth,requireRole(Role.PATIENT)
   const slot=await prisma.scheduleSlot.findFirst({where:{id:String(req.params.slotId),patientId:req.user!.id},include:{doctor:{select:{consultationFee:true,categoryId:true,locationId:true}}}});
   if(!slot)return res.status(404).json({error:'Visit not found.'});
   res.json(await visitCostFor(slot,req.user!.id));
+});
+// Demo clock: everyone reads the app time; only an admin can move it.
+const timeState = () => ({ now: new Date().toISOString(), realNow: new Date(realNow()).toISOString(), offsetMinutes: Math.round(clockOffsetMs() / 60_000), enabled: timeControlEnabled() });
+router.get('/time', (_req, res) => res.json(timeState()));
+const MAX_OFFSET_MINUTES = 60 * 24 * 60;
+router.post('/admin/time', requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+  if (!timeControlEnabled()) return res.status(403).json({ error: 'Time control is turned off on this server.' });
+  const input = z.union([
+    z.object({ offsetMinutes: z.number().int().min(-MAX_OFFSET_MINUTES).max(MAX_OFFSET_MINUTES) }),
+    z.object({ at: z.coerce.date() }),
+  ]).safeParse(req.body);
+  if (!input.success) return res.status(400).json({ error: 'Choose an offset of up to 60 days or a valid date and time.' });
+  const offsetMs = 'at' in input.data ? input.data.at.getTime() - realNow() : input.data.offsetMinutes * 60_000;
+  if (Math.abs(offsetMs) > MAX_OFFSET_MINUTES * 60_000) return res.status(400).json({ error: 'The demo time can be at most 60 days from real time.' });
+  setClockOffset(offsetMs);
+  // Run the time-based jobs now so their effect is visible right away instead of on the next timer tick.
+  const [released, reminders] = await Promise.all([
+    releaseUnattendedSlots().catch(() => ({ count: 0 })),
+    sendUpcomingReminders().catch(() => ({ count: 0 })),
+  ]);
+  res.json({ ...timeState(), released: released.count, reminders: reminders.count });
 });
 router.get('/admin/statistics',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
   const from=typeof req.query.from==='string'?new Date(req.query.from):new Date(Date.now()-7*86_400_000);

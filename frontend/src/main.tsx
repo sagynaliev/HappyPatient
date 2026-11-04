@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { Toaster } from "./components/Toaster";
+import { DemoTimeBadge } from "./components/DemoTimeBadge";
+import { syncAppClock } from "./lib/appClock";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/RouteGuards";
 const MedicalHistoryPage = lazy(() => import("./pages/MedicalHistoryPage"));
@@ -17,6 +19,7 @@ import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminDoctorsPage from "./pages/AdminDoctorsPage";
 import AdminAppointmentsPage from "./pages/AdminAppointmentsPage";
 const AdminOperationsPage = lazy(() => import("./pages/AdminOperationsPage"));
+const AdminTimePage = lazy(() => import("./pages/AdminTimePage"));
 import Schedule from "./pages/Schedule";
 import DoctorProfilePage from "./pages/DoctorProfilePage";
 import ProfilePage from "./pages/ProfilePage";
@@ -28,11 +31,13 @@ import DoctorDashboard from "./pages/DoctorDashboard";
 import FrontDeskPage from "./pages/FrontDeskPage";
 import "./styles/global.css";
 import "./styles/redesign.css";
-createRoot(document.getElementById("root")!).render(
+// Read the demo clock before the first render so every screen starts with the same "now".
+void syncAppClock().finally(() => createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
         <Toaster />
+        <DemoTimeBadge />
         <Layout>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -60,6 +65,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="pricing" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="pricing" /></Suspense>} />
                 <Route path="statistics" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="statistics" /></Suspense>} />
                 <Route path="integrity" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="integrity" /></Suspense>} />
+                <Route path="time" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminTimePage /></Suspense>} />
                 <Route path="reference-data" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="reference" /></Suspense>} />
               </Route>
             </Route>
@@ -87,4 +93,4 @@ createRoot(document.getElementById("root")!).render(
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
-);
+));

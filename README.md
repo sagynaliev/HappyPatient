@@ -105,3 +105,7 @@ To inspect local tables, run `npm run db:studio` from the repository root and op
 ## Security
 
 No real credentials or secrets are committed. Use `.env.example` as the configuration template.
+
+## Demo time (for class demonstrations)
+
+Admins can move the platform clock in **Admin → Demo time** to show time-based rules without waiting: the 10-minute auto-release, 24 h / 2 h reminders, the 30-minute check-in window and medical notes after a visit starts. Every user sees the same shifted time and an orange "Demo time" badge; moving the clock immediately releases overdue bookings and sends due reminders. The shift is kept in server memory, so a server restart returns to real time. Sign-in sessions last one day in app time, so shifting more than a day ahead signs people out. Set `TIME_CONTROL=off` to disable the feature.
