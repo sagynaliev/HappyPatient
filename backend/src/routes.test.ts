@@ -302,6 +302,7 @@ describe('authenticated self profile endpoints', () => {
       status: 'BOOKED',
       visitPurpose: 'Annual checkup',
       reference: 'HP-SLOT-1',
+      priceKzt: 18000,
       doctor: {
         name: 'Dr. Sam Doctor',
         specialty: 'Cardiology',

@@ -166,6 +166,10 @@ router.get('/me/appointments', requireAuth, requireRole(Role.PATIENT), async (re
       doctor: { select: { office: true, consultationFee: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
     },
   })) ?? [];
+  // Same price as the breakdown (rules at booking time); falls back to the doctor's fee if pricing is unavailable.
+  const prices = await Promise.all(appointments.map((appointment) => prisma.scheduleSlot.findFirst({ where: { id: appointment.id }, select: { id: true, doctorId: true, startAt: true, endAt: true, updatedAt: true, doctor: { select: { consultationFee: true, categoryId: true, locationId: true } } } })
+    .then((slot) => slot ? visitCostFor(slot, req.user!.id).then((cost) => cost.consultationKzt) : appointment.doctor.consultationFee)
+    .catch(() => appointment.doctor.consultationFee)));
   res.json({
     cancelled: cancelledRows.map(({ doctor, ...row }) => ({
       ...row,
@@ -173,8 +177,9 @@ router.get('/me/appointments', requireAuth, requireRole(Role.PATIENT), async (re
       cancelledBy: row.cancelledByRole === Role.PATIENT ? 'PATIENT' : 'CLINIC',
       doctor: { name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`, specialty: doctor.category.name, office: doctor.office, consultationFee: doctor.consultationFee },
     })),
-    appointments: appointments.map(({ doctor, ...appointment }) => ({
+    appointments: appointments.map(({ doctor, ...appointment }, index) => ({
       ...appointment,
+      priceKzt: prices[index],
       reference: appointmentReference(appointment.id),
       doctor: {
         id: doctor.id,
@@ -1031,10 +1036,9 @@ router.patch('/admin/pricing/:id',requireAuth,requireRole(Role.ADMIN),async(req,
   const version=await prisma.$transaction(async tx=>{const rule=await tx.pricingRule.create({data:{kind:input.kind,doctorId:input.doctorId??null,categoryId:input.categoryId??null,consultationType:input.consultationType??null,serviceCode:input.serviceCode??null,officeId:input.officeId??null,serviceName:input.serviceName??null,scopeKey:old.scopeKey,amountKzt:input.amountKzt,ratePerHourKzt:input.ratePerHourKzt??null,freeMinutes:input.freeMinutes,rounding:input.rounding,dailyCapKzt:input.dailyCapKzt??null,effectiveFrom:input.effectiveFrom,effectiveTo:input.effectiveTo??null,createdById:req.user!.id,versionOfId:id}});await tx.pricingRule.update({where:{id},data:{effectiveTo:input.effectiveFrom}});await tx.pricingRuleAudit.create({data:{ruleId:rule.id,actorId:req.user!.id,action:'versioned',oldValue:old as unknown as Prisma.InputJsonValue,newValue:rule as unknown as Prisma.InputJsonValue}});return rule;});
   res.status(201).json({rule:version});
 });
-router.get('/me/appointments/:slotId/cost',requireAuth,requireRole(Role.PATIENT),async(req,res)=>{
-  const slot=await prisma.scheduleSlot.findFirst({where:{id:String(req.params.slotId),patientId:req.user!.id},include:{doctor:{select:{consultationFee:true,categoryId:true,locationId:true}}}});
-  if(!slot)return res.status(404).json({error:'Visit not found.'});
-  const bookingEvent=await prisma.notification.findFirst({where:{slotId:slot.id,userId:req.user!.id,type:'BOOKED'},orderBy:{createdAt:'desc'},select:{createdAt:true}});
+/** Price of a booked visit with the rules in force when it was booked; shared by the list and the breakdown. */
+async function visitCostFor(slot:{id:string;doctorId:string;startAt:Date;endAt:Date;updatedAt:Date;doctor:{consultationFee:number;categoryId:string;locationId:string|null}},userId:string){
+  const bookingEvent=await prisma.notification.findFirst({where:{slotId:slot.id,userId,type:'BOOKED'},orderBy:{createdAt:'desc'},select:{createdAt:true}});
   const bookedAt=bookingEvent?.createdAt??slot.updatedAt;
   // The existing BOOKED notification timestamps the booking event; updatedAt is the fallback if that delivery row is absent.
   const rules=await prisma.pricingRule.findMany({where:{kind:{in:['visit','parking']},effectiveFrom:{lte:bookedAt},OR:[{effectiveTo:null},{effectiveTo:{gt:bookedAt}}]}});
@@ -1042,7 +1046,12 @@ router.get('/me/appointments/:slotId/cost',requireAuth,requireRole(Role.PATIENT)
   const parking=resolvePricingRule(rules as PricingRule[],'parking',bookedAt,slot.doctorId,slot.doctor.categoryId,undefined,slot.doctor.locationId);
   const cost=calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined);
   const duration=(slot.endAt.getTime()-slot.startAt.getTime())/60000;
-  res.json({...cost,bookedAt,parking:parking?{durationMinutes:duration,amountKzt:calculateParkingCost(duration,parking)}:null});
+  return {...cost,bookedAt,parking:parking?{durationMinutes:duration,amountKzt:calculateParkingCost(duration,parking)}:null};
+}
+router.get('/me/appointments/:slotId/cost',requireAuth,requireRole(Role.PATIENT),async(req,res)=>{
+  const slot=await prisma.scheduleSlot.findFirst({where:{id:String(req.params.slotId),patientId:req.user!.id},include:{doctor:{select:{consultationFee:true,categoryId:true,locationId:true}}}});
+  if(!slot)return res.status(404).json({error:'Visit not found.'});
+  res.json(await visitCostFor(slot,req.user!.id));
 });
 router.get('/admin/statistics',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
   const from=typeof req.query.from==='string'?new Date(req.query.from):new Date(Date.now()-7*86_400_000);

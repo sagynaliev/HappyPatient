@@ -1,0 +1,106 @@
+/* Admin tools tabs (all admin pages) and the operations pages: pricing, statistics, data quality, reference data.
+   Built from the admin dashboard pieces (ad-head, ad-stat, ad-panel) so every admin page looks the same. */
+.admin-main { display: grid; justify-items: stretch; }
+.admin-tools { display: inline-flex; justify-self: start; width: max-content; max-width: 100%; flex-wrap: wrap; gap: 4px; margin: 0 0 22px; padding: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-card); }
+.admin-tool { padding: 8px 16px; border-radius: 999px; color: var(--text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.admin-tool:hover { background: var(--accent); color: var(--primary-deep); }
+.admin-tool.is-active { background: var(--primary); color: #fff; }
+
+.admin-main .ad-ops { display: grid; gap: 20px; max-width: none; margin: 0; padding: 0; }
+.ad-ops > * { margin: 0; }
+.ad-ops .ad-head { margin-bottom: 0; }
+.ad-ops .ad-head p { max-width: 62ch; }
+.ad-ops button.ad-button { border: 0; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.ad-ops button.ad-button-outline { border: 1px solid var(--border); }
+.ad-ops .ad-button:disabled { opacity: .6; cursor: default; }
+.ad-ops .ad-grid { margin-top: 0; }
+.ad-ops .ad-stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ad-stat-icon.is-amber { background: #fdf3e6; color: #d97706; }
+.ad-ops-alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Panels */
+.ad-ops .ad-panel { display: grid; gap: 16px; min-width: 0; margin: 0; border: 1px solid var(--border); background: var(--surface); }
+.ad-ops .admin-panel-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 0; }
+.ad-ops .admin-panel-header h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.ad-empty-state { margin: 0; padding: 26px 16px; border-radius: 16px; background: #f6f8ff; color: var(--text-secondary); text-align: center; font-size: 14px; }
+
+/* Forms */
+.ad-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.ad-ops label { display: grid; gap: 6px; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+.ad-ops input, .ad-ops select { width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 400; }
+.ad-ops input:focus, .ad-ops select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px var(--accent); }
+.ad-form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.ad-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0; }
+.ad-filters label { min-width: 150px; }
+.ad-inline-form { display: flex; flex-wrap: wrap; gap: 8px; }
+.ad-inline-form input { width: 240px; }
+
+/* Segmented control (quick ranges, reference tabs) */
+.ad-segment { display: inline-flex; flex-wrap: wrap; justify-self: start; gap: 4px; padding: 4px; border-radius: 999px; background: var(--page-background); }
+.ad-segment button { min-height: 36px; padding: 6px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.ad-segment button[aria-pressed="true"] { background: var(--surface); color: var(--primary-deep); box-shadow: 0 1px 3px rgb(16 27 59 / 12%); }
+.ad-range { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px; }
+.ad-range .ad-segment { background: var(--page-background); }
+
+/* Tables */
+.ad-ops .table-wrap { overflow-x: auto; margin: 0; border: 1px solid var(--border); border-radius: 16px; }
+.ad-ops .admin-table { width: 100%; min-width: 0; margin: 0; border-collapse: collapse; font-size: 14px; overflow: visible; }
+.ad-ops .admin-table.is-wide { min-width: 760px; }
+.ad-ops .admin-table th { position: sticky; top: 0; z-index: 1; padding: 11px 14px; background: #f6f8ff; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; text-align: left; text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.ad-ops .admin-table td { padding: 12px 14px; border-top: 1px solid var(--border); color: var(--text-primary); vertical-align: middle; }
+.ad-ops .admin-table td small { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 12.5px; }
+.ad-ops .admin-table tbody tr:hover { background: #fafbff; }
+.ad-ops .admin-status { min-width: 0; padding: 4px 10px; font-size: 12px; }
+.ad-row-actions { text-align: right; white-space: nowrap; }
+.ad-row-actions .ad-mini + .ad-mini { margin-left: 6px; }
+.ad-scroll { max-height: 520px; overflow-y: auto; }
+.ad-select { min-width: 220px; }
+.ad-id-list { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12px; }
+.ad-ops details summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+
+/* Small action buttons */
+.ad-mini { min-height: 32px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--primary-deep); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ad-mini:hover { background: var(--accent); }
+.ad-mini.is-danger { color: #b42318; }
+.ad-mini.is-danger:hover { border-color: #f6d3d3; background: #fdecec; }
+
+/* Audit and run lists */
+.ad-audit-list, .ad-run-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.ad-audit-list li { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 2px 14px; padding: 12px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.ad-audit-list li:first-child, .ad-run-list li:first-child { border-top: 0; }
+.ad-audit-list small { grid-column: 2; color: var(--text-secondary); overflow-wrap: anywhere; }
+.ad-audit-date { color: var(--text-secondary); font-size: 13px; }
+.ad-run-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 11px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.ad-run-list li .ad-audit-date { min-width: 120px; }
+
+/* Charts */
+.ad-bars { display: flex; align-items: flex-end; gap: 10px; min-height: 170px; padding: 8px 4px 0; overflow-x: auto; }
+.ad-bars-col { display: grid; flex: 1 0 34px; justify-items: center; gap: 6px; }
+.ad-bars-bar { display: block; width: 100%; max-width: 44px; border-radius: 10px 10px 4px 4px; background: var(--primary); }
+.ad-bars-value { color: var(--text-primary); font-size: 12.5px; font-weight: 600; }
+.ad-bars-label { color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.ad-ops .ad-mini-chart { margin: 0; padding: 0; border: 0; }
+.ad-ops .ad-mini-chart ul { margin: 0; gap: 10px; }
+.ad-ops .ad-mini-chart li { grid-template-columns: minmax(110px, 1fr) minmax(80px, 2fr) 32px; font-size: 14px; }
+.ad-ops .ad-bar-track { height: 10px; background: var(--accent); }
+
+/* Location tree */
+.ad-ops .ad-location-tree ul { margin: 0; padding-left: 18px; list-style: none; }
+.ad-ops .ad-location-tree > ul { padding-left: 0; }
+.ad-ops .ad-location-tree details { padding: 4px 0 4px 12px; border-left: 2px solid var(--border); }
+.ad-ops .ad-location-tree summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; color: var(--text-primary); font-weight: 400; }
+.ad-ops .ad-location-tree summary small { color: var(--text-secondary); }
+.ad-loc-kind { padding: 2px 8px; border-radius: 6px; background: var(--accent); color: var(--primary-deep); font-size: 11.5px; font-weight: 600; text-transform: capitalize; }
+.ad-ops .ad-location-actions { display: flex; gap: 6px; margin: 2px 0 6px; }
+
+@media (max-width: 1100px) {
+  .ad-ops .ad-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ad-ops .ad-grid, .ad-ops .ad-grid-even { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .admin-tools { display: flex; width: 100%; overflow-x: auto; flex-wrap: nowrap; border-radius: 16px; }
+  .ad-ops .ad-stats { grid-template-columns: minmax(0, 1fr); }
+  .ad-inline-form input { width: 100%; }
+  .ad-audit-list li { grid-template-columns: minmax(0, 1fr); }
+  .ad-audit-list small { grid-column: 1; }
+}

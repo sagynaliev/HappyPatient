@@ -27,7 +27,7 @@ function MedicalEntryCard({ entry, eventAt }: { entry: MedicalEntry; eventAt: st
     <h3>{entry.title}</h3>
     <p className={`mh-body${long && !expanded ? ' is-clamped' : ''}`}>{entry.body}</p>
     {long && <button className="mh-more" type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? 'Show less' : 'Show more'}</button>}
-    <footer className="mh-entry-doctor"><Icon name="stethoscope" size={15} /> Dr. {entry.doctor.user.firstName} {entry.doctor.user.lastName}{entry.updatedAt !== entry.createdAt && <span> · edited</span>}</footer>
+    <footer className="mh-entry-doctor"><Icon name="stethoscope" size={15} /> Dr. {entry.doctor.user.firstName} {entry.doctor.user.lastName}</footer>
   </article>;
 }
 
