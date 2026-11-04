@@ -730,13 +730,6 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 .bk-consult-option:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 
 /* ---------- Health records: same page frame as My appointments ---------- */
-.mh-page { max-width: none; margin: 0; padding: 36px 24px 52px; }
-.mh-container { width: min(100%, 1280px); margin: 0 auto; }
-.mh-page-heading { margin-bottom: 24px; }
-.mh-page-heading h1 { margin: 0; font-family: Onest, sans-serif; font-size: clamp(28px, 3vw, 36px); line-height: 1.2; }
-.mh-page-heading p { margin: 7px 0 0; color: var(--text-secondary); font-size: 14px; }
-.mh-page .mh-history { margin-top: 0; }
-@media (max-width: 768px) { .mh-page { padding: 24px 16px 40px; } }
 
 /* ---------- Booking: confirmation and recap stay inside the booking layout ---------- */
 .bk-main .bk-confirmation { width: 100%; margin: 0; }

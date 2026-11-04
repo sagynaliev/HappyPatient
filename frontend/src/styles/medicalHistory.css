@@ -1,0 +1,106 @@
+/* Medical history: shared by the patient Health records page and the doctor appointment panel.
+   Follows the patient dashboard look (pt-*): blue banner, white cards, soft tinted icons. */
+.mh-page { display: grid; gap: 24px; width: min(100%, 1280px); margin: 0 auto; color: var(--text-primary); }
+
+/* Banner */
+.mh-banner { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 240px; min-height: 190px; overflow: hidden; border-radius: var(--radius-lg); background: var(--primary); color: #fff; }
+.mh-banner::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 85% 20%, rgb(255 255 255 / 18%), transparent 45%), radial-gradient(circle at 10% 120%, rgb(26 63 174 / 60%), transparent 55%); }
+.mh-banner-copy { position: relative; display: grid; align-content: center; justify-items: start; gap: 10px; padding: 28px 36px; }
+.mh-banner-chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; background: rgb(255 255 255 / 16%); font-size: 13px; font-weight: 500; }
+.mh-banner h1 { margin: 0; font-size: clamp(28px, 3vw, 38px); font-weight: 600; letter-spacing: -0.035em; line-height: 1.1; }
+.mh-banner p { max-width: 46ch; margin: 0; color: #fff; font-size: 15px; }
+.mh-banner-art { position: relative; }
+.mh-orb { position: absolute; border-radius: 50%; border: 1px solid rgb(255 255 255 / 22%); }
+.mh-orb-1 { width: 210px; height: 210px; top: -10px; right: -40px; }
+.mh-orb-2 { width: 130px; height: 130px; top: 36px; right: 10px; background: rgb(255 255 255 / 8%); }
+.mh-art-card { position: absolute; top: 46px; right: 50px; display: grid; width: 96px; height: 96px; place-items: center; border-radius: 26px; background: #fff; color: var(--primary); box-shadow: 0 18px 40px rgb(16 27 59 / 25%); transform: rotate(-6deg); }
+
+/* Shared container: the doctor panel is narrow, so layout follows the component width. */
+.mh-history { display: grid; gap: 20px; min-width: 0; container-type: inline-size; color: var(--text-primary); }
+.mh-history :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+
+/* Category filters double as summary cards */
+.mh-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.mh-filter { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-card); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.mh-filter:hover { border-color: var(--accent-strong); }
+.mh-filter[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 3px var(--accent), var(--shadow-card); }
+.mh-filter-icon { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border-radius: 14px; background: var(--accent); color: var(--primary); }
+.mh-filter.is-test .mh-filter-icon { background: #e6f4ff; color: #0b6fb8; }
+.mh-filter.is-anamnesis .mh-filter-icon { background: #efeafe; color: #6a4fd8; }
+.mh-filter.is-conclusion .mh-filter-icon { background: #e3f7ee; color: #0f8a63; }
+.mh-filter-text { display: grid; min-width: 0; }
+.mh-filter-text strong { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.mh-filter-text span { overflow: hidden; color: var(--text-secondary); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Timeline card */
+.mh-card { display: grid; gap: 16px; min-width: 0; padding: 22px 24px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-card); }
+.mh-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.mh-heading h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.mh-heading-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.mh-sort { display: inline-flex; padding: 4px; border-radius: 999px; background: var(--page-background); }
+.mh-sort button { min-height: 34px; padding: 6px 14px; border: 0; border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.mh-sort button[aria-pressed="true"] { background: var(--surface); color: var(--primary-deep); box-shadow: 0 1px 3px rgb(16 27 59 / 12%); }
+
+.mh-list { display: grid; gap: 22px; margin: 0; padding: 0; list-style: none; }
+.mh-group { position: relative; display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 18px; }
+.mh-group:not(:last-child)::before { content: ""; position: absolute; top: 66px; bottom: -22px; left: 28px; border-left: 2px dashed var(--border); }
+.mh-date { display: grid; width: 58px; height: 62px; place-items: center; align-content: center; border-radius: 16px; background: var(--primary); color: #fff; line-height: 1.1; }
+.mh-date span { font-size: 12px; font-weight: 500; opacity: .85; }
+.mh-date strong { font-size: 22px; font-weight: 600; }
+.mh-group-body { display: grid; gap: 12px; min-width: 0; }
+.mh-date-heading { margin: 0; padding-top: 4px; color: var(--text-secondary); font-size: 13.5px; font-weight: 600; }
+
+.mh-entry { min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: var(--radius-sm); background: #f8faff; overflow-wrap: anywhere; }
+.mh-entry.is-test { border-left-color: #0b6fb8; }
+.mh-entry.is-anamnesis { border-left-color: #6a4fd8; }
+.mh-entry.is-conclusion { border-left-color: #0f8a63; }
+.mh-entry-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.mh-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+.mh-pill.is-test { background: #e6f4ff; color: #0a5d9c; }
+.mh-pill.is-anamnesis { background: #efeafe; color: #5a3fc4; }
+.mh-pill.is-conclusion { background: #e3f7ee; color: #0f7a57; }
+.mh-entry-time { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 13px; }
+.mh-entry h3 { margin: 12px 0 6px; font-size: 16px; font-weight: 600; }
+.mh-body { margin: 0; color: #33406a; font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; }
+.mh-body.is-clamped { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.mh-more { margin-top: 6px; padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.mh-more:hover { text-decoration: underline; }
+.mh-entry-doctor { display: flex; align-items: center; gap: 7px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); color: var(--text-secondary); font-size: 13px; }
+
+.mh-load-more { justify-self: center; }
+.mh-alert { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0; padding: 12px 14px; border-radius: 12px; font-size: 14px; }
+.mh-alert.is-success { justify-content: flex-start; background: #e3f7ee; color: var(--status-success); }
+.mh-alert.is-error { border: 1px solid #f2c8c9; background: var(--status-error-bg); color: var(--status-error); }
+.mh-loading { display: grid; gap: 12px; }
+.mh-skeleton { height: 96px; border-radius: var(--radius-sm); }
+.mh-empty { display: grid; justify-items: center; gap: 8px; padding: 30px 16px; border-radius: 18px; background: #f6f8ff; color: var(--text-secondary); text-align: center; }
+.mh-empty-icon { display: grid; width: 56px; height: 56px; place-items: center; border-radius: 16px; background: #fff; color: var(--primary); box-shadow: var(--shadow-card); }
+.mh-empty h3 { margin: 4px 0 0; color: var(--text-primary); font-size: 17px; font-weight: 600; }
+.mh-empty p { max-width: 42ch; margin: 0; font-size: 14px; }
+
+/* Doctor note form */
+.mh-form { display: grid; gap: 8px; padding: 18px; border: 1px solid var(--accent-strong); border-radius: var(--radius-sm); background: #f8faff; }
+.mh-form h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.mh-form label { color: #33406a; font-size: 13px; font-weight: 600; }
+.mh-form input, .mh-form select, .mh-form textarea { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text-primary); font: inherit; }
+.mh-form input:focus, .mh-form select:focus, .mh-form textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px var(--accent); }
+.mh-form textarea { resize: vertical; }
+.mh-form small { color: var(--text-secondary); }
+.mh-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+
+@container (max-width: 760px) {
+  .mh-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+}
+@container (max-width: 460px) {
+  .mh-filter { padding: 12px; gap: 10px; }
+  .mh-filter-icon { width: 38px; height: 38px; flex-basis: 38px; }
+  .mh-card { padding: 16px; }
+  .mh-group { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .mh-group::before, .mh-date { display: none; }
+  .mh-actions > button { flex: 1; }
+}
+@media (max-width: 768px) {
+  .mh-banner { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .mh-banner-copy { padding: 24px 22px; }
+  .mh-banner-art { display: none; }
+}
