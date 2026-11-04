@@ -104,6 +104,9 @@
 .pa-cost-breakdown { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--page-background); }
 .pa-price-total { font-weight: 800; }
 .pa-price-total dt,.pa-price-total dd { color: var(--text-primary); }
+.pa-price-extra { margin-top: 6px; border-top: 1px dashed var(--border); }
+.pa-price-extra dt small { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 12px; }
+.pa-price-extra dd { color: var(--text-secondary); }
 .pa-detail-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 .pa-detail-actions > .button,.patient-appointment-actions [aria-expanded] { min-width: 44px; min-height: 44px; }
 

@@ -74,6 +74,8 @@ export type DoctorProfile = {
   user?: { firstName: string; lastName: string };
 };
 export type PatientAppointment = {
+  /** Visit price with the pricing rules in force when it was booked. */
+  priceKzt?: number;
   id: string;
   startAt: string;
   endAt: string;

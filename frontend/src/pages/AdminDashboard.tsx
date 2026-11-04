@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AdminDoctorRecord, AdminMetrics, authApi } from "../lib/api";
-import { Icon, IconName } from "../components/Icons";
+import { Icon } from "../components/Icons";
+import { AdminStat } from "../components/AdminStat";
 
 type AdminAppointment = { id: string; patient: string; doctor: string; specialty: string; date: string; status: string; purpose?: string | null };
 
@@ -12,17 +13,6 @@ const timeShort = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2
 const weekdayOf = (value: string) => new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: TZ }).format(new Date(value));
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const initials = (name: string) => name.replace(/^Dr\.\s*/, "").split(" ").map((part) => part[0] ?? "").join("").slice(0, 2).toUpperCase();
-
-function Stat({ icon, tone, label, value, note }: { icon: IconName; tone: string; label: string; value: string | number; note: string }) {
-  return (
-    <article className="admin-metric-card ad-stat">
-      <span className={`ad-stat-icon ${tone}`}><Icon name={icon} /></span>
-      <span className="ad-stat-label">{label}</span>
-      <strong>{value}</strong>
-      <small>{note}</small>
-    </article>
-  );
-}
 
 export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
@@ -75,10 +65,10 @@ export default function AdminDashboard() {
       </header>
 
       <section className="admin-metrics-grid ad-stats" aria-label="Platform metrics">
-        <Stat icon="users" tone="is-blue" label="Total users" value={loading ? "—" : metrics?.totalUsers ?? 0} note={metrics ? `${metrics.patients} patients · ${metrics.admins} admins` : "Loading user totals…"} />
-        <Stat icon="user" tone="is-violet" label="Patients" value={loading ? "—" : metrics?.patients ?? 0} note="Patient accounts" />
-        <Stat icon="stethoscope" tone="is-green" label="Doctors" value={loading ? "—" : metrics?.doctors ?? 0} note={`${verifiedDoctors} with an office listed`} />
-        <Stat icon="calendar" tone="is-pink" label="Booked visits" value={loading ? "—" : metrics?.appointments ?? 0} note="Currently booked appointments" />
+        <AdminStat icon="users" tone="is-blue" label="Total users" value={loading ? "—" : metrics?.totalUsers ?? 0} note={metrics ? `${metrics.patients} patients · ${metrics.admins} admins` : "Loading user totals…"} />
+        <AdminStat icon="user" tone="is-violet" label="Patients" value={loading ? "—" : metrics?.patients ?? 0} note="Patient accounts" />
+        <AdminStat icon="stethoscope" tone="is-green" label="Doctors" value={loading ? "—" : metrics?.doctors ?? 0} note={`${verifiedDoctors} with an office listed`} />
+        <AdminStat icon="calendar" tone="is-pink" label="Booked visits" value={loading ? "—" : metrics?.appointments ?? 0} note="Currently booked appointments" />
       </section>
 
       {error && <div className="admin-alert" role="alert">{error}</div>}

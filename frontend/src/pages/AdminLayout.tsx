@@ -1,16 +1,26 @@
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import "../styles/adminPortal.css";
+import "../styles/adminOperations.css";
+
+const tools = [
+  { to: "/admin/dashboard", label: "Dashboard" },
+  { to: "/admin/pricing", label: "Pricing" },
+  { to: "/admin/statistics", label: "Statistics" },
+  { to: "/admin/integrity", label: "Data quality" },
+  { to: "/admin/reference-data", label: "Reference data" },
+];
 
 export default function AdminLayout() {
+  const { pathname } = useLocation();
+  const current = tools.find((tool) => pathname.startsWith(tool.to))?.to ?? (pathname.replace(/\/$/, "") === "/admin" ? "/admin/dashboard" : undefined);
   return (
     <div className="admin-shell">
       <section className="admin-main">
-        <nav aria-label="Admin tools"><Link to="/admin">Dashboard</Link> · <Link to="/admin/pricing">Pricing</Link> · <Link to="/admin/statistics">Statistics</Link> · <Link to="/admin/integrity">Data quality</Link> · <Link to="/admin/reference-data">Reference data</Link></nav><Outlet />
+        <nav className="admin-tools" aria-label="Admin tools">
+          {tools.map((tool) => <Link key={tool.to} to={tool.to} className={`admin-tool${current === tool.to ? " is-active" : ""}`} aria-current={current === tool.to ? "page" : undefined}>{tool.label}</Link>)}
+        </nav>
+        <Outlet />
       </section>
-
-      <footer className="admin-footer">
-        <Link to="/dashboard">Back to main dashboard</Link>
-      </footer>
     </div>
   );
 }

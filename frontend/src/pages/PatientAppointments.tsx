@@ -72,8 +72,8 @@ function VisitCost({ slotId, visible }: { slotId: string; visible: boolean }) {
   return <section className="pa-cost-breakdown" aria-label="Price breakdown">
     {!cost && !error ? <p role="status">Loading price…</p> : error ? <p className="alert error">Price breakdown unavailable.</p> : cost && <dl className="pa-price-list">
       <div><dt>Consultation fee</dt><dd>{formatFee(cost.consultationKzt)}</dd></div>
-      {cost.parking && <div><dt>Parking estimate · {Math.ceil(cost.parking.durationMinutes / 60)} h</dt><dd>{formatFee(cost.parking.amountKzt)}</dd></div>}
-      <div className="pa-price-total"><dt>Total</dt><dd>{formatFee(cost.totalKzt)}</dd></div>
+      <div className="pa-price-total"><dt>Visit total</dt><dd>{formatFee(cost.totalKzt)}</dd></div>
+      {cost.parking && <div className="pa-price-extra"><dt>Parking estimate · {cost.parking.durationMinutes} min<small>Paid separately at the car park</small></dt><dd>{formatFee(cost.parking.amountKzt)}</dd></div>}
     </dl>}
   </section>;
 }
@@ -134,7 +134,7 @@ function AppointmentCard({
               <dd>{appointment.doctor.office}</dd>
             </div>
           )}
-          {!expanded && <div><dt><AppointmentIcon kind="fee" /> <span className="sr-only">Consultation fee</span></dt><dd>{formatFee(appointment.doctor.consultationFee)}</dd></div>}
+          {!expanded && <div><dt><AppointmentIcon kind="fee" /> <span className="sr-only">Visit price</span></dt><dd>{formatFee(appointment.priceKzt ?? appointment.doctor.consultationFee)}</dd></div>}
         </dl>
 
         <div className="patient-appointment-actions">
