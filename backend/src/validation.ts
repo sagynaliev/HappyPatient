@@ -1,11 +1,25 @@
 import { z } from 'zod';
+/** Kazakhstan IIN: YYMMDD birth date, century/sex digit, serial and a mod-11 check digit. */
+export function isValidIin(value: string) {
+  if (!/^\d{12}$/.test(value)) return false;
+  const digits = [...value].map(Number);
+  const month = Number(value.slice(2, 4));
+  const day = Number(value.slice(4, 6));
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(2000, month, 0)).getUTCDate()) return false;
+  const weighted = (weights: number[]) => weights.reduce((sum, weight, index) => sum + weight * digits[index], 0) % 11;
+  let check = weighted([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  if (check === 10) check = weighted([3, 4, 5, 6, 7, 8, 9, 10, 11, 1, 2]);
+  return check !== 10 && check === digits[11];
+}
+const iinSchema = z.string().regex(/^\d{12}$/, 'IIN must contain exactly 12 digits.').refine(isValidIin, 'Enter a valid IIN.');
+const phoneSchema = z.string().trim().regex(/^\+?[\d\s()-]{7,30}$/, 'Enter a valid phone number.').refine(value => value.replace(/\D/g, '').length >= 10, 'Enter a valid phone number.');
 export const registrationSchema = z.object({
   email: z.string().trim().email().transform(v => v.toLowerCase()),
   password: z.string().min(8).max(128),
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
-  phone: z.string().trim().max(30).optional(),
-  iin: z.string().regex(/^\d{12}$/, 'IIN must contain exactly 12 digits.')
+  phone: phoneSchema,
+  iin: iinSchema
 });
 export const loginSchema = z.object({ email: z.string().email().transform(v => v.toLowerCase()), password: z.string().min(1) });
 export const profileUpdateSchema = z.object({
@@ -62,7 +76,8 @@ export const walkInRegistrationSchema = z.object({
   email: z.string().trim().email().transform(v => v.toLowerCase()).optional().or(z.literal('')),
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
-  phone: z.string().trim().max(30).optional().or(z.literal('')),
+  phone: phoneSchema.optional().or(z.literal('')),
+  // Checksum is enforced when a new patient is created, so existing records stay reusable.
   iin: z.string().regex(/^\d{12}$/, 'IIN must contain exactly 12 digits.'),
   doctorId: z.string().min(1),
   slotId: z.string().min(1),

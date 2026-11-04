@@ -62,7 +62,7 @@ beforeEach(() => {
   prismaMock.user.findUnique.mockResolvedValue(null);
   prismaMock.user.update.mockResolvedValue({
     id: 'patient-user', email: 'patient@example.test', firstName: 'Casey', lastName: 'Patient', role: Role.PATIENT,
-    phone: '+7 700 111 22 33', iin: '123456789012', createdAt: new Date('2026-10-01T00:00:00.000Z'),
+    phone: '+7 700 111 22 33', iin: '881230500711', createdAt: new Date('2026-10-01T00:00:00.000Z'),
   });
   notificationMock.mockResolvedValue({ channel: 'local', message: 'Confirmation notification recorded for local development.' });
   prismaMock.notification.findUnique.mockResolvedValue(null);
@@ -158,10 +158,10 @@ describe('Sprint 3 front-desk workflows', () => {
     prismaMock.user.findUnique.mockResolvedValueOnce(null);
     prismaMock.user.create.mockResolvedValueOnce({ id: 'walkin-1', email: 'walk@example.test', firstName: 'Aru', lastName: 'Walk' });
     const response = await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK, 'desk-user')).send({
-      iin: '990101300123', firstName: 'Aru', lastName: 'Walk', email: 'walk@example.test', doctorId: 'doctor-1', slotId: 'slot-9', visitPurpose: 'Walk-in consultation',
+      iin: '990101300122', firstName: 'Aru', lastName: 'Walk', email: 'walk@example.test', doctorId: 'doctor-1', slotId: 'slot-9', visitPurpose: 'Walk-in consultation',
     }).expect(201);
     expect(response.body.slot.status).toBe(SlotStatus.BOOKED);
-    expect(prismaMock.user.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ iin: '990101300123', role: Role.PATIENT }) }));
+    expect(prismaMock.user.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ iin: '990101300122', role: Role.PATIENT }) }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(prismaMock.notification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ message: expect.stringContaining('Dr. Sam Doctor') }) }));
   });
@@ -194,7 +194,7 @@ describe('notifications for both sides of an appointment', () => {
 
   it('sends a welcome notification after registration', async () => {
     prismaMock.user.create.mockResolvedValueOnce({ id: 'new-user', email: 'new@example.test', firstName: 'Nur', lastName: 'New', role: Role.PATIENT, phone: null });
-    await request(app).post('/api/auth/register').send({ email: 'new@example.test', password: 'Password#123', firstName: 'Nur', lastName: 'New', phone: '+7 700 123 45 67', iin: '990101300999' });
+    await request(app).post('/api/auth/register').send({ email: 'new@example.test', password: 'Password#123', firstName: 'Nur', lastName: 'New', phone: '+7 700 123 45 67', iin: '950515400569' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (prismaMock.user.create.mock.calls.length) {
       expect(prismaMock.notification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ userId: 'new-user', type: 'WELCOME' }) }));
@@ -249,10 +249,10 @@ describe('authenticated self profile endpoints', () => {
   it('returns account details with a masked IIN and creation date', async () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'patient-user', email: 'patient@example.test', firstName: 'Casey', lastName: 'Patient', role: Role.PATIENT,
-      phone: '+7 700 111 22 33', iin: '123456789012', createdAt: new Date('2026-10-01T00:00:00.000Z'),
+      phone: '+7 700 111 22 33', iin: '881230500711', createdAt: new Date('2026-10-01T00:00:00.000Z'),
     });
     const response = await request(app).get('/api/me').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(200);
-    expect(response.body.user.maskedIin).toBe('••••••••••12');
+    expect(response.body.user.maskedIin).toBe('••••••••••11');
     expect(response.body.user.createdAt).toBe('2026-10-01T00:00:00.000Z');
     expect(response.body.user).not.toHaveProperty('iin');
   });
@@ -266,7 +266,7 @@ describe('authenticated self profile endpoints', () => {
       where: { id: 'patient-user' },
       data: { firstName: 'Casey', lastName: 'Patient', phone: '+7 700 111 22 33' },
     }));
-    expect(response.body.user.maskedIin).toBe('••••••••••12');
+    expect(response.body.user.maskedIin).toBe('••••••••••11');
     expect(response.body.user).not.toHaveProperty('iin');
   });
 
@@ -321,6 +321,7 @@ describe('authenticated self profile endpoints', () => {
         checkedInAt: true,
         doctor: {
           select: {
+            id: true,
             office: true,
             consultationFee: true,
             category: { select: { name: true } },
@@ -452,7 +453,7 @@ describe('Sprint 2 doctor endpoints', () => {
       role: Role.PATIENT, phone: null,
     });
     const response = await request(app).post('/api/auth/register').send({
-      email: 'patient@example.test', password: 'SecurePass123', firstName: 'Taylor', lastName: 'Patient', iin: '123456789012',
+      email: 'patient@example.test', password: 'SecurePass123', firstName: 'Taylor', lastName: 'Patient', phone: '+7 700 123 45 67', iin: '881230500711',
     }).expect(201);
     expect(response.body.notification).toEqual({ channel: 'local', message: expect.any(String) });
     expect(response.body).not.toHaveProperty('passwordHash');
@@ -775,7 +776,7 @@ describe('branded appointment emails through real routes (mocked Resend)', () =>
   it('creates and emails the receipt for an immediately checked-in walk-in', async () => {
     prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(checkedInSlot());
     prismaMock.user.findUnique.mockResolvedValueOnce({ id: 'patient-user', role: Role.PATIENT, email: 'patient@example.test', firstName: 'Casey', lastName: 'Patient' });
-    await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK)).send({ slotId: 'slot-1', doctorId: 'doctor-1', iin: '123456789012', firstName: 'Casey', lastName: 'Patient', visitPurpose: 'Walk-in consultation' }).expect(201);
+    await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK)).send({ slotId: 'slot-1', doctorId: 'doctor-1', iin: '881230500711', firstName: 'Casey', lastName: 'Patient', visitPurpose: 'Walk-in consultation' }).expect(201);
     await vi.waitFor(() => expect(sendEmail).toHaveBeenCalledOnce());
     expect(sendEmail.mock.calls[0][0].attachments).toHaveLength(1);
     expect(prismaMock.receipt.upsert).toHaveBeenCalledOnce();
@@ -832,7 +833,7 @@ describe('manual availability protects active appointments', () => {
 
 
 describe('Sprint 4 walk-in boundaries', () => {
-  const input = { iin: '990101300123', firstName: 'Walk', lastName: 'In', doctorId: 'doctor-1', slotId: 'slot-9', visitPurpose: 'Consultation' };
+  const input = { iin: '990101300122', firstName: 'Walk', lastName: 'In', doctorId: 'doctor-1', slotId: 'slot-9', visitPurpose: 'Consultation' };
   it.each([[1800000, 'OCCUPIED'], [1801000, 'BOOKED'], [0, 'OCCUPIED'], [-60000, 'OCCUPIED']])('server decides status at %i ms', async (delta, status) => {
     const now = new Date('2026-11-02T05:00:00Z');
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(now);
@@ -850,6 +851,17 @@ describe('Sprint 4 walk-in boundaries', () => {
     prismaMock.user.findUnique.mockResolvedValueOnce({ id: 'patient', role: Role.PATIENT });
     prismaMock.scheduleSlot.updateMany.mockResolvedValueOnce({ count: 0 });
     await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK)).send(input).expect(409);
+  });
+  it('rejects an invalid IIN for a new walk-in patient but reuses an existing record', async () => {
+    const slot = { id: 'slot-9', startAt: new Date(Date.now() + 3600000), doctor: { user: { firstName: 'Sam', lastName: 'Doctor' } } };
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(slot);
+    prismaMock.user.findUnique.mockResolvedValueOnce(null);
+    const rejected = await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK)).send({ ...input, iin: '123456789012' }).expect(400);
+    expect(rejected.body.error).toBe('Enter a valid IIN.');
+    expect(prismaMock.user.create).not.toHaveBeenCalled();
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(slot);
+    prismaMock.user.findUnique.mockResolvedValueOnce({ id: 'legacy', role: Role.PATIENT, email: 'legacy@example.test', firstName: 'Old', lastName: 'Record' });
+    await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(Role.FRONT_DESK)).send({ ...input, iin: '123456789012' }).expect(201);
   });
   it.each([Role.PATIENT, Role.DOCTOR])('rejects %s walk-ins', async role => { await request(app).post('/api/front-desk/walk-ins').set('Authorization', bearer(role)).send(input).expect(403); });
 });

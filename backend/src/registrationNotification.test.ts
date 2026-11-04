@@ -49,7 +49,8 @@ describe('registration confirmation notification', () => {
     expect(payload.html).toContain('Hello &lt;img src=x onerror=alert(1)&gt;,');
     expect(payload.html).not.toContain('<img src=x');
     expect(payload.html).not.toContain('href="javascript:');
-    expect(payload.html).not.toContain('Go to HappyPatient</a>');
+    // Unsafe configured URLs fall back to the public platform URL.
+    expect(payload.html).toContain('href="https://happypatient-f.onrender.com/"');
     expect(payload.text).toContain('Hello <img src=x onerror=alert(1)>,');
   });
 
@@ -65,12 +66,12 @@ describe('registration confirmation notification', () => {
     expect(JSON.stringify(result)).not.toMatch(/password|token|secret/i);
   });
 
-  it('omits the CTA link safely when FRONTEND_URL is missing', async () => {
+  it('links to the public platform URL when FRONTEND_URL is missing', async () => {
     await sendRegistrationConfirmation('patient@example.test', 'Taylor', 'test-resend-key');
 
     const [payload] = sendEmail.mock.calls[0];
-    expect(payload.html).not.toContain('href=');
-    expect(payload.text).not.toContain('Go to HappyPatient:');
+    expect(payload.html).toContain('href="https://happypatient-f.onrender.com/"');
+    expect(payload.text).toContain('Go to HappyPatient: https://happypatient-f.onrender.com/');
     expect(payload.html).toContain('Your account has been successfully created.');
   });
 
