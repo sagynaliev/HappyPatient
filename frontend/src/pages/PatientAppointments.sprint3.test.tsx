@@ -65,7 +65,7 @@ describe("Sprint 3 patient check-in and receipt (US16, US18)", () => {
     expect(screen.getByRole("button", { name: "Keep appointment" })).toHaveFocus();
     expect(authApi.cancelAppointment).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("dialog", { name: "Confirm cancellation" }).querySelector("button.pa-cancel-confirm")!);
-    expect(await screen.findByRole("status")).toHaveTextContent("Appointment cancelled.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Appointment cancelled");
     expect(authApi.cancelAppointment).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Cancel appointment with Dr. Sam Doctor" })).toBeEnabled());
