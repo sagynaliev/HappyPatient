@@ -24,14 +24,13 @@ describe("provider dashboard", () => {
     });
   });
 
-  it("derives the agenda and booking tabs from real schedule slots", async () => {
+  it("lists today's patients from the schedule and links each visit to its own page", async () => {
     render(<MemoryRouter><DoctorDashboard /></MemoryRouter>);
-    expect((await screen.findAllByText("Jamie Patient")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Available time")).toBeTruthy();
-    expect(screen.getByText("Completed consultations")).toBeTruthy();
-    expect(screen.getByText("Completion status is not tracked by the schedule API")).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: /All/ }));
-    expect(screen.getByRole("link", { name: "Details →" }).getAttribute("href")).toContain("slotId=visit-1");
+    const patient = await screen.findByText("Jamie Patient", { selector: "strong" });
+    expect(patient.closest("a")?.getAttribute("href")).toBe("/doctor/visits/visit-1");
+    expect(screen.getByText(/free slots still open today/)).toBeTruthy();
+    expect(screen.queryByText("Available time")).toBeNull();
+    expect(screen.getByText("Patients today")).toBeTruthy();
     expect(authApi.getSchedule).toHaveBeenCalledWith("doctor-1");
   });
 });

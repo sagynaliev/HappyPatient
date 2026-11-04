@@ -4,10 +4,10 @@ import "../styles/patientDashboard.css";
 const TZ = "Asia/Almaty";
 const dayKey = (value: string | Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(value));
 
-/** Month calendar that marks days with a booked visit (shared by the dashboard and My Appointments). */
-export function MiniCalendar({ marked }: { marked: Set<string> }) {
+/** Month calendar that marks days with a booked visit (dashboard, My Appointments, doctor schedule). With onSelect, days become buttons. */
+export function MiniCalendar({ marked, selected, onSelect }: { marked: Set<string>; selected?: string; onSelect?: (key: string) => void }) {
   const today = dayKey(new Date());
-  const [cursor, setCursor] = useState(() => { const [y, m] = today.split("-").map(Number); return { y, m }; });
+  const [cursor, setCursor] = useState(() => { const [y, m] = (selected ?? today).split("-").map(Number); return { y, m }; });
   const first = new Date(Date.UTC(cursor.y, cursor.m - 1, 1));
   const daysInMonth = new Date(Date.UTC(cursor.y, cursor.m, 0)).getUTCDate();
   const offset = (first.getUTCDay() + 6) % 7; // Monday first
@@ -30,7 +30,8 @@ export function MiniCalendar({ marked }: { marked: Set<string> }) {
         {cells.map((day, index) => {
           if (!day) return <span key={`e${index}`} />;
           const key = `${cursor.y}-${String(cursor.m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const classes = ["pt-day", key === today ? "is-today" : "", marked.has(key) ? "has-visit" : ""].filter(Boolean).join(" ");
+          const classes = ["pt-day", key === today ? "is-today" : "", marked.has(key) ? "has-visit" : "", key === selected ? "is-selected" : ""].filter(Boolean).join(" ");
+          if (onSelect) return <button type="button" key={key} className={classes} role="gridcell" aria-pressed={key === selected} aria-label={`${day}${marked.has(key) ? ", visit booked" : ""}`} onClick={() => onSelect(key)}>{day}</button>;
           return <span key={key} className={classes} role="gridcell" aria-label={marked.has(key) ? `${day}, visit booked` : undefined}>{day}</span>;
         })}
       </div>
