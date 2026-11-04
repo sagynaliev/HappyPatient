@@ -33,4 +33,13 @@ describe("provider dashboard", () => {
     expect(screen.getByText("Patients today")).toBeTruthy();
     expect(authApi.getSchedule).toHaveBeenCalledWith("doctor-1");
   });
+  it("shows at most three of today's patients and links to the rest", async () => {
+    const future = (hour: number) => new Date(Date.now() + hour * 3600e3).toISOString();
+    vi.mocked(authApi.getSchedule).mockResolvedValue({ doctor: { id: "doctor-1", office: "Clinic A", category: { name: "Dentistry" } }, slots: [1, 2, 3, 4, 5].map((n) => ({ id: `v${n}`, startAt: future(n / 10), endAt: future(n / 10 + 0.05), status: "BOOKED" as const, visitPurpose: "Visit", patient: { id: `p${n}`, firstName: "Pat", lastName: `${n}` } })) });
+    render(<MemoryRouter><DoctorDashboard /></MemoryRouter>);
+    await screen.findAllByText(/Pat \d/);
+    const list = document.querySelector(".dw-agenda")!;
+    expect(list.querySelectorAll("li")).toHaveLength(3);
+    expect(screen.getByRole("link", { name: /\+2 more visits today/ }).getAttribute("href")).toBe("/doctor/visits");
+  });
 });
