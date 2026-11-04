@@ -25,6 +25,8 @@ export default function DoctorVisitPage() {
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [notesTab, setNotesTab] = useState<"visit" | "earlier">("visit");
+  const [earlierVisit, setEarlierVisit] = useState<string>("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,7 +85,7 @@ export default function DoctorVisitPage() {
   const notesHint = slot.status === "BOOKED" && started
     ? "The patient has not checked in yet. Notes open once the front desk confirms arrival."
     : slot.status === "BOOKED"
-      ? "You can read the history now. Notes open after the visit starts and the patient checks in."
+      ? "Notes for this visit open after it starts and the patient checks in. Earlier records are under Earlier visits."
       : "";
 
   return (
@@ -148,9 +150,27 @@ export default function DoctorVisitPage() {
 
         <section className="dw-notes" aria-label="Medical notes">
           {slot.patient && canReadHistory ? <>
-            {notesHint && <p className="dw-notice"><Icon name="info" size={18} /> {notesHint}</p>}
+            <div className="dw-notes-bar">
+              <div className="dw-segment" role="tablist" aria-label="Notes">
+                <button type="button" role="tab" aria-selected={notesTab === "visit"} aria-pressed={notesTab === "visit"} onClick={() => setNotesTab("visit")}>This visit</button>
+                <button type="button" role="tab" aria-selected={notesTab === "earlier"} aria-pressed={notesTab === "earlier"} onClick={() => setNotesTab("earlier")}>Earlier visits{past.length ? ` (${past.length})` : ""}</button>
+              </div>
+              {notesTab === "earlier" && (
+                <label className="dw-earlier-select">
+                  <span className="sr-only">Choose an earlier visit</span>
+                  <select value={earlierVisit} onChange={(event) => setEarlierVisit(event.target.value)}>
+                    <option value="all">All earlier records</option>
+                    {past.slice().reverse().map((item) => <option key={item.id} value={item.id}>{shortDay(item.startAt)}, {clock(item.startAt)} · {item.visitPurpose || "Visit"}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+            {notesTab === "visit" && notesHint && <p className="dw-notice"><Icon name="info" size={18} /> {notesHint}</p>}
+            {notesTab === "earlier" && <p className="dw-notice"><Icon name="info" size={18} /> Read-only. {earlierVisit === "all" ? "All records from earlier visits, including other doctors’ notes." : "Notes written during the selected visit."}</p>}
             <Suspense fallback={<p className="dw-muted" role="status">Loading medical history…</p>}>
-              <MedicalHistory key={slot.id} patientId={slot.patient.id} appointmentId={canWriteNotes ? slot.id : undefined} />
+              {notesTab === "visit"
+                ? <MedicalHistory key={`visit-${slot.id}`} patientId={slot.patient.id} appointmentId={canWriteNotes ? slot.id : undefined} scope={{ only: slot.id }} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Use Add note to record tests, anamnesis or a conclusion for this visit." : "Notes written during this visit will appear here." }} />
+                : <MedicalHistory key={`earlier-${earlierVisit}`} patientId={slot.patient.id} scope={earlierVisit === "all" ? { except: slot.id } : { only: earlierVisit }} emptyText={{ title: "No earlier records", body: earlierVisit === "all" ? "This patient has no notes from earlier visits." : "No notes were written during that visit." }} />}
             </Suspense>
           </> : (
             <div className="mh-card dw-notes-locked">

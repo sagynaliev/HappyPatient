@@ -29,6 +29,14 @@ describe('medical history authorization and validation', () => {
   it.each([Role.ADMIN, Role.FRONT_DESK])('rejects %s reads', async role => { expect((await request(app).get('/medical-history').set('Authorization', token(role))).status).toBe(404); });
   it('rejects and audits anonymous reads', async () => { expect((await request(app).get('/medical-history')).status).toBe(401); expect(db.historyAccessAudit.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({actorId:null,actorRole:null,endpoint:'list',outcome:'denied'})})); });
   it('paginates and counts categories', async () => { db.$queryRaw.mockResolvedValue(Array.from({ length: 21 }, (_, index) => ({ id:String(index),doctorFirstName:'A',doctorLastName:'B' }))); db.medicalEntry.groupBy.mockResolvedValue([{ category: 'test', _count: 25 }]); const result = await request(app).get('/medical-history?offset=20').set('Authorization', token(Role.PATIENT)); expect(result.body.entries).toHaveLength(20); expect(result.body.hasMore).toBe(true); expect(result.body.counts.test).toBe(25); });
+  it('scopes the list and counts to one visit or to everything except it', async () => {
+    db.$queryRaw.mockResolvedValue([]); db.medicalEntry.groupBy.mockResolvedValue([]);
+    await request(app).get('/medical-history?patientId=patient&appointmentId=visit-1').set('Authorization', token(Role.DOCTOR)).expect(200);
+    expect(JSON.stringify(db.$queryRaw.mock.calls[0])).toContain('visit-1');
+    expect(db.medicalEntry.groupBy).toHaveBeenLastCalledWith(expect.objectContaining({ where: { patientId: 'patient', appointmentId: 'visit-1' } }));
+    await request(app).get('/medical-history?patientId=patient&excludeAppointmentId=visit-1').set('Authorization', token(Role.DOCTOR)).expect(200);
+    expect(db.medicalEntry.groupBy).toHaveBeenLastCalledWith(expect.objectContaining({ where: { patientId: 'patient', OR: [{ appointmentId: null }, { appointmentId: { not: 'visit-1' } }] } }));
+  });
   it('policy-checks individual entry reads and returns the same 404 denial', async () => {
     db.medicalEntry.findUnique.mockResolvedValue({id:'entry',patientId:'patient',doctorId:'doctor',category:'test',title:'Private title',body:'Private body',createdAt:new Date(),updatedAt:new Date(),doctor:{user:{firstName:'A',lastName:'B'}}});
     const allowed=await request(app).get('/medical-history/entry').set('Authorization',token(Role.DOCTOR));
