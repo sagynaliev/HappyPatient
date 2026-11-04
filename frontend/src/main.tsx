@@ -20,7 +20,9 @@ const AdminOperationsPage = lazy(() => import("./pages/AdminOperationsPage"));
 import Schedule from "./pages/Schedule";
 import DoctorProfilePage from "./pages/DoctorProfilePage";
 import ProfilePage from "./pages/ProfilePage";
-import DoctorAppointments from "./pages/DoctorAppointments";
+import DoctorSchedulePage from "./pages/DoctorSchedulePage";
+import DoctorVisitPage from "./pages/DoctorVisitPage";
+import { LegacyDoctorAppointments } from "./components/RouteGuards";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import FrontDeskPage from "./pages/FrontDeskPage";
 import "./styles/global.css";
@@ -70,8 +72,9 @@ createRoot(document.getElementById("root")!).render(
             </Route>
             <Route element={<ProtectedRoute roles={["DOCTOR"]} />}>
               <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
-              <Route path="/doctor/appointments" element={<DoctorAppointments />} />
-              <Route path="/doctor/schedule" element={<Schedule />} />
+              <Route path="/doctor/schedule" element={<DoctorSchedulePage />} />
+              <Route path="/doctor/visits/:slotId" element={<DoctorVisitPage />} />
+              <Route path="/doctor/appointments" element={<LegacyDoctorAppointments />} />
             </Route>
             <Route element={<ProtectedRoute roles={["FRONT_DESK", "ADMIN"]} />}>
               <Route path="/front-desk" element={<FrontDeskPage />} />

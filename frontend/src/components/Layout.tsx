@@ -35,8 +35,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   DOCTOR: [
     { to: "/doctor/dashboard", label: "Dashboard", icon: "grid" },
-    { to: "/doctor/appointments", label: "Appointments", icon: "calendar" },
-    { to: "/doctor/schedule", label: "My Schedule", icon: "clock" },
+    { to: "/doctor/schedule", label: "Schedule", icon: "calendar" },
   ],
   FRONT_DESK: [
     { to: "/front-desk", label: "Front desk", icon: "desk", end: true },

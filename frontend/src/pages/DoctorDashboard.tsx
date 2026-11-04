@@ -2,52 +2,30 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AppNotification, DoctorCancellation, DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
+import { addDays, clock, dayKey, formatDayKey, formatInClinic, weekOf } from "../lib/almaty";
 import { NotificationItem } from "../components/NotificationItem";
+import { Icon } from "../components/Icons";
 import { onNotificationsChanged } from "../lib/notificationEvents";
-import "../styles/doctorDashboard.css";
+import { patientName, slotKind } from "./DoctorSchedulePage";
+import "../styles/patientDashboard.css";
+import "../styles/doctorWorkspace.css";
 
-type BookingTab = "today" | "upcoming" | "past" | "all";
-const ZONE = "Asia/Almaty";
+function greeting() {
+  const hour = Number(formatInClinic(new Date(), { hour: "numeric", hourCycle: "h23" }));
+  return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+}
+const kindLabel = { free: "Available time", booked: "Booked", arrived: "Checked in", blocked: "Blocked" } as const;
 
-function localDate(value: Date | string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
-  const get = (part: string) => parts.find((item) => item.type === part)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
-function localTime(value: string): string {
-  return new Intl.DateTimeFormat("en-GB", { timeZone: ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value));
-}
-function formatDate(value: string, options: Intl.DateTimeFormatOptions = { weekday: "short", day: "numeric", month: "short" }): string {
-  return new Intl.DateTimeFormat("en-GB", { timeZone: ZONE, ...options }).format(new Date(value));
-}
-function slotName(slot: ScheduleSlot) {
-  return slot.patient ? `${slot.patient.firstName} ${slot.patient.lastName}` : slot.status === "FREE" ? "Available time" : "Patient details unavailable";
-}
-function statusTitle(slot: ScheduleSlot) {
-  return slot.status === "BOOKED" ? "Booked" : slot.status === "OCCUPIED" ? "Occupied" : "Free";
-}
-
+/** Doctor overview in the patient-dashboard style: today's patients, week load and alerts. */
 export default function DoctorDashboard() {
   const { user } = useAuth();
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<BookingTab>("today");
-  const [page, setPage] = useState(1);
   const [notes, setNotes] = useState<AppNotification[]>([]);
   const [cancellations, setCancellations] = useState<DoctorCancellation[]>([]);
   const request = useRef(0);
-  const today = localDate(new Date());
-  const weekStart = new Date(`${today}T00:00:00Z`);
-  weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
-  const weekStartKey = weekStart.toISOString().slice(0, 10);
-  const weekEndDate = new Date(`${weekStartKey}T00:00:00Z`);
-  weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 7);
-  const weekEnd = weekEndDate.toISOString().slice(0, 10);
-  const nextWeek = new Date(`${today}T00:00:00Z`);
-  nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
-  const nextWeekKey = nextWeek.toISOString().slice(0, 10);
 
   const load = useCallback(async () => {
     const current = ++request.current;
@@ -55,7 +33,6 @@ export default function DoctorDashboard() {
     setError("");
     try {
       const profile = await authApi.doctorProfile();
-      if (current !== request.current) return;
       const result = await authApi.getSchedule(profile.doctor.id);
       if (current !== request.current) return;
       setDoctor(result.doctor ?? profile.doctor);
@@ -67,103 +44,129 @@ export default function DoctorDashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-    return () => { request.current += 1; };
-  }, [load]);
+  useEffect(() => { void load(); return () => { request.current += 1; }; }, [load]);
 
   useEffect(() => {
-    const fetchNotes = () => {
-      const call = authApi.notifications?.();
-      if (call) call.then((result) => setNotes(result.notifications.slice(0, 4))).catch(() => setNotes([]));
+    const fetchAlerts = () => {
+      authApi.notifications?.()?.then((result) => setNotes(result.notifications.slice(0, 4))).catch(() => setNotes([]));
+      authApi.doctorCancellations?.()?.then((result) => setCancellations(result.cancellations.slice(0, 3))).catch(() => setCancellations([]));
     };
-    const fetchCancellations = () => {
-      const call = authApi.doctorCancellations?.();
-      if (call) call.then((result) => setCancellations(result.cancellations.slice(0, 5))).catch(() => setCancellations([]));
-    };
-    fetchNotes();
-    fetchCancellations();
-    return onNotificationsChanged(() => { fetchNotes(); fetchCancellations(); });
+    fetchAlerts();
+    return onNotificationsChanged(fetchAlerts);
   }, []);
 
-  const booked = useMemo(() => slots.filter((slot) => slot.status === "BOOKED"), [slots]);
-  const todaySlots = useMemo(() => slots.filter((slot) => localDate(slot.startAt) === today), [slots, today]);
-  const upcomingCount = booked.filter((slot) => localDate(slot.startAt) >= today && localDate(slot.startAt) < nextWeekKey).length;
-  const availableWeekCount = slots.filter((slot) => slot.status === "FREE" && Date.parse(slot.startAt) >= Date.now() && localDate(slot.startAt) >= weekStartKey && localDate(slot.startAt) < weekEnd).length;
+  const today = dayKey(new Date());
+  const now = Date.now();
+  const week = weekOf(today);
+  const todaySlots = useMemo(() => slots.filter((slot) => dayKey(slot.startAt) === today), [slots, today]);
+  const todayVisits = todaySlots.filter((slot) => slot.patient);
+  const remaining = todayVisits.filter((slot) => Date.parse(slot.endAt) > now && slot.status === "BOOKED");
+  const nextVisit = slots.find((slot) => slot.patient && slot.status === "BOOKED" && Date.parse(slot.endAt) > now);
+  const weekVisits = slots.filter((slot) => slot.patient && week.includes(dayKey(slot.startAt)));
+  const freeWeek = slots.filter((slot) => slot.status === "FREE" && Date.parse(slot.startAt) > now && week.includes(dayKey(slot.startAt))).length;
+  const arrivedToday = todayVisits.filter((slot) => slot.status === "OCCUPIED").length;
+  const perDay = week.map((key) => ({ key, visits: slots.filter((slot) => slot.patient && dayKey(slot.startAt) === key).length }));
+  const maxPerDay = Math.max(1, ...perDay.map((item) => item.visits));
+  const upcomingVisits = slots.filter((slot) => slot.patient && dayKey(slot.startAt) > today && dayKey(slot.startAt) <= addDays(today, 7)).length;
 
-  const counts = useMemo(() => {
-    const now = Date.now();
-    return {
-      today: booked.filter((slot) => localDate(slot.startAt) === today).length,
-      upcoming: booked.filter((slot) => Date.parse(slot.startAt) >= now).length,
-      past: booked.filter((slot) => Date.parse(slot.startAt) < now).length,
-      all: booked.length,
-    };
-  }, [booked, today]);
-  const filteredBookings = useMemo(() => {
-    const now = Date.now();
-    return booked.filter((slot) => {
-      const starts = Date.parse(slot.startAt);
-      return tab === "all" || (tab === "today" ? localDate(slot.startAt) === today : tab === "upcoming" ? starts >= now : starts < now);
-    });
-  }, [booked, tab, today]);
-  const pageSize = 4;
-  const pageCount = Math.max(1, Math.ceil(filteredBookings.length / pageSize));
-  const visibleBookings = filteredBookings.slice((page - 1) * pageSize, page * pageSize);
-
-  function selectTab(next: BookingTab) {
-    setTab(next);
-    setPage(1);
-  }
-
-  const firstName = user?.firstName || doctor?.user?.firstName || "Doctor";
+  const firstName = doctor?.user?.firstName || user?.firstName || "Doctor";
   const fullName = doctor?.user ? `Dr. ${doctor.user.firstName} ${doctor.user.lastName}` : `Dr. ${firstName}`;
+  const initials = `${doctor?.user?.firstName[0] ?? user?.firstName?.[0] ?? ""}${doctor?.user?.lastName[0] ?? user?.lastName?.[0] ?? ""}`.toUpperCase();
 
   return (
-    <div className="provider-dashboard">
-      <header className="pd-heading">
-        <div><p className="pd-eyebrow">Provider overview</p><h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {fullName}.</h1><p>{formatDate(new Date().toISOString(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {ZONE} (UTC+5)</p></div>
-        <Link className="pd-button pd-button-outline" to="/doctor/schedule"><span aria-hidden="true">▦</span> Manage Schedule</Link>
-      </header>
+    <div className="pt-page dw-dashboard" aria-label="Doctor dashboard">
+      {error && <div className="dw-alert" role="alert"><span>{error}</span><button type="button" className="dw-mini" onClick={() => void load()}>Retry</button></div>}
+      <div className="pt-layout">
+        <div className="pt-main">
+          <section className="pt-banner">
+            <div className="pt-banner-copy">
+              <span className="pt-date-chip"><Icon name="calendar" size={16} /> {formatInClinic(new Date(), { weekday: "long", day: "numeric", month: "long" })}</span>
+              <h1>{greeting()}, Dr. {doctor?.user?.lastName ?? firstName}!</h1>
+              <p>{loading ? "Loading your day…" : remaining.length ? `You have ${remaining.length} ${remaining.length === 1 ? "patient" : "patients"} left today${nextVisit && dayKey(nextVisit.startAt) === today ? `. Next: ${patientName(nextVisit)} at ${clock(nextVisit.startAt)}.` : "."}` : todayVisits.length ? "All of today’s patients have been seen or checked in." : "No patients booked for today."}</p>
+              <Link className="pt-banner-button" to="/doctor/schedule"><Icon name="calendar" size={18} /> Open schedule</Link>
+            </div>
+            <div className="pt-banner-art" aria-hidden="true">
+              <span className="pt-orb pt-orb-1" />
+              <span className="pt-orb pt-orb-2" />
+              <span className="pt-art-card"><Icon name="stethoscope" size={54} /></span>
+              <span className="pt-art-pill pt-art-pill-1"><Icon name="users" size={14} /> {todayVisits.length} today</span>
+              <span className="pt-art-pill pt-art-pill-2"><Icon name="check" size={14} /> {arrivedToday} checked in</span>
+            </div>
+          </section>
 
-      {error && <div className="pd-alert" role="alert"><span>{error}</span><button type="button" onClick={() => void load()}>Retry</button></div>}
+          <div className="pt-stats">
+            <div className="pt-card pt-stat"><span className="pt-stat-icon is-blue"><Icon name="users" /></span><div><strong>{loading ? "–" : todayVisits.length}</strong><span>Patients today</span></div></div>
+            <div className="pt-card pt-stat"><span className="pt-stat-icon is-violet"><Icon name="calendar" /></span><div><strong>{loading ? "–" : weekVisits.length}</strong><span>Visits this week</span></div></div>
+            <div className="pt-card pt-stat"><span className="pt-stat-icon is-green"><Icon name="clock" /></span><div><strong>{loading ? "–" : freeWeek}</strong><span>Free slots this week</span></div></div>
+          </div>
 
-      <section className="pd-metrics" aria-label="Schedule metrics">
-        <article className="pd-metric"><span>Today’s appointments</span><strong>{loading ? "—" : booked.filter((slot) => localDate(slot.startAt) === today).length}</strong><small>Booked visits for today</small></article>
-        <article className="pd-metric"><span>Upcoming appointments</span><strong>{loading ? "—" : upcomingCount}</strong><small>Next 7 days</small></article>
-        <article className="pd-metric"><span>Available time slots</span><strong>{loading ? "—" : availableWeekCount}</strong><small>This week</small></article>
-        <article className="pd-metric"><span>Completed consultations</span><strong aria-label="Not available">—</strong><small>Completion status is not tracked by the schedule API</small></article>
-      </section>
+          <div className="dw-dash-grid">
+            <section className="pt-card dw-today" aria-labelledby="dw-today-title">
+              <header className="pt-section-head"><h2 id="dw-today-title">Today’s appointments</h2><Link to="/doctor/schedule" className="pt-link">Full schedule</Link></header>
+              {!loading && todayVisits.length > 0 && <p className="dw-muted dw-today-note">{todaySlots.filter((slot) => slot.status === "FREE" && Date.parse(slot.startAt) > now).length} free slots still open today</p>}
+              {loading ? <div className="pt-empty" role="status">Loading today’s schedule…</div> : todayVisits.length === 0 ? (
+                todaySlots.length === 0
+                  ? <div className="pt-empty"><span className="pt-empty-icon"><Icon name="calendar" size={26} /></span><h3>No working hours today</h3><p>Add availability so patients can book you.</p><Link className="button small" to="/doctor/schedule?addAvailability=1">Add availability</Link></div>
+                  : <div className="pt-empty"><span className="pt-empty-icon"><Icon name="users" size={26} /></span><h3>No patients yet today</h3><p>{todaySlots.filter((slot) => slot.status === "FREE").length} free slots are open for booking.</p></div>
+              ) : (
+                <ol className="dw-agenda">
+                  {todayVisits.map((slot) => {
+                    const kind = slotKind(slot);
+                    const content = <>
+                      <time dateTime={slot.startAt}>{clock(slot.startAt)}</time>
+                      {slot.patient ? <span className="dw-avatar" aria-hidden="true">{`${slot.patient.firstName[0]}${slot.patient.lastName[0]}`}</span> : <span className="dw-avatar is-empty" aria-hidden="true"><Icon name="clock" size={16} /></span>}
+                      <span className="dw-patient-copy"><strong>{slot.patient ? patientName(slot) : kindLabel[kind]}</strong><small>{slot.patient ? slot.visitPurpose || "Consultation" : kind === "free" ? "Open for booking" : "Not bookable"}</small></span>
+                      <span className={`dw-pill is-${kind}`}>{kind === "free" ? "Free" : kindLabel[kind]}</span>
+                    </>;
+                    return <li key={slot.id} className={Date.parse(slot.endAt) <= now ? "is-past" : ""}>{slot.patient ? <Link to={`/doctor/visits/${encodeURIComponent(slot.id)}`} className="dw-agenda-row">{content}</Link> : <div className="dw-agenda-row">{content}</div>}</li>;
+                  })}
+                </ol>
+              )}
+            </section>
 
-      <section className="pd-main-grid">
-        <div className="pd-main-stack">
-        <article className="pd-card pd-timeline">
-          <div className="pd-card-heading"><div><h2>Today’s timeline</h2><p>{doctor?.office || "Office not listed"} · Schedule status in {ZONE}</p></div><Link to="/doctor/schedule">Open schedule →</Link></div>
-          {loading ? <div className="pd-loading" role="status">Loading today’s schedule…</div> : todaySlots.length === 0 ? <div className="pd-empty">No schedule slots found for today.</div> : <ol className="pd-timeline-list">{todaySlots.map((slot) => <li key={slot.id} className={`pd-agenda pd-agenda-${slot.status.toLowerCase()}`}>
-            <time dateTime={slot.startAt}>{localTime(slot.startAt)}</time><div className="pd-agenda-copy"><strong>{slot.status === "FREE" ? "Available time" : slotName(slot)}</strong><span>{slot.visitPurpose || (slot.status === "FREE" ? "Open for booking" : doctor?.category.name || "Scheduled visit")} · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min</span></div><span className={`pd-state pd-state-${slot.status.toLowerCase()}`}>{statusTitle(slot)}</span>
-          </li>)}</ol>}
-        </article>
-
-              <section className="pd-bookings pd-card" aria-labelledby="pd-booking-title">
-        <div className="pd-bookings-header"><div><h2 id="pd-booking-title">Upcoming bookings</h2><p>Booked visits from your schedule</p></div><Link to="/doctor/appointments">Manage appointments →</Link></div>
-        <div className="pd-tabs" role="tablist" aria-label="Filter bookings">{(["today", "upcoming", "past", "all"] as BookingTab[]).map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} className={tab === item ? "is-active" : ""} onClick={() => selectTab(item)}>{item[0].toUpperCase() + item.slice(1)} <span>{loading ? "—" : counts[item]}</span></button>)}</div>
-        {loading ? <div className="pd-loading" role="status">Loading bookings…</div> : visibleBookings.length === 0 ? <div className="pd-empty">No booked visits in this view.</div> : <div className="pd-table-wrap" tabIndex={0} role="region" aria-label="Upcoming bookings table"><table className="pd-table"><thead><tr><th scope="col">Patient</th><th scope="col">Date &amp; time · UTC+5</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Visit reason</th><th scope="col">Action</th></tr></thead><tbody>{visibleBookings.map((slot) => <tr key={slot.id}><td><strong>{slotName(slot)}</strong></td><td>{formatDate(slot.startAt)}<small>{localTime(slot.startAt)}–{localTime(slot.endAt)}</small></td><td>Not recorded</td><td><span className="pd-state pd-state-booked">Booked</span></td><td>{slot.visitPurpose || "Not provided"}</td><td><Link className="pd-details-link" to={`/doctor/appointments?slotId=${encodeURIComponent(slot.id)}`}>Details →</Link></td></tr>)}</tbody></table></div>}
-        <footer className="pd-pagination"><span>Showing {filteredBookings.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredBookings.length)} of {filteredBookings.length}</span><div><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>Previous</button><span aria-current="page">{page} / {pageCount}</span><button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page >= pageCount}>Next</button></div></footer>
-      </section>
+            <section className="pt-card dw-week" aria-labelledby="dw-week-title">
+              <header className="pt-section-head"><h2 id="dw-week-title">This week</h2><span className="dw-muted">{formatDayKey(week[0], { day: "numeric", month: "short" })} – {formatDayKey(week[6], { day: "numeric", month: "short" })}</span></header>
+              <div className="dw-week-bars" role="img" aria-label={`Visits per day: ${perDay.map((item) => `${formatDayKey(item.key, { weekday: "short" })} ${item.visits}`).join(", ")}`}>
+                {perDay.map((item) => (
+                  <div key={item.key} className={`dw-week-col${item.key === today ? " is-today" : ""}`}>
+                    <span className="dw-week-value">{item.visits}</span>
+                    <span className="dw-week-track"><span style={{ height: `${(item.visits / maxPerDay) * 100}%` }} /></span>
+                    <span className="dw-week-label">{formatDayKey(item.key, { weekday: "short" })}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="dw-muted">{upcomingVisits} booked {upcomingVisits === 1 ? "visit" : "visits"} in the next 7 days.</p>
+            </section>
+          </div>
         </div>
-        <aside className="pd-side-stack">
-          <section className="pd-card pd-actions"><h2>Quick actions</h2><Link className="pd-button pd-button-primary" to="/doctor/schedule?addAvailability=1">+ Add availability</Link><Link className="pd-button pd-button-outline" to="/doctor/appointments">Review bookings</Link><Link className="pd-button pd-button-outline" to="/profile">Edit my profile</Link></section>
-          <section className="pd-card dd-cancellations"><h2>Recent cancellations</h2>{cancellations.length === 0 ? <p className="dd-muted">No cancelled visits.</p> : <ul className="notification-panel-list">{cancellations.map((item) => {
-            const notification: AppNotification = { id: item.id, slotId: item.slotId, type: "CANCELLED", channel: "in-app", status: "RECORDED", subject: `${item.patientName} · ${formatDate(item.startAt)}, ${localTime(item.startAt)} — cancelled`, message: `${item.cancelledBy === "PATIENT" ? "Cancelled by the patient" : "Cancelled by you"}: ${item.reason}`, createdAt: item.createdAt };
-            return <NotificationItem key={item.id} item={notification} role="DOCTOR" />;
-          })}</ul>}</section>
-          <section className="pd-card pd-notifications"><h2>Notifications</h2>{notes.length === 0 ? <div className="pd-notification-empty"><span aria-hidden="true">♧</span><p>No notifications yet. New bookings, cancellations and arrivals will appear here.</p></div> : <ul className="notification-panel-list">{notes.map((note) => <NotificationItem key={note.id} item={note} role="DOCTOR" />)}</ul>}</section>
+
+        <aside className="pt-side">
+          <section className="pt-card pt-profile">
+            <header className="pt-profile-head"><h2>My profile</h2><Link to="/profile" className="pt-round" aria-label="Edit profile"><Icon name="file" size={16} /></Link></header>
+            <div className="pt-profile-body">
+              <span className="pt-avatar">{initials}</span>
+              <div><strong>{fullName}</strong><span>{doctor?.category.name ?? "Doctor"}</span></div>
+            </div>
+            <dl className="pt-profile-facts">
+              <div><dt>Office</dt><dd>{doctor?.office || "Not listed"}</dd></div>
+              <div><dt>Next patient</dt><dd>{nextVisit ? `${patientName(nextVisit)} · ${dayKey(nextVisit.startAt) === today ? "" : `${formatInClinic(nextVisit.startAt, { day: "numeric", month: "short" })}, `}${clock(nextVisit.startAt)}` : "None booked"}</dd></div>
+            </dl>
+          </section>
+
+          <section className="pt-card dw-alerts" aria-labelledby="dw-alerts-title">
+            <header className="pt-section-head"><h2 id="dw-alerts-title">Alerts</h2></header>
+            {cancellations.length === 0 && notes.length === 0 ? <p className="dw-muted">New bookings, cancellations and arrivals will appear here.</p> : (
+              <ul className="notification-panel-list">
+                {cancellations.map((item) => {
+                  const notification: AppNotification = { id: item.id, slotId: item.slotId, type: "CANCELLED", channel: "in-app", status: "RECORDED", subject: `${item.patientName} cancelled`, message: `${formatInClinic(item.startAt, { day: "numeric", month: "short" })}, ${clock(item.startAt)} · ${item.reason}`, createdAt: item.createdAt };
+                  return <NotificationItem key={`c-${item.id}`} item={notification} role="DOCTOR" />;
+                })}
+                {notes.map((note) => <NotificationItem key={note.id} item={note} role="DOCTOR" />)}
+              </ul>
+            )}
+          </section>
         </aside>
-      </section>
-
-
-
-      <aside className="pd-disclaimer">Patient information is shown only through the existing doctor-authorized schedule endpoints. Appointment state is reported as booked or available.</aside>
+      </div>
     </div>
   );
 }

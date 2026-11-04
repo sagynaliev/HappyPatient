@@ -13,7 +13,7 @@ export function kindOf(type: string): NotificationKind {
 const KIND_ICON: Record<NotificationKind, string> = { booked: "✓", cancelled: "✕", "checked-in": "➜", system: "i", security: "!" };
 const destinationFor = (item: AppNotification, role: Role) => {
   if (!item.slotId) return "/profile";
-  if (role === "DOCTOR") return `/doctor/appointments?appointmentId=${encodeURIComponent(item.slotId)}`;
+  if (role === "DOCTOR") return `/doctor/visits/${encodeURIComponent(item.slotId)}`;
   if (role === "FRONT_DESK") return "/front-desk";
   if (role === "ADMIN") return "/admin/appointments";
   return `/appointments?appointmentId=${encodeURIComponent(item.slotId)}`;

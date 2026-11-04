@@ -1,0 +1,170 @@
+/* Doctor workspace: schedule (calendar + day list), visit page and dashboard extras.
+   Same tokens and card language as the patient dashboard (patientDashboard.css). */
+.dw-page { display: grid; gap: 20px; width: min(100%, 1280px); margin: 0 auto; color: var(--text-primary); }
+.dw-card { padding: 20px 22px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-card); }
+.dw-card h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.dw-muted { margin: 0; color: var(--text-secondary); font-size: 14px; }
+.dw-eyebrow { margin: 0 0 4px; color: var(--primary); font-size: 13px; font-weight: 600; }
+.dw-alert { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px solid #f6d3d3; border-radius: 14px; background: #fbeceb; color: #b42318; }
+.dw-back { justify-self: start; color: var(--primary); font-size: 14px; font-weight: 600; }
+.dw-back:hover { text-decoration: underline; }
+
+/* Header */
+.dw-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.dw-head h1 { margin: 0; font-size: clamp(30px, 3.2vw, 40px); font-weight: 600; letter-spacing: -0.04em; }
+.dw-head p { margin: 4px 0 0; color: var(--text-secondary); }
+.dw-head-actions { display: flex; gap: 10px; }
+
+/* Buttons */
+.dw-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; border: 0; border-radius: 999px; background: var(--primary); color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.dw-button:hover { background: var(--primary-hover); }
+.dw-button:disabled { opacity: .6; cursor: default; }
+.dw-button.is-danger { background: #c0262d; }
+.dw-mini { min-height: 34px; padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--primary-deep); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.dw-mini:hover { background: var(--accent); }
+.dw-mini.is-danger { color: #b42318; }
+.dw-mini.is-danger:hover { border-color: #f6d3d3; background: #fdecec; }
+.dw-round { display: grid; width: 34px; height: 34px; place-items: center; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--text-primary); font-size: 18px; cursor: pointer; }
+.dw-round:hover { background: var(--accent); }
+.dw-segment { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--page-background); }
+.dw-segment button { min-height: 32px; padding: 4px 14px; border: 0; border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.dw-segment button[aria-pressed="true"] { background: var(--surface); color: var(--primary-deep); box-shadow: 0 1px 3px rgb(16 27 59 / 12%); }
+
+/* Status pills, avatars */
+.dw-pill { flex: 0 0 auto; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.dw-pill.is-booked { background: var(--accent); color: var(--primary-deep); }
+.dw-pill.is-arrived { background: #e3f7ee; color: #0f7a57; }
+.dw-pill.is-free { background: #f1f2f5; color: #5a6687; }
+.dw-pill.is-blocked { background: #fdf3e6; color: #b45309; }
+.dw-avatar { display: grid; flex: 0 0 38px; width: 38px; height: 38px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--primary-deep); font-size: 13px; font-weight: 600; }
+.dw-avatar.is-empty { background: #f1f2f5; color: #8a93a8; }
+.dw-avatar.is-large { flex-basis: 56px; width: 56px; height: 56px; font-size: 18px; }
+.dw-count { display: grid; min-width: 26px; height: 26px; place-items: center; padding: 0 8px; border-radius: 999px; background: var(--accent); color: var(--primary-deep); font-size: 13px; font-weight: 600; }
+
+/* Summary row */
+.dw-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.dw-summary > div { display: grid; grid-template-columns: 46px 1fr; grid-template-rows: auto auto; column-gap: 14px; align-items: center; padding: 16px 20px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-card); }
+.dw-summary strong { font-size: 24px; font-weight: 600; line-height: 1.15; }
+.dw-summary small { grid-column: 2; color: var(--text-secondary); font-size: 13px; }
+.dw-summary-icon { display: grid; grid-row: span 2; width: 46px; height: 46px; place-items: center; border-radius: 14px; }
+.dw-summary-icon.is-blue { background: var(--accent); color: var(--primary); }
+.dw-summary-icon.is-violet { background: #efeafe; color: #6a4fd8; }
+.dw-summary-icon.is-green { background: #e3f7ee; color: #0f8a63; }
+
+/* Schedule layout */
+.dw-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+.dw-side { display: grid; gap: 20px; min-width: 0; }
+.dw-side .pt-day { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13.5px; cursor: pointer; }
+.dw-side .pt-day:hover { background: var(--accent); }
+.dw-side .pt-day.is-selected { box-shadow: inset 0 0 0 2px var(--primary); }
+.dw-side .pt-day.is-today { background: var(--primary); color: #fff; }
+.dw-day-list header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.dw-day-list ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.dw-patient-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 14px; color: inherit; }
+.dw-patient-row:hover { background: #f6f8ff; }
+.dw-patient-copy { display: grid; flex: 1; min-width: 0; }
+.dw-patient-copy strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dw-patient-copy small { overflow: hidden; color: var(--text-secondary); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Calendar */
+.dw-calendar { display: grid; gap: 14px; min-width: 0; padding-bottom: 14px; }
+.dw-calendar-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.dw-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dw-nav h2 { margin-left: 6px; }
+.dw-legend { display: flex; gap: 12px; margin: 0 6px 0 0; padding: 0; list-style: none; color: var(--text-secondary); font-size: 12.5px; }
+.dw-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.dw-legend span { width: 10px; height: 10px; border-radius: 3px; }
+.dw-legend .is-free { border: 1px dashed #a3acc2; background: #fff; }
+.dw-legend .is-booked { background: var(--primary); }
+.dw-legend .is-arrived { background: #12935f; }
+.dw-grid-scroll { overflow: auto; max-height: 680px; border: 1px solid var(--border); border-radius: 16px; }
+.dw-grid { display: grid; min-width: min-content; }
+.dw-corner, .dw-day-head { position: sticky; top: 0; z-index: 3; background: #f6f8ff; border-bottom: 1px solid var(--border); }
+.dw-corner { left: 0; z-index: 4; }
+.dw-day-head { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 8px; border: 0; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.dw-day-head strong { display: grid; min-width: 30px; height: 30px; place-items: center; border-radius: 10px; color: var(--text-primary); font-size: 15px; }
+.dw-day-head.is-today strong { background: var(--primary); color: #fff; }
+.dw-day-head.is-selected:not(.is-today) strong { box-shadow: inset 0 0 0 2px var(--primary); }
+.dw-times { position: sticky; left: 0; z-index: 2; background: var(--surface); }
+.dw-times span { position: absolute; right: 10px; transform: translateY(-50%); color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.dw-times span:first-child { transform: none; }
+.dw-column { position: relative; border-left: 1px solid var(--border); }
+.dw-column.is-today { background: #fbfcff; }
+.dw-line { position: absolute; right: 0; left: 0; border-top: 1px dashed #eef1f8; }
+.dw-line.is-hour { border-top: 1px solid #e8ecf6; }
+.dw-now { position: absolute; right: 0; left: 0; z-index: 2; border-top: 2px solid #f0627a; }
+.dw-now::before { position: absolute; top: -5px; left: -4px; width: 8px; height: 8px; border-radius: 50%; background: #f0627a; content: ""; }
+.dw-column-empty { position: absolute; top: 12px; right: 0; left: 0; color: #a3acc2; font-size: 12px; text-align: center; }
+.dw-event { position: absolute; right: 6px; left: 6px; z-index: 1; display: grid; align-content: start; gap: 2px; overflow: hidden; padding: 6px 10px; border: 1px solid transparent; border-radius: 12px; font: inherit; text-align: left; cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.dw-event:hover { z-index: 2; box-shadow: 0 8px 20px rgb(16 27 59 / 12%); transform: translateY(-1px); }
+.dw-event strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dw-event small { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.dw-event.is-free { border: 1px dashed #c9d1e4; background: #fff; color: #5a6687; }
+.dw-event.is-free strong { font-weight: 500; }
+.dw-event.is-booked { border-color: #c9d8ff; background: #edf2ff; color: var(--primary-deep); box-shadow: inset 3px 0 0 var(--primary); }
+.dw-event.is-arrived { border-color: #cdeedd; background: #e9f7f0; color: #0f6b4c; box-shadow: inset 3px 0 0 #12935f; }
+.dw-event.is-blocked { border-color: #fbe3c4; background: repeating-linear-gradient(45deg, #fdf3e6, #fdf3e6 6px, #fbecd6 6px, #fbecd6 12px); color: #92400e; }
+.dw-event.is-past { opacity: .55; }
+.dw-grid-loading { padding: 40px 0; color: var(--text-secondary); text-align: center; }
+.dw-empty-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding: 4px 0; color: var(--text-secondary); }
+.dw-empty-cta p { margin: 0; }
+
+/* Visit page */
+.dw-visit-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.dw-visit-title { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.dw-visit-icon { display: grid; flex: 0 0 56px; width: 56px; height: 56px; place-items: center; border-radius: 18px; background: var(--accent); color: var(--primary); }
+.dw-visit-head h1 { margin: 0; font-size: clamp(24px, 2.6vw, 32px); font-weight: 600; letter-spacing: -0.03em; }
+.dw-visit-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0 0; color: var(--text-secondary); font-size: 14px; }
+.dw-visit-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.dw-visit-actions { display: flex; align-items: center; gap: 10px; }
+.dw-cancel { display: grid; flex-basis: 100%; gap: 8px; padding: 14px; border: 1px solid #f6d3d3; border-radius: 14px; background: #fdf6f6; }
+.dw-cancel label { font-size: 14px; font-weight: 600; }
+.dw-cancel textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; font: inherit; resize: vertical; }
+.dw-cancel-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dw-visit-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
+.dw-visit-side { display: grid; gap: 20px; min-width: 0; }
+.dw-patient-id { display: flex; align-items: center; gap: 14px; margin: 14px 0 6px; }
+.dw-patient-id div { display: grid; min-width: 0; }
+.dw-patient-id strong { font-size: 17px; font-weight: 600; }
+.dw-patient-id small { overflow-wrap: anywhere; color: var(--text-secondary); font-size: 13px; }
+.dw-facts { display: grid; margin: 10px 0 0; }
+.dw-facts > div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.dw-facts dt { color: var(--text-secondary); }
+.dw-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.dw-notes { display: grid; gap: 16px; min-width: 0; }
+.dw-notice { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 14px 16px; border: 1px solid #dbe5ff; border-radius: 14px; background: #edf2ff; color: var(--primary-deep); font-size: 14px; }
+.dw-notice svg { flex: 0 0 auto; margin-top: 1px; }
+
+/* Dashboard extras */
+.dw-dashboard .pt-banner h1 { font-size: clamp(26px, 2.8vw, 34px); }
+.dw-dash-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.dw-today, .dw-week, .dw-alerts { padding: 22px 24px; }
+.dw-today-note { margin: -8px 0 10px; font-size: 13px; }
+.dw-agenda { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.dw-agenda-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-radius: 14px; color: inherit; }
+a.dw-agenda-row:hover { background: #f6f8ff; }
+.dw-agenda time { flex: 0 0 48px; color: var(--text-primary); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dw-agenda li.is-past { opacity: .55; }
+.dw-week-bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 170px; margin-bottom: 12px; }
+.dw-week-col { display: grid; grid-template-rows: auto 1fr auto; justify-items: center; gap: 6px; height: 100%; }
+.dw-week-value { font-size: 12.5px; font-weight: 600; }
+.dw-week-track { position: relative; display: flex; align-items: flex-end; width: 100%; max-width: 30px; height: 100%; border-bottom: 2px solid #e8ecf6; }
+.dw-week-track span { display: block; width: 100%; border-radius: 10px 10px 4px 4px; background: #b8cafc; }
+.dw-week-col.is-today .dw-week-track span { background: var(--primary); }
+.dw-week-label { color: var(--text-secondary); font-size: 12px; }
+.dw-week-col.is-today .dw-week-label { color: var(--primary); font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .dw-layout, .dw-visit-grid, .dw-dash-grid { grid-template-columns: minmax(0, 1fr); }
+  .dw-side { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .dw-visit-grid .dw-notes { order: -1; }
+}
+@media (max-width: 700px) {
+  .dw-summary { gap: 8px; }
+  .dw-summary > div { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  .dw-summary-icon { display: none; }
+  .dw-summary small { grid-column: 1; font-size: 12px; line-height: 1.3; }
+  .dw-legend { display: none; }
+  .dw-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .dw-visit-actions { width: 100%; justify-content: space-between; }
+}

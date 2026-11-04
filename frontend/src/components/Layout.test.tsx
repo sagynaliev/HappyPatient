@@ -48,8 +48,8 @@ describe("shared header", () => {
     expect(screen.getByRole("link", { name: "Profile: Alikhan S." })).toBeInTheDocument();
     expect(screen.queryByText("ASAlikhan S.")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Dashboard" })).toHaveLength(1);
-    expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("href", "/doctor/appointments");
-    expect(screen.getByRole("link", { name: "My Schedule" })).toHaveAttribute("href", "/doctor/schedule");
+    expect(screen.queryByRole("link", { name: "Appointments" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/doctor/schedule");
   });
 
   it("shows patient navigation without doctor-only links", () => {
