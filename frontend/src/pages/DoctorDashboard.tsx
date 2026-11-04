@@ -47,6 +47,11 @@ export default function DoctorDashboard() {
   const week = weekOf(today);
   const todaySlots = useMemo(() => slots.filter((slot) => dayKey(slot.startAt) === today), [slots, today]);
   const todayVisits = todaySlots.filter((slot) => slot.patient);
+  // Keep the card short: the next three visits (or the last three once the day is over), the rest are on the Visits page.
+  const firstUpcoming = Math.max(0, todayVisits.findIndex((slot) => Date.parse(slot.endAt) > now));
+  const startIndex = todayVisits.some((slot) => Date.parse(slot.endAt) > now) ? Math.min(firstUpcoming, Math.max(0, todayVisits.length - 3)) : Math.max(0, todayVisits.length - 3);
+  const shownToday = todayVisits.slice(startIndex, startIndex + 3);
+  const hiddenToday = todayVisits.length - shownToday.length;
   const remaining = todayVisits.filter((slot) => Date.parse(slot.endAt) > now && slot.status === "BOOKED");
   const nextVisit = slots.find((slot) => slot.patient && slot.status === "BOOKED" && Date.parse(slot.endAt) > now);
   const weekVisits = slots.filter((slot) => slot.patient && week.includes(dayKey(slot.startAt)));
@@ -108,7 +113,7 @@ export default function DoctorDashboard() {
                   : <div className="pt-empty"><span className="pt-empty-icon"><Icon name="users" size={26} /></span><h3>No patients yet today</h3><p>{todaySlots.filter((slot) => slot.status === "FREE").length} free slots are open for booking.</p></div>
               ) : (
                 <ol className="dw-agenda">
-                  {todayVisits.map((slot) => {
+                  {shownToday.map((slot) => {
                     const kind = slotKind(slot);
                     const content = <>
                       <time dateTime={slot.startAt}>{clock(slot.startAt)}</time>
@@ -120,6 +125,7 @@ export default function DoctorDashboard() {
                   })}
                 </ol>
               )}
+              {!loading && hiddenToday > 0 && <Link className="dw-more" to="/doctor/visits">+{hiddenToday} more {hiddenToday === 1 ? "visit" : "visits"} today <Icon name="arrow-right" size={15} /></Link>}
             </section>
 
             <section className="pt-card dw-week" aria-labelledby="dw-week-title">
