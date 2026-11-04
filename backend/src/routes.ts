@@ -61,7 +61,7 @@ router.post('/auth/forgot-password', async (req, res) => {
           from: 'onboarding@resend.dev',
           to: user.email,
           subject: 'Your HappyPatient password reset code',
-          ...brandedEmail({ title: 'Your password reset code', message: 'Use this code to reset your HappyPatient password.', details: [['Verification code', code]], nextStep: 'This code expires in 10 minutes and can only be used once.' }),
+          ...brandedEmail({ title: 'Your password reset code', message: 'Use this code to reset your HappyPatient password.', code, tone: 'info', status: 'Security code', nextStep: 'This code expires in 10 minutes and can only be used once. If you did not ask to reset your password, you can ignore this email.' }),
         });
         if (error) {
           console.error('Resend rejected password recovery email', {

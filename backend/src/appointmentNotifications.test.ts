@@ -20,7 +20,7 @@ describe('appointment delivery', () => {
     const [payload, options] = mocks.send.mock.calls[0];
     expect(payload).toMatchObject({ to: input.email, subject: 'Visit Check-in Confirmed | Happy Patient' });
     expect(payload.html).toContain('You&#39;re checked in!');
-    expect(payload.text).toContain('Checked In');
+    expect(payload.text).toContain('Status: Checked in');
     expect(options.idempotencyKey).toContain(input.receipt.id);
     expect(payload.attachments[0].filename).toBe('HappyPatient-registration-HP-123.pdf');
     const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');

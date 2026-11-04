@@ -4,9 +4,9 @@ const data = { doctor: 'Dr. Әлия <script>alert(1)</script>', reference: 'HP-
 describe('branded appointment templates', () => {
   it.each<PatientEmailEvent>(['BOOKED', 'CANCELLED', 'DOCTOR_CANCELLED', 'CHECKED_IN'])('renders %s with escaped values, real details and Almaty dates', event => {
     const email = appointmentEmail(event, data);
-    expect(email.html).toContain('#2D5FF5');
-    expect(email.html).toContain('#111D40');
-    expect(email.html).toContain('#F3F6FF');
+    expect(email.html).toContain('#2B63F6');
+    expect(email.html).toContain('#101B3B');
+    expect(email.html).toContain('#F2F5FC');
     expect(email.html).toContain('max-width:600px');
     expect(email.html).toContain('name="viewport"');
     expect(email.html).toContain('<!--[if mso]>');
@@ -22,7 +22,7 @@ describe('branded appointment templates', () => {
       expect(email.html).toContain('Manage appointment');
       expect(email.html).toContain('https://happy.example/appointments?appointmentId=slot%2F123');
       expect(email.text).toContain('Manage appointment: https://happy.example/appointments?appointmentId=slot%2F123');
-      expect(email.html).toContain('M10.5 18h4l2-3 2.8 6 2-3h4.2');
+      expect(email.html).toContain('&#9829;');
     }
     if (event === 'CANCELLED' || event === 'DOCTOR_CANCELLED') {
       expect(email.html).toContain('Book another appointment');
@@ -32,6 +32,20 @@ describe('branded appointment templates', () => {
     if (event === 'DOCTOR_CANCELLED') expect(email.text).toContain('Cancelled by doctor');
     if (event === 'CANCELLED') expect(email.text).toContain('Cancelled by patient');
     if (event === 'CHECKED_IN') expect(email.text).toContain('attached as a PDF');
+  });
+
+  it('uses colour by meaning: green when done, red when cancelled, blue for reminders', () => {
+    expect(appointmentEmail('BOOKED', data).html).toContain('#0F8A63');
+    expect(appointmentEmail('CHECKED_IN', data).html).toContain('#0F8A63');
+    for (const event of ['CANCELLED', 'DOCTOR_CANCELLED'] as const) {
+      const { html } = appointmentEmail(event, data);
+      expect(html).toContain('#D63B42');
+      expect(html).not.toContain('#0F8A63');
+    }
+    const reminder = reminderEmail(data).html;
+    expect(reminder).toContain('Reminder');
+    expect(reminder).not.toContain('#D63B42');
+    expect(reminder).not.toContain('#0F8A63');
   });
 });
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Resend } from 'resend';
 import { prisma } from './prisma';
 import { config } from './config';
-import { brandedEmail } from './email/layout';
+import { brandedEmail, EmailTone } from './email/layout';
 import { appointmentEmail, reminderEmail } from './email/appointment';
 import { registrationReceiptPdf, RegistrationReceiptData } from './registrationReceipt';
 
@@ -18,6 +18,12 @@ export const formatAlmaty = (value: Date) =>
  * RESEND_API_KEY are available, also emails it. Never throws: a failed notification must not
  * break the booking, cancellation or check-in that triggered it.
  */
+// Colour meaning for emails without their own template: done = green, needs attention = amber.
+const systemTones: Partial<Record<NotificationType, EmailTone>> = {
+  WELCOME: 'success', SCHEDULE_CREATED: 'success', PROFILE_UPDATED: 'info',
+  PASSWORD_CHANGED: 'warning', APPOINTMENT_RELEASED: 'warning', CANCELLED: 'danger', BOOKED: 'success', CHECKED_IN: 'success',
+};
+
 export async function notifyUser(input: {
   userId: string;
   type: NotificationType;
@@ -47,7 +53,7 @@ export async function notifyUser(input: {
     let outcome: { status: string; error?: string; deliveredAt?: Date };
     try {
       if (input.type === 'CHECKED_IN' && !input.receipt) throw new Error('Registration receipt required');
-      const content = input.html ? { html: input.html, text: input.text ?? input.message } : brandedEmail({ title: input.subject, message: input.message });
+      const content = input.html ? { html: input.html, text: input.text ?? input.message } : brandedEmail({ title: input.subject, message: input.message, tone: systemTones[input.type] });
       const attachments = input.receipt ? [{ filename: `HappyPatient-registration-${input.receipt.reference}.pdf`, content: registrationReceiptPdf(input.receipt), contentType: 'application/pdf' }] : undefined;
       const result = await new Resend(config.RESEND_API_KEY).emails.send({ from: 'onboarding@resend.dev', to: input.email, subject: input.subject, ...content, attachments }, { idempotencyKey: base.eventKey });
       outcome = result.error ? { status: 'FAILED', error: 'Email provider rejected delivery' } : { status: 'DELIVERED', deliveredAt: new Date() };
