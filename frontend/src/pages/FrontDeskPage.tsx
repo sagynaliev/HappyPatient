@@ -146,7 +146,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
     </div>
     {walkInConfirmation && view === "walk-in" && <FloatingNotice
       title="Walk-in registered"
-      message={`${walkInConfirmation.patientName} · ${walkInConfirmation.doctorName} · ${dateText(walkInConfirmation.startAt)} ${timeText(walkInConfirmation.startAt)}–${timeText(walkInConfirmation.endAt)} · ${walkInConfirmation.office || walkInConfirmation.specialty} · ${walkInConfirmation.status === "OCCUPIED" ? "Checked in" : "Booked"} · Booking ID ${walkInConfirmation.reference}`}
+      message={`${walkInConfirmation.patientName} · ${timeText(walkInConfirmation.startAt)} with ${walkInConfirmation.doctorName}`}
       actions={[
         { label: "View receipt", variant: "outline", onClick: () => { if (walkInConfirmation.status !== "OCCUPIED") { setError("The receipt is available after check-in."); return; } void authApi.receipt(walkInConfirmation.slotId).then(({ receipt: result }) => setReceipt(result)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Receipt is not available.")); } },
         { label: "Register another", variant: "primary", onClick: () => setWalkInConfirmation(null) },

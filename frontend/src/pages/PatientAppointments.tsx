@@ -554,7 +554,7 @@ export default function PatientAppointments() {
         </div>
       )}
 
-      {pendingCancellation && <FloatingNotice title="Appointment cancelled." actions={[{ label: "Undo", variant: "primary", onClick: undoCancellation }]} timeoutMs={10_000} pauseOnInteraction={false} onTimeout={() => { void commitCancellation(pendingCancellation); }} />}
+      {pendingCancellation && <FloatingNotice tone="error" title="Appointment cancelled" message="Changed your mind? You can undo for a few seconds." actions={[{ label: "Undo", variant: "primary", onClick: undoCancellation }]} timeoutMs={10_000} pauseOnInteraction={false} onTimeout={() => { void commitCancellation(pendingCancellation); }} />}
 
       {receipt && <ReceiptDialog receipt={receipt} onClose={() => setReceipt(null)} />}
     </section>
