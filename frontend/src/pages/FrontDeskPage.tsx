@@ -7,6 +7,7 @@ import "../styles/frontDesk.css";
 import { isValidPhone } from "../lib/iin";
 import { ReceiptDialog } from "../components/ReceiptView";
 import { FloatingNotice } from "../components/FloatingNotice";
+import { toast } from "../lib/toast";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty" }).format(new Date());
 const dateText = (value: string) => new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "Asia/Almaty" }).format(new Date(value));
@@ -62,13 +63,13 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
       setPurpose("Walk-in consultation");
       await loadAppointments();
       if (result.slot.status === "OCCUPIED") setReceipt((await authApi.receipt(result.slot.id)).receipt);
-    } catch (cause: unknown) { setError(cause instanceof Error ? cause.message : "Walk-in registration failed."); }
+    } catch (cause: unknown) { setError(cause instanceof Error ? cause.message : "Walk-in registration failed."); toast.error("Walk-in not registered", cause instanceof Error ? cause.message : undefined); }
     finally { setBusy(false); }
   }
 
   async function checkIn(appointment: FrontDeskAppointment) {
     setBusy(true); setError(""); setMessage(""); setReceipt(null);
-    try { const result = await authApi.checkInAppointment(appointment.id); setMessage(`Check-in confirmed for ${result.reference}.`); setReceipt((await authApi.receipt(appointment.id)).receipt); await loadAppointments(); }
+    try { const result = await authApi.checkInAppointment(appointment.id); setMessage(`Check-in confirmed for ${result.reference}.`); toast.success("Check-in confirmed", result.reference); setReceipt((await authApi.receipt(appointment.id)).receipt); await loadAppointments(); }
     catch (cause: unknown) { setError(cause instanceof Error ? cause.message : "Check-in failed."); }
     finally { setBusy(false); }
   }

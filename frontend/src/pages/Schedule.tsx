@@ -9,6 +9,7 @@ import { DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
 import { notifyNotificationsChanged } from "../lib/notificationEvents";
 import { AddAvailabilityModal } from "../components/AddAvailabilityModal";
 import "../styles/providerAvailabilityDialog.css";
+import { toast } from "../lib/toast";
 
 const today = () => {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -218,6 +219,7 @@ export default function Schedule() {
       const result = await authApi.updateOffice(office);
       setDoctor(result.doctor);
       setMessage("Office location saved.");
+      toast.success("Office location saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save office location.");
     } finally { setBusy(false); }
@@ -243,6 +245,7 @@ export default function Schedule() {
         new Date(`${workingDate}T00:00:00.000Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }),
       );
       setMessage(`Schedule created — ${result.created} slots across ${selectedDayNames.join(", ")} (${startTime}–${endTime}).`);
+      toast.success("Schedule published", `${result.created} slots across ${selectedDayNames.join(", ")} (${startTime}–${endTime}).`);
       const firstDate = selectedDates[0];
       setDate(firstDate);
       closeAvailabilityDialog();
@@ -334,13 +337,16 @@ export default function Schedule() {
       });
       clearSlotSelection();
       setMessage("Appointment booked.");
+      toast.success(rescheduleId && rescheduleFrom ? "Appointment changed" : "Appointment confirmed", `${doctorName} · ${displayDate(selected.startAt)}, ${displayTime(selected.startAt)}`);
       setVisitPurpose("");
     } catch (err) {
       if (typeof err === "object" && err !== null && "status" in err && err.status === 409) {
         setError("That time is no longer available. Choose another available time.");
+        toast.warning("That time was just taken", "Choose another available time.");
         clearSlotSelection();
       } else {
         setError(err instanceof Error ? err.message : "Unable to book this slot.");
+        toast.error("Appointment could not be confirmed", err instanceof Error ? err.message : "Please try again.");
       }
     } finally {
       bookingInFlight.current = false;

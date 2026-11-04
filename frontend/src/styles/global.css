@@ -2508,28 +2508,6 @@ table th { color: #3b4562; }
 }
 
 /* Sprint 4: medical history and front-desk additions (existing tokens). */
-.mh-page { max-width: 1100px; width: 100%; margin: 0 auto; padding: 24px; }
-.mh-history { min-width: 0; margin-top: 24px; color: var(--text-primary); }
-.mh-heading, .mh-actions, .mh-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
-.mh-heading { justify-content: space-between; }
-.mh-form { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
-.mh-form input, .mh-form select, .mh-form textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; color: var(--text-primary); background: var(--surface); }
-.mh-form textarea { resize: vertical; }
-.mh-history :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
-.mh-filters button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); color: var(--text-primary); cursor: pointer; }
-.mh-filters button[aria-pressed="true"] { background: var(--selected-surface); border-color: var(--primary); font-weight: 700; text-decoration: underline; }
-.mh-list { display: grid; gap: 16px; }
-.mh-entry { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow-wrap: anywhere; }
-.mh-entry h3 { margin: 12px 0 8px; }
-.mh-meta, .mh-form small { color: var(--text-secondary); }
-.mh-body { white-space: pre-wrap; }
-.mh-entry .tag { background: var(--accent); color: var(--primary); padding: 4px 8px; border-radius: 8px; }
-.mh-history .alert { padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
-.mh-history .alert.error { color: var(--status-error); }
-.mh-history .alert.success { color: var(--status-success); }
-.mh-skeleton { height: 90px; background: var(--selected-surface); margin: 12px 0; }
-@media (max-width: 768px) { .mh-page { padding: 16px; } .mh-heading { align-items: flex-start; } }
-@media (max-width: 375px) { .mh-form, .mh-entry { padding: 12px; } .mh-actions > button { width: 100%; } }
 
 .fd-slot-status { margin-top: 16px; color: var(--text-primary); }
 .fd-slot-status ul { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
@@ -2559,8 +2537,6 @@ table th { color: #3b4562; }
 .ad-breakdowns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
 .ad-audit, .ad-run { margin: 16px 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
 .ad-audit li { margin: 8px 0; overflow-wrap: anywhere; }
-.mh-date-heading { position: relative; margin: 16px 0 0; padding-left: 18px; color: var(--primary); }
-.mh-date-heading::before { position: absolute; left: 0; top: .35em; width: 8px; height: 8px; border: 2px solid var(--primary); border-radius: 50%; content: ''; }
 @media (max-width: 768px) { .ad-page { padding: 16px; } .ad-breakdowns { grid-template-columns: 1fr; } }
 @media (max-width: 375px) { .ad-page { padding: 12px; } .ad-page .pr-form > *, .ad-filters > * { width: 100%; } .ad-page .admin-table { min-width: 640px; } }
 .ad-mini-chart { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; }

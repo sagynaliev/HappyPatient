@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { authApi, DoctorProfile, ProfileUser } from "../lib/api";
 import "../styles/appScreens.css";
 import "../styles/profilePage.css";
+import { toast } from "../lib/toast";
 
 function initials(firstName: string, lastName: string) {
   return `${firstName.trim().charAt(0)}${lastName.trim().charAt(0)}`.toLocaleUpperCase();
@@ -80,8 +81,10 @@ export default function ProfilePage() {
       setDraft({ firstName: result.firstName, lastName: result.lastName, phone: result.phone || "" });
       setEditing(false);
       setMessage("Profile updated.");
+      toast.success("Profile updated");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update profile. Please try again.");
+      toast.error("Profile not saved", caught instanceof Error ? caught.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -107,6 +110,7 @@ export default function ProfilePage() {
         officeNumber: doctor.officeNumber || "",
       });
       setMessage("Clinic location updated.");
+      toast.success("Clinic location updated");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update clinic location. Please try again.");
     } finally {

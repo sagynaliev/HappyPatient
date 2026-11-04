@@ -316,7 +316,7 @@ export default function PatientBookingFlow({
         {doctor ? (
           <div className="bk-layout">
             <div className="bk-main">
-              {bookingSuccess ? (step === 4 ? confirmationCard : recapCard) : (<section className="bk-card" aria-labelledby="bk-step-title">
+              {bookingSuccess ? (step === 4 ? <>{confirmationCard}{nextCards}</> : recapCard) : (<section className="bk-card" aria-labelledby="bk-step-title">
                 <header className="bk-card-heading">
                   <h2 id="bk-step-title">{step}. {steps[step - 1]}</h2>
                   <p>{step === 1
@@ -539,7 +539,6 @@ export default function PatientBookingFlow({
                 {fee && <p className="bk-summary-price">{fee}</p>}
                 <p className="bk-summary-footnote">{bookingSuccess ? `Confirmed · Booking ID ${bookingSuccess.reference}` : "Not confirmed yet. Review and confirm in step 4."}</p>
               </section>
-              {nextCards}
             </aside>
           </div>
         ) : null}
