@@ -88,7 +88,7 @@ export default function AdminDashboard() {
                   <span className="ad-avatar" aria-hidden="true">{initials(item.patient)}</span>
                   <div><strong>{item.patient}</strong><small>{item.doctor} · {item.specialty}</small></div>
                   <span className="ad-time"><Icon name="clock" size={15} /> {dayShort.format(new Date(item.date))}, {timeShort.format(new Date(item.date))}</span>
-                  <span className="admin-status admin-status-active">Booked</span>
+                  <span className={`admin-status ${item.status === "Checked in" ? "admin-status-active" : "admin-status-booked"}`}>{item.status}</span>
                 </li>
               ))}
             </ul>

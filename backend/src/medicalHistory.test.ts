@@ -21,6 +21,12 @@ describe('medical history authorization and validation', () => {
     expect(db.scheduleSlot.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ doctor: { userId: 'session-user' }, status: 'OCCUPIED' }) }));
   });
   it.each([{ category: 'other' }, { title: '' }, { title: '   ' }, { body: '' }, { title: 'x'.repeat(121) }, { body: 'x'.repeat(5001) }])('rejects invalid fields', async invalid => { expect((await request(app).post('/medical-history').set('Authorization', token(Role.DOCTOR)).send({ ...valid, ...invalid })).status).toBe(400); expect(db.medicalEntry.create).not.toHaveBeenCalled(); });
+  it('only accepts notes until 24 hours after the visit ends', async () => {
+    await request(app).post('/medical-history').set('Authorization', token(Role.DOCTOR)).send(valid);
+    const where = db.scheduleSlot.findFirst.mock.calls.map(call => call[0].where).find(item => item.endAt);
+    expect(where.endAt.gte.getTime()).toBeGreaterThan(Date.now() - 24 * 60 * 60_000 - 5000);
+    expect(where.endAt.gte.getTime()).toBeLessThan(Date.now() - 24 * 60 * 60_000 + 5000);
+  });
   it('rejects doctor without eligible visit', async () => { db.scheduleSlot.findFirst.mockResolvedValue(null); expect((await request(app).post('/medical-history').set('Authorization', token(Role.DOCTOR)).send(valid)).status).toBe(404); });
   it('rejects patient writes', async () => { expect((await request(app).post('/medical-history').set('Authorization', token(Role.PATIENT)).send(valid)).status).toBe(404); });
   it('derives patient identity from session even when another ID is supplied', async () => { const result = await request(app).get('/medical-history?patientId=someone-else').set('Authorization', token(Role.PATIENT)); expect(result.status).toBe(200); expect(result.headers['cache-control']).toBe('no-store'); expect(db.$queryRaw).toHaveBeenCalled(); expect(db.$queryRaw.mock.calls[0][0].sql).toContain('e."patientId"'); expect(db.$queryRaw.mock.calls[0][0].values).toContain('session-user'); });

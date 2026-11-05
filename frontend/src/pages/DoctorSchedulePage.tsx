@@ -152,7 +152,7 @@ export default function DoctorSchedulePage() {
     setBusy(true);
     try {
       const result = await authApi.createWorkingDays({ dates, startTime, endTime });
-      toast.success("Schedule published", `${result.created} slots · ${dates.map((key) => formatDayKey(key, { weekday: "short" })).join(", ")} · ${startTime}–${endTime}`);
+      toast.success("Schedule published", `${result.created} slots · ${dates.map((key) => formatDayKey(key, { weekday: "short" })).join(", ")} · ${startTime}–${endTime}${result.skippedSummary ? ` · skipped ${result.skippedSummary}` : ""}`);
       setBusy(false);
       setAvailabilityOpen(false);
       selectDay(dates[0]);

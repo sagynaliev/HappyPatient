@@ -317,6 +317,11 @@
   text-transform: capitalize;
 }
 
+.admin-status-booked {
+  background: #e9efff;
+  color: #1a3fae;
+}
+
 .admin-status-active {
   background: #ecfdf5;
   color: #047857;

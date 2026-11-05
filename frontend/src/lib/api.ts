@@ -191,7 +191,7 @@ export const authApi = {
   createSchedule: (body: { date: string; startTime: string; endTime: string }) =>
     api<{ created: number }>('/doctors/me/schedule', { method: 'POST', body: JSON.stringify(body) }),
   createWorkingDays: (body: { dates: string[]; startTime: string; endTime: string }) =>
-    api<{ created: number; dates: string[] }>('/doctors/me/schedule/working-days', { method: 'POST', body: JSON.stringify(body) }),
+    api<{ created: number; dates: string[]; skippedSummary?: string }>('/doctors/me/schedule/working-days', { method: 'POST', body: JSON.stringify(body) }),
   getSchedule: (doctorId: string, date?: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule${date ? `?date=${encodeURIComponent(date)}` : ""}`),
   bookSlot: (doctorId: string, slotId: string, visitPurpose: string) =>
     api<{ slot: ScheduleSlot; reference?: string }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose }) }),

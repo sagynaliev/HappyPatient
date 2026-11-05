@@ -53,8 +53,8 @@ export default function AdminAppointmentsPage() {
                   <td>{item.patient}</td>
                   <td>{item.doctor}</td>
                   <td>{item.specialty}</td>
-                  <td>{new Date(item.date).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
-                  <td><span className="admin-status admin-status-active">{item.status}</span></td>
+                  <td>{new Date(item.date).toLocaleString("en-GB", { timeZone: "Asia/Almaty", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</td>
+                  <td><span className={`admin-status ${item.status === "Checked in" ? "admin-status-active" : "admin-status-booked"}`}>{item.status}</span></td>
                   <td>{item.purpose || "General consultation"}</td>
                 </tr>
               ))
