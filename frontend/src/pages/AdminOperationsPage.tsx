@@ -1,6 +1,7 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { AdminStat } from '../components/AdminStat';
+import { toast } from '../lib/toast';
 import { Icon } from '../components/Icons';
 import '../styles/adminOperations.css';
 
@@ -10,11 +11,12 @@ type DoctorChoice = {id:string;name:string;locationId:string|null;office:string|
 type Location = {id:string;name:string;kind:'city'|'floor'|'office';parentId:string|null;parent:{name:string}|null;active:boolean;_count:{doctors:number};usage?:{doctors:number;slots:number};children:Location[]};
 type Audit = {id:string;action:string;createdAt:string;actor:{firstName:string;lastName:string}|null;oldValue:unknown;newValue:unknown};
 type ReferenceAudit = {id:string;entity:string;entityId:string;action:string;createdAt:string;actor:{firstName:string;lastName:string}|null;oldValue:unknown;newValue:unknown};
-type Rule = {id:string;kind:Kind;amountKzt:number;ratePerHourKzt:number|null;freeMinutes:number;rounding:string;dailyCapKzt:number|null;effectiveFrom:string;effectiveTo:string|null;active:boolean;doctorId:string|null;categoryId:string|null;consultationType:string|null;serviceName:string|null;category:{name:string}|null;office:{name:string}|null;createdBy:{firstName:string;lastName:string}|null;audits:Audit[]};
+type Rule = {id:string;kind:Kind;amountKzt:number;ratePerHourKzt:number|null;freeMinutes:number;rounding:string;dailyCapKzt:number|null;effectiveFrom:string;effectiveTo:string|null;active:boolean;doctorId:string|null;categoryId:string|null;consultationType:string|null;serviceCode:string|null;serviceName:string|null;category:{name:string}|null;office:{name:string}|null;createdBy:{firstName:string;lastName:string}|null;audits:Audit[]};
 type Check = {id:string;name:string;description:string;count:number;severity:'info'|'warning'|'critical';sampleIds:string[]};
 type Run = {id:string;startedAt:string;finishedAt:string|null;status:string;results:Check[]|null};
 type Stats = {period?:string;totalVisits:number;utilization:number;noShowRate:number;newPatients:number;returningPatients:number;timeSeries:{period:string;visits:number}[];bySpecialty:{name:string;visits:number}[];byOffice:{name:string;visits:number}[];doctorWorkload:{doctorId:string;doctorName:string;specialty:string;bookedCount:number;completedCount:number;bookedMinutes:number;availableMinutes:number;utilization:number;averageAppointmentsPerWorkingDay:number;cancelled?:number;expired?:number}[]};
 const money=(n:number)=>new Intl.NumberFormat('en-US').format(n)+' KZT';
+const dateTimeLabel=(value:string)=>new Intl.DateTimeFormat('en-GB',{dateStyle:'medium',timeStyle:'short',hourCycle:'h23',timeZone:'Asia/Almaty'}).format(new Date(value));
 const dateLabel=(value:string)=>new Intl.DateTimeFormat('en-GB',{dateStyle:'medium',timeZone:'Asia/Almaty'}).format(new Date(value));
 const localDateTime=(date:Date)=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Almaty'}).format(new Date());
@@ -50,6 +52,8 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   const [rounding,setRounding]=useState<'per_started_hour'|'per_minute'>('per_started_hour');
   const [effectiveFrom,setEffectiveFrom]=useState(localDateTime(new Date()));
   const [editing,setEditing]=useState<Rule|null>(null);
+  const [formError,setFormError]=useState('');
+  const [confirmingRule,setConfirmingRule]=useState<string|null>(null);
   const [locationKind,setLocationKind]=useState<'city'|'floor'|'office'>('city');
   const [locationName,setLocationName]=useState('');
   const [parentId,setParentId]=useState('');
@@ -83,19 +87,22 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   useEffect(()=>{void load()},[load]);
 
   function startEdit(rule:Rule) {
-    setEditing(rule);setKind(rule.kind);setDoctorId(rule.doctorId??'');setCategoryId(rule.categoryId??'');setConsultationType(rule.consultationType??'');setServiceName(rule.serviceName??'');setOfficeId(rule.office?.name?locations.find(item=>item.name===rule.office?.name)?.id??'':'');setAmount(String(rule.amountKzt));setRate(String(rule.ratePerHourKzt??''));setFreeMinutes(String(rule.freeMinutes));setRounding(rule.rounding as 'per_started_hour'|'per_minute');setEffectiveFrom(localDateTime(new Date()));
+    setEditing(rule);setKind(rule.kind);setDoctorId(rule.doctorId??'');setCategoryId(rule.categoryId??'');setConsultationType(rule.consultationType??'');setServiceCode(rule.serviceCode??'');setServiceName(rule.serviceName??'');setFormError('');setOfficeId(rule.office?.name?locations.find(item=>item.name===rule.office?.name)?.id??'':'');setAmount(String(rule.amountKzt));setRate(String(rule.ratePerHourKzt??''));setFreeMinutes(String(rule.freeMinutes));setRounding(rule.rounding as 'per_started_hour'|'per_minute');setEffectiveFrom(localDateTime(new Date()));
   }
   async function saveRule(event:FormEvent) {
-    event.preventDefault();setError('');
-    if(!Number.isInteger(Number(amount))||Number(amount)<0||kind==='parking'&&(!Number.isInteger(Number(rate))||Number(rate)<0)){setError('Enter whole-number KZT values that are zero or greater.');return;}
+    event.preventDefault();setError('');setFormError('');
+    // Parking is priced by the hourly rate; its flat amount is not used.
+    const flatAmount=kind==='parking'?0:Number(amount);
+    if(kind!=='parking'&&(amount.trim()===''||!Number.isInteger(flatAmount)||flatAmount<0)){setFormError('Enter the amount as a whole number of KZT (0 or more).');return;}
+    if(kind==='parking'&&(rate.trim()===''||!Number.isInteger(Number(rate))||Number(rate)<0)){setFormError('Enter the hourly parking rate as a whole number of KZT (0 or more).');return;}
     if(editing&&(editing.doctorId||editing.categoryId)&&!window.confirm('This change affects existing doctors. Save it as a new price version?'))return;
-    const body={kind,amountKzt:Number(amount),ratePerHourKzt:kind==='parking'?Number(rate):null,freeMinutes:Number(freeMinutes),rounding,effectiveFrom:new Date(effectiveFrom).toISOString(),effectiveTo:null,doctorId:kind==='visit'?(doctorId||null):null,categoryId:kind==='visit'?(categoryId||null):null,consultationType:kind==='visit'?(consultationType||null):null,serviceCode:kind==='treatment'?(serviceCode||null):null,serviceName:kind==='treatment'?(serviceName||null):null,officeId:kind==='parking'?(officeId||null):null};
-    try{await api(editing?'/admin/pricing/'+encodeURIComponent(editing.id):'/admin/pricing',{method:editing?'PATCH':'POST',body:JSON.stringify(body)});setEditing(null);setDoctorId('');setCategoryId('');setConsultationType('');setServiceCode('');setServiceName('');setOfficeId('');setAmount('');setRate('');await load();}
-    catch{setError('The pricing rule could not be saved. Check its dates and overlapping active rules.');}
+    const body={kind,amountKzt:flatAmount,ratePerHourKzt:kind==='parking'?Number(rate):null,freeMinutes:Number(freeMinutes),rounding,effectiveFrom:new Date(effectiveFrom).toISOString(),effectiveTo:null,doctorId:kind==='visit'?(doctorId||null):null,categoryId:kind==='visit'?(categoryId||null):null,consultationType:kind==='visit'?(consultationType||null):null,serviceCode:kind==='treatment'?(serviceCode||null):null,serviceName:kind==='treatment'?(serviceName||null):null,officeId:kind==='parking'?(officeId||null):null};
+    try{await api(editing?'/admin/pricing/'+encodeURIComponent(editing.id):'/admin/pricing',{method:editing?'PATCH':'POST',body:JSON.stringify(body)});setEditing(null);setDoctorId('');setCategoryId('');setConsultationType('');setServiceCode('');setServiceName('');setOfficeId('');setAmount('');setRate('');toast.success(editing?'New price version saved':'Pricing rule added');await load();}
+    catch(caught){const message=caught instanceof Error&&caught.message?caught.message:'The pricing rule could not be saved.';setFormError(message);toast.error('Pricing rule not saved',message);}
   }
   async function deactivate(rule:Rule) {
-    if(!window.confirm('Deactivate this pricing rule? Its previous booking period will remain in history.'))return;
-    try{await api('/admin/pricing/'+encodeURIComponent(rule.id),{method:'PATCH',body:JSON.stringify({active:false})});await load();}
+    setConfirmingRule(null);
+    try{await api('/admin/pricing/'+encodeURIComponent(rule.id),{method:'PATCH',body:JSON.stringify({active:false})});toast.neutral('Pricing rule deactivated','Bookings made while it was active keep their price.');await load();}
     catch{setError('This rule could not be deactivated.');}
   }
   async function saveCategory(event:FormEvent){event.preventDefault();try{await api(editingCategory?'/admin/reference/categories/'+encodeURIComponent(editingCategory.id):'/admin/reference/categories',{method:editingCategory?'PATCH':'POST',body:JSON.stringify({name:categoryName})});setCategoryName('');setEditingCategory(null);await load();}catch{setError('Category could not be saved. It may already exist.');}}
@@ -118,7 +125,9 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   const visibleRules=rules.filter(item=>(kindFilter==='all'||item.kind===kindFilter)&&(activeFilter==='all'||ruleIsActive(item)===(activeFilter==='active')));
   const maxVisits=Math.max(1,...(stats?.timeSeries??[]).map(item=>item.visits));
   const sortedWorkload=stats?.doctorWorkload.slice().sort((a,b)=>workloadSort==='doctorName'?a.doctorName.localeCompare(b.doctorName):Number(b[workloadSort])-Number(a[workloadSort]))??[];
-  const latestChecks=runs[0]?.results??[];
+  const latestRun=runs.find(run=>run.status==='complete'&&Array.isArray(run.results));
+  const previousRun=latestRun?runs.slice(runs.indexOf(latestRun)+1).find(run=>run.status==='complete'&&Array.isArray(run.results)):undefined;
+  const latestChecks=latestRun?.results??[];
   const passedChecks=latestChecks.filter(check=>check.count===0).length;
   const warningChecks=latestChecks.filter(check=>check.count>0&&check.severity==='warning').length;
   const criticalChecks=latestChecks.filter(check=>check.count>0&&check.severity==='critical').length;
@@ -128,7 +137,7 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
     <header className="ad-head">
       <div><h1>{title}</h1><p>{subtitle}</p></div>
       <div className="ad-head-actions">
-        <button className="ad-button ad-button-outline" type="button" onClick={()=>void load()} disabled={busy}><Icon name="spark" size={18}/> Refresh</button>
+        <button className="ad-button ad-button-outline" type="button" onClick={()=>void load()} disabled={busy}><Icon name="refresh" size={18}/> Refresh</button>
         {view==='integrity'&&<button className="ad-button" type="button" onClick={()=>void runIntegrity()} disabled={busy}><Icon name="shield" size={18}/> {busy?'Running checks…':'Run checks now'}</button>}
       </div>
     </header>
@@ -146,23 +155,24 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
         <div className="admin-panel-header"><div><h2>{editing?'Create a new version':'Add a pricing rule'}</h2><p className="ad-muted">{editing?'The current version stays in history; the new one starts at the date you choose.':'The most specific rule wins: doctor, then specialty, then global.'}</p></div></div>
         <div className="ad-form-grid">
           <label>Type<select value={kind} onChange={e=>setKind(e.target.value as Kind)}><option value="visit">Visit</option><option value="treatment">Treatment</option><option value="parking">Parking</option></select></label>
-          <label>Amount (KZT)<input type="number" min="0" step="1" value={amount} onChange={e=>setAmount(e.target.value)} required/></label>
+          {kind!=='parking'&&<label>Amount (KZT)<input type="number" min="0" step="1" value={amount} onChange={e=>setAmount(e.target.value)} required/></label>}
           {kind==='parking'&&<><label>Hourly rate (KZT)<input type="number" min="0" step="1" value={rate} onChange={e=>setRate(e.target.value)} required/></label><label>Free minutes<input type="number" min="0" step="1" value={freeMinutes} onChange={e=>setFreeMinutes(e.target.value)}/></label><label>Rounding<select value={rounding} onChange={e=>setRounding(e.target.value as typeof rounding)}><option value="per_started_hour">Each started hour</option><option value="per_minute">Per minute</option></select></label></>}
           {kind==='visit'&&<><label>Doctor scope<select value={doctorId} onChange={e=>setDoctorId(e.target.value)}><option value="">Any doctor</option>{doctors.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Specialty scope<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Any specialty</option>{categories.filter(item=>item.active).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Consultation type<input value={consultationType} onChange={e=>setConsultationType(e.target.value)} maxLength={80} placeholder="Optional"/></label></>}
           {kind==='treatment'&&<><label>Service code<input value={serviceCode} onChange={e=>setServiceCode(e.target.value)} maxLength={80}/></label><label>Service name<input value={serviceName} onChange={e=>setServiceName(e.target.value)} maxLength={120}/></label></>}
           {kind==='parking'&&<label>Office scope<select value={officeId} onChange={e=>setOfficeId(e.target.value)}><option value="">All offices</option>{locations.filter(item=>isSelectableOffice(item,locations)).map(item=><option key={item.id} value={item.id}>{locationPath(item,locations)}</option>)}</select></label>}
           <label>Effective from<input type="datetime-local" value={effectiveFrom} onChange={e=>setEffectiveFrom(e.target.value)} required/></label>
         </div>
-        <div className="ad-form-actions"><button className="ad-button" type="submit">{editing?'Save new version':'Add rule'}</button>{editing&&<button className="ad-button ad-button-outline" type="button" onClick={()=>setEditing(null)}>Cancel</button>}</div>
+        {formError&&<p className="ad-form-error" role="alert">{formError}</p>}
+        <div className="ad-form-actions"><button className="ad-button" type="submit">{editing?'Save new version':'Add rule'}</button>{editing&&<button className="ad-button ad-button-outline" type="button" onClick={()=>{setEditing(null);setFormError('');}}>Cancel</button>}</div>
       </form>
       <section className="admin-panel ad-panel">
         <div className="admin-panel-header"><div><h2>Rules</h2><p className="ad-muted">{visibleRules.length} shown</p></div>
           <div className="ad-filters"><label>Type<select value={kindFilter} onChange={e=>setKindFilter(e.target.value as typeof kindFilter)}><option value="all">All types</option><option value="visit">Visits</option><option value="treatment">Treatments</option><option value="parking">Parking</option></select></label><label>Status<select value={activeFilter} onChange={e=>setActiveFilter(e.target.value as typeof activeFilter)}><option value="all">All rules</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div>
         </div>
-        <div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>Type / scope</th><th>Amount</th><th>Parking</th><th>Effective</th><th>Status</th><th>Created by</th><th aria-label="Actions"/></tr></thead><tbody>{visibleRules.map(rule=><tr key={rule.id}><td><strong>{kindNames[rule.kind]}</strong><small>{rule.category?.name??doctors.find(item=>item.id===rule.doctorId)?.name??rule.office?.name??rule.serviceName??'All doctors'}</small></td><td>{rule.kind==='parking'?'—':money(rule.amountKzt)}</td><td>{rule.ratePerHourKzt===null?'—':money(rule.ratePerHourKzt)+' / hour'}</td><td>{dateLabel(rule.effectiveFrom)}{rule.effectiveTo?' – '+dateLabel(rule.effectiveTo):''}</td><td>{ruleIsActive(rule)?<span className="admin-status admin-status-active">Active</span>:rule.active?<span className="admin-status admin-status-muted">Ended</span>:<span className="admin-status admin-status-danger">Inactive</span>}</td><td>{rule.createdBy?rule.createdBy.firstName+' '+rule.createdBy.lastName:'Admin'}<small>{rule.audits?.length??0} audit records</small></td><td className="ad-row-actions"><button className="ad-mini" type="button" onClick={()=>startEdit(rule)}>New version</button>{ruleIsActive(rule)&&<button className="ad-mini is-danger" type="button" onClick={()=>void deactivate(rule)}>Deactivate</button>}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>Type / scope</th><th>Amount</th><th>Parking</th><th>Effective</th><th>Status</th><th>Created by</th><th aria-label="Actions"/></tr></thead><tbody>{visibleRules.map(rule=><tr key={rule.id}><td><strong>{kindNames[rule.kind]}</strong><small>{rule.category?.name??doctors.find(item=>item.id===rule.doctorId)?.name??rule.office?.name??rule.serviceName??'All doctors'}</small></td><td>{rule.kind==='parking'?'—':money(rule.amountKzt)}</td><td>{rule.ratePerHourKzt===null?'—':money(rule.ratePerHourKzt)+' / hour'}</td><td>{dateLabel(rule.effectiveFrom)}{rule.effectiveTo?' – '+dateLabel(rule.effectiveTo):''}</td><td>{ruleIsActive(rule)?<span className="admin-status admin-status-active">Active</span>:rule.active?<span className="admin-status admin-status-muted">Ended</span>:<span className="admin-status admin-status-danger">Inactive</span>}</td><td>{rule.createdBy?rule.createdBy.firstName+' '+rule.createdBy.lastName:'Admin'}<small>{rule.audits?.length??0} audit records</small></td><td className="ad-row-actions">{confirmingRule===rule.id?<span className="ad-confirm" role="group" aria-label="Confirm deactivation"><span>Deactivate this rule?</span><button className="ad-mini is-danger" type="button" onClick={()=>void deactivate(rule)}>Yes, deactivate</button><button className="ad-mini" type="button" onClick={()=>setConfirmingRule(null)}>Keep</button></span>:<><button className="ad-mini" type="button" onClick={()=>startEdit(rule)}>New version</button>{ruleIsActive(rule)&&<button className="ad-mini is-danger" type="button" onClick={()=>setConfirmingRule(rule.id)}>Deactivate</button>}</>}</td></tr>)}</tbody></table></div>
         {visibleRules.length===0&&<p className="ad-empty-state">No pricing rules match these filters.</p>}
       </section>
-      {visibleRules.some(rule=>rule.audits?.length>0)&&<section className="admin-panel ad-panel"><div className="admin-panel-header"><div><h2>Price change audit</h2><p className="ad-muted">Who changed what, old → new</p></div></div><ul className="ad-audit-list">{visibleRules.flatMap(rule=>(rule.audits??[]).map(audit=><li key={audit.id}><span className="ad-audit-date">{dateLabel(audit.createdAt)}</span><span><strong>{audit.actor?.firstName??'Admin'} {audit.actor?.lastName??''}</strong> · {audit.action} · {kindNames[rule.kind]}</span><small>{auditChange(audit.oldValue,audit.newValue)}</small></li>))}</ul></section>}
+      {visibleRules.some(rule=>rule.audits?.length>0)&&<section className="admin-panel ad-panel"><div className="admin-panel-header"><div><h2>Price change audit</h2><p className="ad-muted">Who changed what, old → new</p></div></div><ul className="ad-audit-list">{visibleRules.flatMap(rule=>(rule.audits??[]).map(audit=>({rule,audit}))).sort((a,b)=>Date.parse(b.audit.createdAt)-Date.parse(a.audit.createdAt)).map(({rule,audit})=><li key={audit.id}><span className="ad-audit-date">{dateTimeLabel(audit.createdAt)}</span><span><strong>{audit.actor?.firstName??'Admin'} {audit.actor?.lastName??''}</strong> · {audit.action} · {kindNames[rule.kind]}</span><small>{auditChange(audit.oldValue,audit.newValue)}</small></li>)}</ul></section>}
     </>}
 
     {view==='statistics'&&<>
@@ -207,11 +217,11 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
         <AdminStat icon="ban" tone="is-pink" label="Critical" value={criticalChecks} note="Fix as soon as possible"/>
       </section>
       {runs.length===0&&!busy&&<p className="ad-empty-state">No integrity runs recorded yet. Run the checks to see results.</p>}
-      {runs[0]&&<section className="admin-panel ad-panel">
-        <div className="admin-panel-header"><div><h2>Latest run</h2><p className="ad-muted">{dateLabel(runs[0].startedAt)} · {runs[0].status} · trend compared with the previous run</p></div></div>
-        <div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>Check</th><th>Records</th><th>Trend</th><th>Result</th><th>Sample IDs</th></tr></thead><tbody>{latestChecks.map(check=>{const prior=runs[1]?.results?.find(item=>item.id===check.id);const delta=prior?check.count-prior.count:null;return <tr key={check.id}><td><strong>{check.name??checkName(check.id)}</strong><small>{check.description??''}</small></td><td>{check.count}</td><td>{delta===null?'—':delta===0?'No change':delta>0?'+'+delta:String(delta)}</td><td>{severityPill(check)}</td><td>{check.sampleIds?.length?<details><summary>{check.sampleIds.length} IDs</summary><ul className="ad-id-list">{check.sampleIds.map(id=><li key={id}><code>{id}</code></li>)}</ul></details>:'—'}</td></tr>})}</tbody></table></div>
+      {latestRun&&<section className="admin-panel ad-panel">
+        <div className="admin-panel-header"><div><h2>Latest run</h2><p className="ad-muted">{dateTimeLabel(latestRun.startedAt)} · trend compared with the run before it</p></div></div>
+        <div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>Check</th><th>Records</th><th>Trend</th><th>Result</th><th>Sample IDs</th></tr></thead><tbody>{latestChecks.map(check=>{const prior=previousRun?.results?.find(item=>item.id===check.id);const delta=prior?check.count-prior.count:null;return <tr key={check.id}><td><strong>{check.name??checkName(check.id)}</strong><small>{check.description??''}</small></td><td>{check.count}</td><td>{delta===null?'—':delta===0?'No change':delta>0?'+'+delta:String(delta)}</td><td>{severityPill(check)}</td><td>{check.sampleIds?.length?<details><summary>{check.sampleIds.length} IDs</summary><ul className="ad-id-list">{check.sampleIds.map(id=><li key={id}><code>{id}</code></li>)}</ul></details>:'—'}</td></tr>})}</tbody></table></div>
       </section>}
-      {runs.length>1&&<section className="admin-panel ad-panel"><div className="admin-panel-header"><div><h2>Previous runs</h2><p className="ad-muted">Last {runs.length-1}</p></div></div><ul className="ad-run-list">{runs.slice(1).map(run=>{const results=run.results??[];const failing=results.filter(check=>check.count>0);return <li key={run.id}><span className="ad-audit-date">{dateLabel(run.startedAt)}</span><span>{results.length-failing.length} passed</span>{failing.some(check=>check.severity==='critical')?<span className="admin-status admin-status-danger">{failing.filter(check=>check.severity==='critical').length} critical</span>:failing.length?<span className="admin-status admin-status-amber">{failing.length} to review</span>:<span className="admin-status admin-status-active">All clear</span>}</li>})}</ul></section>}
+      {runs.length>0&&<section className="admin-panel ad-panel"><div className="admin-panel-header"><div><h2>Run history</h2><p className="ad-muted">Newest first · last {runs.length}</p></div></div><ul className="ad-run-list">{runs.map(run=>{const results=Array.isArray(run.results)?run.results:[];const failing=results.filter(check=>check.count>0);const critical=failing.filter(check=>check.severity==='critical').length;return <li key={run.id}><span className="ad-audit-date">{dateTimeLabel(run.startedAt)}</span>{run===latestRun&&<span className="admin-status admin-status-muted">Latest</span>}{run.status!=='complete'||!results.length?<span className={`admin-status ${run.status==='failed'?'admin-status-danger':'admin-status-amber'}`}>{run.status==='failed'?'Failed · no results':run.status==='running'?'Running or interrupted':'No results'}</span>:<><span>{results.length-failing.length} of {results.length} passed</span>{critical?<span className="admin-status admin-status-danger">{critical} critical</span>:failing.length?<span className="admin-status admin-status-amber">{failing.length} to review</span>:<span className="admin-status admin-status-active">All clear</span>}</>}</li>})}</ul></section>}
     </>}
 
     {view==='reference'&&<>
