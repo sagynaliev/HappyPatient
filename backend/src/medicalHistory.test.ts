@@ -34,14 +34,31 @@ describe('medical history authorization and validation', () => {
   it('does not treat a cancelled-only doctor visit as an assignment', async () => { db.scheduleSlot.findFirst.mockResolvedValue(null); const result=await request(app).get('/medical-history?patientId=patient').set('Authorization',token(Role.DOCTOR));expect(result.status).toBe(404);expect(db.scheduleSlot.findFirst).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({OR:[{status:'OCCUPIED'},{status:'BOOKED',startAt:{gt:expect.any(Date)}}]})})); });
   it.each([Role.ADMIN, Role.FRONT_DESK])('rejects %s reads', async role => { expect((await request(app).get('/medical-history').set('Authorization', token(role))).status).toBe(404); });
   it('rejects and audits anonymous reads', async () => { expect((await request(app).get('/medical-history')).status).toBe(401); expect(db.historyAccessAudit.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({actorId:null,actorRole:null,endpoint:'list',outcome:'denied'})})); });
-  it('paginates and counts categories', async () => { db.$queryRaw.mockResolvedValue(Array.from({ length: 21 }, (_, index) => ({ id:String(index),doctorFirstName:'A',doctorLastName:'B' }))); db.medicalEntry.groupBy.mockResolvedValue([{ category: 'test', _count: 25 }]); const result = await request(app).get('/medical-history?offset=20').set('Authorization', token(Role.PATIENT)); expect(result.body.entries).toHaveLength(20); expect(result.body.hasMore).toBe(true); expect(result.body.counts.test).toBe(25); });
+  it('paginates, counts categories and lists specialties', async () => {
+    db.$queryRaw
+      .mockResolvedValueOnce(Array.from({ length: 21 }, (_, index) => ({ id: String(index), doctorFirstName: 'A', doctorLastName: 'B', specialty: 'Cardiology' })))
+      .mockResolvedValueOnce([{ category: 'test', count: 25 }])
+      .mockResolvedValueOnce([{ name: 'Cardiology', count: 25 }]);
+    const result = await request(app).get('/medical-history?offset=20').set('Authorization', token(Role.PATIENT));
+    expect(result.body.entries).toHaveLength(20); expect(result.body.hasMore).toBe(true);
+    expect(result.body.counts.test).toBe(25);
+    expect(result.body.specialties).toEqual([{ name: 'Cardiology', count: 25 }]);
+    expect(result.body.entries[0].specialty).toBe('Cardiology');
+  });
+  it('filters by specialty, period and text', async () => {
+    db.$queryRaw.mockResolvedValue([]);
+    await request(app).get('/medical-history?specialty=Cardiology&from=2026-10-01T00:00:00Z&to=2026-11-01T00:00:00Z&q=blood').set('Authorization', token(Role.PATIENT)).expect(200);
+    const sql = JSON.stringify(db.$queryRaw.mock.calls[0]);
+    expect(sql).toContain('Cardiology'); expect(sql).toContain('%blood%'); expect(sql).toContain('2026-10-01');
+    await request(app).get('/medical-history?q=' + 'x'.repeat(101)).set('Authorization', token(Role.PATIENT)).expect(400);
+  });
   it('scopes the list and counts to one visit or to everything except it', async () => {
-    db.$queryRaw.mockResolvedValue([]); db.medicalEntry.groupBy.mockResolvedValue([]);
+    db.$queryRaw.mockResolvedValue([]);
     await request(app).get('/medical-history?patientId=patient&appointmentId=visit-1').set('Authorization', token(Role.DOCTOR)).expect(200);
-    expect(JSON.stringify(db.$queryRaw.mock.calls[0])).toContain('visit-1');
-    expect(db.medicalEntry.groupBy).toHaveBeenLastCalledWith(expect.objectContaining({ where: { patientId: 'patient', appointmentId: 'visit-1' } }));
+    expect(db.$queryRaw.mock.calls.slice(0, 2).every(call => JSON.stringify(call).includes('visit-1'))).toBe(true);
+    db.$queryRaw.mockClear();
     await request(app).get('/medical-history?patientId=patient&excludeAppointmentId=visit-1').set('Authorization', token(Role.DOCTOR)).expect(200);
-    expect(db.medicalEntry.groupBy).toHaveBeenLastCalledWith(expect.objectContaining({ where: { patientId: 'patient', OR: [{ appointmentId: null }, { appointmentId: { not: 'visit-1' } }] } }));
+    expect(JSON.stringify(db.$queryRaw.mock.calls[0])).toContain('IS DISTINCT FROM');
   });
   it('policy-checks individual entry reads and returns the same 404 denial', async () => {
     db.medicalEntry.findUnique.mockResolvedValue({id:'entry',patientId:'patient',doctorId:'doctor',category:'test',title:'Private title',body:'Private body',createdAt:new Date(),updatedAt:new Date(),doctor:{user:{firstName:'A',lastName:'B'}}});
