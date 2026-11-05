@@ -84,6 +84,10 @@
 .ad-ops .ad-mini-chart li { grid-template-columns: minmax(110px, 1fr) minmax(80px, 2fr) 32px; font-size: 14px; }
 .ad-ops .ad-bar-track { height: 10px; background: var(--accent); }
 
+/* Inline form error and row confirmation */
+.ad-form-error { margin: 0; padding: 10px 14px; border: 1px solid #f6d3d3; border-radius: 12px; background: #fbeceb; color: #b42318; font-size: 14px; }
+.ad-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; font-size: 13px; font-weight: 600; color: #b42318; }
+
 /* Demo time */
 .ad-time-steps { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
 .ad-time-step { display: grid; gap: 4px; justify-items: start; min-height: 78px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 16px; background: #f6f8ff; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
