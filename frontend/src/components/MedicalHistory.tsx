@@ -10,6 +10,7 @@ export type MedicalEntry = { id: string; category: MedicalCategory; title: strin
 type HistoryResponse = { entries: MedicalEntry[]; hasMore: boolean; counts: Partial<Record<MedicalCategory, number>> };
 const almaty = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Almaty', ...options });
 const timeText = almaty({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const writtenText = almaty({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const dayText = almaty({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const monthText = almaty({ month: 'short' });
 const dayNumber = almaty({ day: 'numeric' });
@@ -22,8 +23,9 @@ function MedicalEntryCard({ entry, eventAt }: { entry: MedicalEntry; eventAt: st
   return <article className={`mh-entry is-${entry.category}`}>
     <header className="mh-entry-head">
       <span className={`mh-pill is-${entry.category}`}><Icon name={categoryIcons[entry.category]} size={14} /> {categoryLabels[entry.category]}</span>
-      <time className="mh-entry-time" dateTime={eventAt}><Icon name="clock" size={14} /> {timeText.format(new Date(eventAt))}</time>
+      <time className="mh-entry-time" dateTime={entry.createdAt} title="When the note was written"><Icon name="clock" size={14} /> Written {writtenText.format(new Date(entry.createdAt))}</time>
     </header>
+    {entry.appointmentStartAt && <p className="mh-entry-visit"><Icon name="calendar" size={13} /> Visit {writtenText.format(new Date(entry.appointmentStartAt))}</p>}
     <h3>{entry.title}</h3>
     <p className={`mh-body${long && !expanded ? ' is-clamped' : ''}`}>{entry.body}</p>
     {long && <button className="mh-more" type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? 'Show less' : 'Show more'}</button>}

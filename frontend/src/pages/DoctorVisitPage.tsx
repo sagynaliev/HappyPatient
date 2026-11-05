@@ -9,6 +9,8 @@ import "../styles/medicalHistory.css";
 import "../styles/doctorWorkspace.css";
 
 const MedicalHistory = lazy(() => import("../components/MedicalHistory"));
+// Same limit as the API: notes up to 24 hours after the visit ends.
+const NOTE_WINDOW_MS = 24 * 60 * 60_000;
 const reference = (slotId: string) => `HP-${slotId.slice(-8).toUpperCase()}`;
 const longDay = (value: string) => formatInClinic(value, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const shortDay = (value: string) => formatInClinic(value, { day: "numeric", month: "short", year: "numeric" });
@@ -76,13 +78,17 @@ export default function DoctorVisitPage() {
   const kind = slotKind(slot);
   const now = Date.now();
   const started = Date.parse(slot.startAt) <= now;
-  const canWriteNotes = slot.status === "OCCUPIED" && Boolean(slot.patient) && started;
-  const canReadHistory = canWriteNotes || (slot.status === "BOOKED" && !started);
+  const notesClosed = Date.parse(slot.endAt) < now - NOTE_WINDOW_MS;
+  const canWriteNotes = slot.status === "OCCUPIED" && Boolean(slot.patient) && started && !notesClosed;
+  const canReadHistory = canWriteNotes || (slot.status === "OCCUPIED" && Boolean(slot.patient)) || (slot.status === "BOOKED" && !started);
   const canCancel = slot.status === "BOOKED" && !started;
   const past = history.filter((item) => item.id !== slot.id && Date.parse(item.startAt) < now);
-  const next = history.find((item) => item.id !== slot.id && Date.parse(item.startAt) > now);
+  // The visit on screen counts as the next one while it is still ahead.
+  const next = history.filter((item) => item.status === "BOOKED" || item.status === "OCCUPIED").find((item) => Date.parse(item.startAt) > now);
   const initials = slot.patient ? `${slot.patient.firstName[0] ?? ""}${slot.patient.lastName[0] ?? ""}` : "—";
-  const notesHint = slot.status === "BOOKED" && started
+  const notesHint = notesClosed && slot.status === "OCCUPIED"
+    ? "Notes for this visit closed 24 hours after it ended, so records are never backdated. Earlier notes stay readable."
+    : slot.status === "BOOKED" && started
     ? "The patient has not checked in yet. Notes open once the front desk confirms arrival."
     : slot.status === "BOOKED"
       ? "Notes for this visit open after it starts and the patient checks in. Earlier records are under Earlier visits."
@@ -132,7 +138,7 @@ export default function DoctorVisitPage() {
             <dl className="dw-facts">
               <div><dt>Visits with you</dt><dd>{history.length}</dd></div>
               <div><dt>Last visit</dt><dd>{past.length ? shortDay(past[past.length - 1].startAt) : "First visit"}</dd></div>
-              <div><dt>Next visit</dt><dd>{next ? `${shortDay(next.startAt)}, ${clock(next.startAt)}` : "None booked"}</dd></div>
+              <div><dt>Next visit</dt><dd>{next ? `${next.id === slot.id ? "This visit · " : ""}${shortDay(next.startAt)}, ${clock(next.startAt)}` : "None booked"}</dd></div>
             </dl>
           </section>
 

@@ -471,42 +471,51 @@ describe('Sprint 2 doctor endpoints', () => {
     expect(prismaMock.scheduleSlot.createMany.mock.calls[0][0].data).toHaveLength(4);
   });
 
-  it('rejects overlapping schedules with a conflict response', async () => {
-    prismaMock.scheduleSlot.findFirst.mockResolvedValue({ id: 'existing-slot' });
-    await request(app).post('/api/doctors/me/schedule')
+  it('rejects a single day only when every time is already taken', async () => {
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([{ startAt: new Date('2099-05-10T04:00:00Z'), endAt: new Date('2099-05-10T05:00:00Z') }]);
+    const response = await request(app).post('/api/doctors/me/schedule')
       .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
       .send({ date: '2099-05-10', startTime: '09:00', endTime: '10:00' })
       .expect(409);
+    expect(response.body.error).toMatch(/No new slots/);
     expect(prismaMock.scheduleSlot.createMany).not.toHaveBeenCalled();
   });
 
-  it('creates 30-minute slots for selected working days as one transaction', async () => {
+  it('creates 30-minute slots for selected working days and reports nothing skipped', async () => {
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([]);
     prismaMock.scheduleSlot.createMany.mockImplementation(async ({ data }) => ({ count: data.length }));
     const response = await request(app).post('/api/doctors/me/schedule/working-days')
       .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
-      .send({
-        dates: ['2099-05-10', '2099-05-12'],
-        startTime: '09:00',
-        endTime: '11:00',
-      })
+      .send({ dates: ['2099-05-10', '2099-05-12'], startTime: '09:00', endTime: '11:00' })
       .expect(201);
-    expect(response.body).toEqual({ created: 8, dates: ['2099-05-10', '2099-05-12'] });
-    const overlapQuery = prismaMock.scheduleSlot.findFirst.mock.calls[0][0];
-    expect(overlapQuery.where.OR).toHaveLength(2);
+    expect(response.body).toMatchObject({ created: 8, dates: ['2099-05-10', '2099-05-12'], skipped: [], skippedSummary: '' });
     expect(prismaMock.scheduleSlot.createMany.mock.calls[0][0].data).toHaveLength(8);
   });
 
-  it('does not create any working-day slots if one date overlaps', async () => {
-    prismaMock.scheduleSlot.findFirst.mockResolvedValue({ id: 'existing-slot' });
-    await request(app).post('/api/doctors/me/schedule/working-days')
+  it('skips times already in the schedule and creates the rest', async () => {
+    // 09:00–10:00 Almaty on 10 May is already taken; 12 May is free.
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([{ startAt: new Date('2099-05-10T04:00:00Z'), endAt: new Date('2099-05-10T05:00:00Z') }]);
+    prismaMock.scheduleSlot.createMany.mockImplementation(async ({ data }) => ({ count: data.length }));
+    const response = await request(app).post('/api/doctors/me/schedule/working-days')
       .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
-      .send({
-        dates: ['2099-05-10', '2099-05-12'],
-        startTime: '09:00',
-        endTime: '11:00',
-      })
-      .expect(409);
-    expect(prismaMock.scheduleSlot.createMany).not.toHaveBeenCalled();
+      .send({ dates: ['2099-05-10', '2099-05-12'], startTime: '09:00', endTime: '11:00' })
+      .expect(201);
+    expect(response.body.created).toBe(6);
+    expect(response.body.skipped).toHaveLength(2);
+    expect(response.body.skippedSummary).toBe('2 already in your schedule');
+  });
+
+  it('skips times that have already started', async () => {
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([]);
+    prismaMock.scheduleSlot.createMany.mockImplementation(async ({ data }) => ({ count: data.length }));
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date());
+    const response = await request(app).post('/api/doctors/me/schedule/working-days')
+      .set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({ dates: [today, '2099-05-12'], startTime: '00:00', endTime: '23:30' })
+      .expect(201);
+    expect(response.body.skipped.length).toBeGreaterThan(0);
+    expect(response.body.skipped.every((item: { reason: string }) => item.reason === 'past')).toBe(true);
+    expect(response.body.skippedSummary).toMatch(/already started/);
   });
 
   it('allows patients to view statuses without patient details', async () => {
@@ -922,5 +931,17 @@ describe('demo clock', () => {
     expect((await request(app).get('/api/time')).body.offsetMinutes).toBe(90);
     const reset = await request(app).post('/api/admin/time').set('Authorization', bearer(Role.ADMIN)).send({ offsetMinutes: 0 }).expect(200);
     expect(reset.body.offsetMinutes).toBe(0);
+  });
+});
+
+describe('admin appointment labels', () => {
+  it('uses the same Booked / Checked in wording as the doctor screens', async () => {
+    const doctor = { user: { firstName: 'Sam', lastName: 'Doctor' }, category: { name: 'Pediatrics' } };
+    prismaMock.scheduleSlot.findMany.mockResolvedValueOnce([
+      { id: 'a', status: 'BOOKED', startAt: new Date('2099-01-01T05:00:00Z'), visitPurpose: null, doctor, patient: { firstName: 'Ann', lastName: 'B', email: 'a@x.test' } },
+      { id: 'b', status: 'OCCUPIED', startAt: new Date('2099-01-01T06:00:00Z'), visitPurpose: null, doctor, patient: { firstName: 'Bob', lastName: 'C', email: 'b@x.test' } },
+    ]);
+    const response = await request(app).get('/api/admin/appointments').set('Authorization', bearer(Role.ADMIN)).expect(200);
+    expect(response.body.appointments.map((item: { status: string }) => item.status)).toEqual(['Booked', 'Checked in']);
   });
 });

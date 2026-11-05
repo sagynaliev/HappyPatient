@@ -27,6 +27,7 @@ describe("doctor visit page", () => {
     expect(screen.getByText("jamie@example.test")).toBeTruthy();
     expect(screen.getByText("Headache")).toBeTruthy();
     expect(screen.getByText(/Notes for this visit open after it starts/)).toBeTruthy();
+    expect(screen.getByText(/This visit ·/)).toBeTruthy();
   });
 
   it("cancels a future visit only with a reason", async () => {

@@ -20,6 +20,8 @@ const querySchema = z.object({
 const include = { doctor: { select: { user: { select: { firstName: true, lastName: true } } } } };
 // OCCUPIED is this project's checked-in/in-progress visit. After endAt it is
 // completed; BOOKED and elapsed but unconfirmed visits never grant access.
+/** Notes are written during or soon after the visit; later additions would look backdated. */
+export const NOTE_WINDOW_MS = 24 * 60 * 60_000;
 const eligibleVisit = (doctorUserId: string, patientId?: string): Prisma.ScheduleSlotWhereInput => ({
   doctor: { userId: doctorUserId }, ...(patientId ? { patientId } : {}),
   status: 'OCCUPIED', startAt: { lte: new Date() }, patient: { role: Role.PATIENT },
@@ -85,7 +87,7 @@ medicalHistoryRouter.post('/medical-history', privateRoute(async (req, res) => {
   const entry = await prisma.$transaction(async tx => {
     // Demo clock: the database trigger stamps the entry with this time instead of its own clock.
     if (clockOffsetMs() !== 0) await tx.$executeRaw`SELECT set_config('app.now', ${new Date().toISOString()}, true)`;
-    const visit = await tx.scheduleSlot.findFirst({ where: { id: input.data.appointmentId, doctor: {userId:req.user!.id}, status:'OCCUPIED', startAt:{lte:new Date()}, patient: {role:Role.PATIENT} }, select: { id: true, patientId: true, doctorId: true } });
+    const visit = await tx.scheduleSlot.findFirst({ where: { id: input.data.appointmentId, doctor: {userId:req.user!.id}, status:'OCCUPIED', startAt:{lte:new Date()}, endAt:{gte:new Date(Date.now()-NOTE_WINDOW_MS)}, patient: {role:Role.PATIENT} }, select: { id: true, patientId: true, doctorId: true } });
     if (!visit?.patientId) return null;
     if (!await canAccessMedicalHistory(req.user, visit.patientId)) return null;
     return tx.medicalEntry.create({ data: { ...input.data, patientId: visit.patientId, doctorId: visit.doctorId }, include });

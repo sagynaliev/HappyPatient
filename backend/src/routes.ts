@@ -396,58 +396,54 @@ router.get('/doctors/me', requireAuth, requireRole(Role.DOCTOR), async (req, res
   res.json({ doctor });
 });
 
+/**
+ * Creates the requested 30-minute slots, skipping times that have already started or overlap an existing slot.
+ * Returns what was created and what was skipped (with the reason) so the doctor sees exactly which times were left out.
+ */
+async function createAvailability(doctorId: string, requested: Array<{ startAt: Date; endAt: Date }>) {
+  const now = new Date();
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.scheduleSlot.findMany({
+      where: { doctorId, startAt: { lt: requested[requested.length - 1].endAt }, endAt: { gt: requested[0].startAt } },
+      select: { startAt: true, endAt: true },
+    });
+    const skipped: Array<{ startAt: Date; reason: 'past' | 'taken' }> = [];
+    const toCreate = requested.filter((slot) => {
+      if (slot.startAt <= now) { skipped.push({ startAt: slot.startAt, reason: 'past' }); return false; }
+      if (existing.some((item) => item.startAt < slot.endAt && item.endAt > slot.startAt)) { skipped.push({ startAt: slot.startAt, reason: 'taken' }); return false; }
+      return true;
+    });
+    const created = toCreate.length ? (await tx.scheduleSlot.createMany({ data: toCreate.map((slot) => ({ ...slot, doctorId })) })).count : 0;
+    return { created, toCreate, skipped };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+const skippedSummary = (skipped: Array<{ startAt: Date; reason: 'past' | 'taken' }>) => {
+  const past = skipped.filter((item) => item.reason === 'past').length;
+  const taken = skipped.filter((item) => item.reason === 'taken').length;
+  return [past && `${past} already started`, taken && `${taken} already in your schedule`].filter(Boolean).join(', ');
+};
+
 router.post('/doctors/me/schedule', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
   const slots = generateScheduleSlots(req.body);
-  if (slots[0].startAt <= new Date()) return res.status(400).json({ error: 'Schedule slots must start in the future.' });
   const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
-  const rangeStart = slots[0].startAt;
-  const rangeEnd = slots[slots.length - 1].endAt;
-  const result = await prisma.$transaction(async (tx) => {
-    const overlap = await tx.scheduleSlot.findFirst({
-      where: { doctorId: doctor.id, startAt: { lt: rangeEnd }, endAt: { gt: rangeStart } },
-      select: { id: true },
-    });
-    if (overlap) return null;
-    const created = await tx.scheduleSlot.createMany({ data: slots.map((slot) => ({ ...slot, doctorId: doctor.id })) });
-    return created.count;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-  if (result === null) return res.status(409).json({ error: 'This schedule overlaps an existing slot.' });
-  void notifyUser({ userId: req.user!.id, type: 'SCHEDULE_CREATED', subject: 'Schedule updated', message: `${result} new 30-minute slot${result === 1 ? '' : 's'} opened from ${formatAlmaty(rangeStart)} to ${formatAlmaty(rangeEnd)}. Patients can book them now.` });
-  res.status(201).json({ created: result, slots });
+  const result = await createAvailability(doctor.id, slots);
+  if (!result.created) return res.status(409).json({ error: `No new slots: every time in this range has ${result.skipped.every((item) => item.reason === 'past') ? 'already started' : 'already started or is already in your schedule'}.`, skipped: result.skipped });
+  void notifyUser({ userId: req.user!.id, type: 'SCHEDULE_CREATED', subject: 'Schedule updated', message: `${result.created} new 30-minute slot${result.created === 1 ? '' : 's'} opened from ${formatAlmaty(result.toCreate[0].startAt)} to ${formatAlmaty(result.toCreate[result.toCreate.length - 1].endAt)}. Patients can book them now.` });
+  res.status(201).json({ created: result.created, slots: result.toCreate, skipped: result.skipped, skippedSummary: skippedSummary(result.skipped) });
 });
 
 router.post('/doctors/me/schedule/working-days', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
   const input = parsed(scheduleBatchSchema, req.body);
-  const slotsByDate = input.dates.map((date) => generateScheduleSlots({
-    date,
-    startTime: input.startTime,
-    endTime: input.endTime,
-  }));
-  const slots = slotsByDate.flat();
-  if (slots.some((slot) => slot.startAt <= new Date())) {
-    return res.status(400).json({ error: 'Schedule slots must start in the future.' });
-  }
+  const slots = input.dates.flatMap((date) => generateScheduleSlots({ date, startTime: input.startTime, endTime: input.endTime }))
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
   const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
-  const dateRanges = slotsByDate.map((daySlots) => ({
-    startAt: { lt: daySlots[daySlots.length - 1].endAt },
-    endAt: { gt: daySlots[0].startAt },
-  }));
-  const result = await prisma.$transaction(async (tx) => {
-    const overlap = await tx.scheduleSlot.findFirst({
-      where: { doctorId: doctor.id, OR: dateRanges },
-      select: { id: true },
-    });
-    if (overlap) return null;
-    const created = await tx.scheduleSlot.createMany({
-      data: slots.map((slot) => ({ ...slot, doctorId: doctor.id })),
-    });
-    return created.count;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-  if (result === null) return res.status(409).json({ error: 'One or more working days overlap an existing slot. No slots were created.' });
-  void notifyUser({ userId: req.user!.id, type: 'SCHEDULE_CREATED', subject: 'Schedule updated', message: `${result} new 30-minute slot${result === 1 ? '' : 's'} opened across ${input.dates.length} working day${input.dates.length === 1 ? '' : 's'} (${input.dates.join(', ')}).` });
-  res.status(201).json({ created: result, dates: input.dates });
+  const result = await createAvailability(doctor.id, slots);
+  if (!result.created) return res.status(409).json({ error: `No new slots were created: ${skippedSummary(result.skipped)}.`, skipped: result.skipped });
+  const days = new Set(result.toCreate.map((slot) => localDateAt(slot.startAt, 'Asia/Almaty'))).size;
+  void notifyUser({ userId: req.user!.id, type: 'SCHEDULE_CREATED', subject: 'Schedule updated', message: `${result.created} new 30-minute slot${result.created === 1 ? '' : 's'} opened across ${days} working day${days === 1 ? '' : 's'} (${input.startTime}–${input.endTime}). Patients can book them now.` });
+  res.status(201).json({ created: result.created, dates: input.dates, skipped: result.skipped, skippedSummary: skippedSummary(result.skipped) });
 });
 
 router.get('/doctors/:doctorId/schedule', requireAuth, requireRole(Role.PATIENT, Role.DOCTOR, Role.ADMIN, Role.FRONT_DESK), async (req, res) => {
@@ -948,7 +944,7 @@ router.patch('/admin/doctors/:id/location',requireAuth,requireRole(Role.ADMIN),a
 
 router.get('/admin/appointments', requireAuth, requireRole(Role.ADMIN), async (_req, res) => {
   const appointments = await prisma.scheduleSlot.findMany({
-    where: { status: 'BOOKED' },
+    where: { status: { in: ['BOOKED', 'OCCUPIED'] }, patientId: { not: null } },
     orderBy: { startAt: 'asc' },
     take: 20,
     include: {
@@ -963,7 +959,8 @@ router.get('/admin/appointments', requireAuth, requireRole(Role.ADMIN), async (_
     doctor: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`,
     specialty: slot.doctor.category.name,
     date: slot.startAt,
-    status: 'confirmed',
+    // Same wording as the doctor and patient screens.
+    status: slot.status === 'OCCUPIED' ? 'Checked in' : 'Booked',
     purpose: slot.visitPurpose,
   })) });
 });

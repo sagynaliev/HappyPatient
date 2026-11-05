@@ -60,6 +60,7 @@
 .mh-pill.is-anamnesis { background: #efeafe; color: #5a3fc4; }
 .mh-pill.is-conclusion { background: #e3f7ee; color: #0f7a57; }
 .mh-entry-time { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 13px; }
+.mh-entry-visit { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--text-secondary); font-size: 12.5px; }
 .mh-history .mh-entry h3 { margin: 12px 0 6px; font-size: 16px; font-weight: 600; }
 .mh-body { margin: 0; color: #33406a; font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; }
 .mh-body.is-clamped { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
