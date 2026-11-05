@@ -6,49 +6,75 @@ import { toast } from '../lib/toast';
 
 export const categoryLabels = { test: 'Tests', anamnesis: 'Anamnesis', conclusion: 'Conclusions' };
 export type MedicalCategory = keyof typeof categoryLabels;
-export type MedicalEntry = { id: string; category: MedicalCategory; title: string; body: string; createdAt: string; updatedAt: string; eventAt?: string; appointmentStartAt?: string|null; doctor: { user: { firstName: string; lastName: string } } };
-type HistoryResponse = { entries: MedicalEntry[]; hasMore: boolean; counts: Partial<Record<MedicalCategory, number>> };
+export type MedicalEntry = { id: string; category: MedicalCategory; title: string; body: string; createdAt: string; updatedAt: string; eventAt?: string; appointmentId?: string|null; appointmentStartAt?: string|null; specialty?: string; doctor: { user: { firstName: string; lastName: string } } };
+type HistoryResponse = { entries: MedicalEntry[]; hasMore: boolean; counts: Partial<Record<MedicalCategory, number>>; specialties?: Array<{ name: string; count: number }> };
 const almaty = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Almaty', ...options });
 const timeText = almaty({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const writtenText = almaty({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const dayText = almaty({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const visitText = almaty({ weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const monthText = almaty({ month: 'short' });
 const dayNumber = almaty({ day: 'numeric' });
 const categoryIcons = { test: 'chart', anamnesis: 'file', conclusion: 'check' } as const;
-const LONG_NOTE = 320;
+const LONG_NOTE = 160;
+const doctorName = (entry: MedicalEntry) => `Dr. ${entry.doctor.user.firstName} ${entry.doctor.user.lastName}`;
 
-function MedicalEntryCard({ entry, eventAt }: { entry: MedicalEntry; eventAt: string }) {
+/** One note, compact: category, title, when it was written and a two-line preview. */
+function MedicalEntryCard({ entry, showDoctor }: { entry: MedicalEntry; showDoctor: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const long = entry.body.length > LONG_NOTE;
+  const long = entry.body.length > LONG_NOTE || entry.body.split('\n').length > 2;
   return <article className={`mh-entry is-${entry.category}`}>
     <header className="mh-entry-head">
-      <span className={`mh-pill is-${entry.category}`}><Icon name={categoryIcons[entry.category]} size={14} /> {categoryLabels[entry.category]}</span>
-      <time className="mh-entry-time" dateTime={entry.createdAt} title="When the note was written"><Icon name="clock" size={14} /> Written {writtenText.format(new Date(entry.createdAt))}</time>
+      <span className={`mh-pill is-${entry.category}`}><Icon name={categoryIcons[entry.category]} size={13} /> {categoryLabels[entry.category]}</span>
+      <h4>{entry.title}</h4>
+      <time className="mh-entry-time" dateTime={entry.createdAt} title="When the note was written">Written {writtenText.format(new Date(entry.createdAt))}</time>
     </header>
-    {entry.appointmentStartAt && <p className="mh-entry-visit"><Icon name="calendar" size={13} /> Visit {writtenText.format(new Date(entry.appointmentStartAt))}</p>}
-    <h3>{entry.title}</h3>
     <p className={`mh-body${long && !expanded ? ' is-clamped' : ''}`}>{entry.body}</p>
     {long && <button className="mh-more" type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? 'Show less' : 'Show more'}</button>}
-    <footer className="mh-entry-doctor"><Icon name="stethoscope" size={15} /> Dr. {entry.doctor.user.firstName} {entry.doctor.user.lastName}</footer>
+    {showDoctor && <p className="mh-entry-doctor"><Icon name="stethoscope" size={14} /> {doctorName(entry)}</p>}
   </article>;
 }
 
-export function MedicalEntryList({ entries }: { entries: MedicalEntry[] }) {
-  const groups: Array<{ day: string; at: string; items: Array<{ entry: MedicalEntry; eventAt: string }> }> = [];
+type EntryGroup = { key: string; at: string; visit: boolean; entries: MedicalEntry[] };
+/** Notes of one visit stay together; notes without a visit are grouped by day. Entries arrive sorted. */
+function groupEntries(entries: MedicalEntry[]) {
+  const groups: EntryGroup[] = [];
   for (const entry of entries) {
-    const eventAt = entry.eventAt ?? entry.appointmentStartAt ?? entry.createdAt;
-    const day = dayText.format(new Date(eventAt));
+    const at = entry.eventAt ?? entry.appointmentStartAt ?? entry.createdAt;
+    const key = entry.appointmentId ? `visit-${entry.appointmentId}` : `day-${dayText.format(new Date(at))}`;
     const last = groups[groups.length - 1];
-    if (last?.day === day) last.items.push({ entry, eventAt });
-    else groups.push({ day, at: eventAt, items: [{ entry, eventAt }] });
+    if (last?.key === key) last.entries.push(entry);
+    else groups.push({ key, at, visit: Boolean(entry.appointmentId), entries: [entry] });
   }
-  return <ol className="mh-list">{groups.map(group => <li className="mh-group" key={`${group.day}-${group.items[0].entry.id}`}>
-    <div className="mh-date" aria-hidden="true"><span>{monthText.format(new Date(group.at))}</span><strong>{dayNumber.format(new Date(group.at))}</strong></div>
-    <div className="mh-group-body">
-      <h3 className="mh-date-heading">{group.day}</h3>
-      {group.items.map(({ entry, eventAt }) => <MedicalEntryCard key={entry.id} entry={entry} eventAt={eventAt} />)}
-    </div>
-  </li>)}</ol>;
+  return groups;
+}
+
+/** A visit as a collapsible card: date, doctor and what was recorded, with the notes inside. */
+function VisitGroup({ group, open, onToggle }: { group: EntryGroup; open: boolean; onToggle: () => void }) {
+  const first = group.entries[0];
+  const doctors = new Set(group.entries.map(doctorName));
+  const tally = (Object.keys(categoryLabels) as MedicalCategory[]).map(key => [key, group.entries.filter(entry => entry.category === key).length] as const).filter(([, count]) => count);
+  const panelId = `mh-group-${group.key}`;
+  return <li className={`mh-group${open ? ' is-open' : ''}`}>
+    <button type="button" className="mh-group-toggle" aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
+      <span className="mh-date" aria-hidden="true"><span>{monthText.format(new Date(group.at))}</span><strong>{dayNumber.format(new Date(group.at))}</strong></span>
+      <span className="mh-group-copy">
+        <span className="mh-group-title">{group.visit ? 'Visit' : 'Notes'} · {visitText.format(new Date(group.at))}{group.visit ? ` · ${timeText.format(new Date(group.at))}` : ''}</span>
+        <span className="mh-group-meta">{doctors.size === 1 ? doctorName(first) : `${doctors.size} doctors`}{first.specialty ? ` · ${first.specialty}` : ''}</span>
+      </span>
+      <span className="mh-group-tally">{tally.map(([key, count]) => <span key={key} className={`mh-pill is-${key}`}>{count} {categoryLabels[key]}</span>)}</span>
+      <Icon name="arrow-right" size={18} className="mh-group-chevron" />
+    </button>
+    {open && <div className="mh-group-body" id={panelId}>{group.entries.map(entry => <MedicalEntryCard key={entry.id} entry={entry} showDoctor={doctors.size > 1} />)}</div>}
+  </li>;
+}
+
+export function MedicalEntryList({ entries, openAll = false }: { entries: MedicalEntry[]; openAll?: boolean }) {
+  const groups = groupEntries(entries);
+  // Only the newest visit starts open so a long history stays short; searches open everything they found.
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  const isOpen = (group: EntryGroup, index: number) => toggled[group.key] ?? (openAll || index === 0);
+  return <ol className="mh-list">{groups.map((group, index) => <VisitGroup key={group.key} group={group} open={isOpen(group, index)} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group, index) }))} />)}</ol>;
 }
 
 export function MedicalNoteForm({ appointmentId, onSave, onCancel }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void }) {
@@ -83,10 +109,17 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
   const [error, setError] = useState(''); const [success, setSuccess] = useState(false);
   const [filter, setFilter] = useState<MedicalCategory | 'all'>('all'); const [adding, setAdding] = useState(false);
   const [retry, setRetry] = useState(0);
-  const path = `/medical-history?${patientId ? `patientId=${encodeURIComponent(patientId)}&` : ''}direction=${direction}&${filter !== 'all' ? `category=${filter}&` : ''}${scope?.only ? `appointmentId=${encodeURIComponent(scope.only)}&` : ''}${scope?.except ? `excludeAppointmentId=${encodeURIComponent(scope.except)}&` : ''}`;
+  const [search, setSearch] = useState(''); const [query, setQuery] = useState('');
+  const [specialty, setSpecialty] = useState(''); const [period, setPeriod] = useState<'all' | '30' | '182' | '365'>('all');
+  const [specialties, setSpecialties] = useState<NonNullable<HistoryResponse['specialties']>>([]);
+  useEffect(() => { const timer = window.setTimeout(() => setQuery(search.trim()), 300); return () => window.clearTimeout(timer); }, [search]);
+  const showFinder = !scope?.only;
+  const since = period === 'all' ? '' : new Date(Date.now() - Number(period) * 86_400_000).toISOString().slice(0, 10);
+  const narrowed = Boolean(query || specialty || since);
+  const path = `/medical-history?${patientId ? `patientId=${encodeURIComponent(patientId)}&` : ''}direction=${direction}&${filter !== 'all' ? `category=${filter}&` : ''}${scope?.only ? `appointmentId=${encodeURIComponent(scope.only)}&` : ''}${scope?.except ? `excludeAppointmentId=${encodeURIComponent(scope.except)}&` : ''}${query ? `q=${encodeURIComponent(query)}&` : ''}${specialty ? `specialty=${encodeURIComponent(specialty)}&` : ''}${since ? `from=${since}&` : ''}`;
   useEffect(() => {
     let active = true; setLoading(true); setError('');
-    api<HistoryResponse>(path).then(result => { if (active) { setEntries(result.entries); setCounts(result.counts); setHasMore(result.hasMore); } }).catch(() => { if (active) setError('Unable to load medical history.'); }).finally(() => { if (active) setLoading(false); });
+    api<HistoryResponse>(path).then(result => { if (active) { setEntries(result.entries); setCounts(result.counts); setHasMore(result.hasMore); if (result.specialties) setSpecialties(result.specialties); } }).catch(() => { if (active) setError('Unable to load medical history.'); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [path, retry]);
   async function loadMore() {
@@ -118,16 +151,22 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
           {appointmentId && !adding && <button className="button small" type="button" onClick={() => { setAdding(true); setSuccess(false); }}>Add note</button>}
         </div>
       </header>
+      {showFinder && <div className="mh-finder" role="search" aria-label="Find records">
+        <label className="mh-search"><Icon name="search" size={16} /><span className="sr-only">Search records</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search notes, e.g. blood test" /></label>
+        {specialties.length > 1 && <label className="mh-select"><span className="sr-only">Specialty</span><select value={specialty} onChange={event => setSpecialty(event.target.value)}><option value="">All specialties</option>{specialties.map(item => <option key={item.name} value={item.name}>{item.name} ({item.count})</option>)}</select></label>}
+        <label className="mh-select"><span className="sr-only">Period</span><select value={period} onChange={event => setPeriod(event.target.value as typeof period)}><option value="all">All time</option><option value="30">Last 30 days</option><option value="182">Last 6 months</option><option value="365">Last year</option></select></label>
+        {narrowed && <button type="button" className="mh-clear" onClick={() => { setSearch(''); setQuery(''); setSpecialty(''); setPeriod('all'); }}>Clear filters</button>}
+      </div>}
       {adding && appointmentId && <MedicalNoteForm appointmentId={appointmentId} onCancel={() => setAdding(false)} onSave={() => { setFilter('all'); setAdding(false); setSuccess(true); setRetry(value => value + 1); toast.success('Medical note saved', 'It is now in the patient’s timeline.'); }} />}
       {success && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> Medical note saved.</p>}
       {error && <div className="mh-alert is-error" role="alert"><span>{error}</span> <button className="button button-outline small" type="button" onClick={() => { if (entries.length) void loadMore(); else setRetry(value => value + 1); }}>Retry</button></div>}
       {loading && entries.length === 0 && <div role="status" className="mh-loading"><span className="sr-only">Loading medical history…</span><div className="skeleton mh-skeleton" /><div className="skeleton mh-skeleton" /></div>}
       {!loading && !error && entries.length === 0 && <div className="mh-empty">
         <span className="mh-empty-icon"><Icon name="file" size={26} /></span>
-        <h3>{filter === 'all' ? emptyText?.title ?? 'No records yet' : `No ${categoryLabels[filter].toLowerCase()} yet`}</h3>
-        <p>{filter === 'all' ? emptyText?.body ?? 'No medical records yet. Entries added by your doctor after a visit will appear here.' : 'No entries in this category.'}</p>
+        <h3>{narrowed ? 'No matching records' : filter === 'all' ? emptyText?.title ?? 'No records yet' : `No ${categoryLabels[filter].toLowerCase()} yet`}</h3>
+        <p>{narrowed ? 'Try another word, specialty or period.' : filter === 'all' ? emptyText?.body ?? 'No medical records yet. Entries added by your doctor after a visit will appear here.' : 'No entries in this category.'}</p>
       </div>}
-      <MedicalEntryList entries={entries} />
+      <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} />
       {hasMore && <button className="button button-outline mh-load-more" type="button" disabled={loading} onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load more'}</button>}
       {loading && entries.length > 0 && <p role="status" className="sr-only">Loading medical history…</p>}
     </div>
