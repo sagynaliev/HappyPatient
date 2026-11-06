@@ -1,5 +1,5 @@
 import { FormEvent, lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { authApi, DoctorProfile, ScheduleSlot } from "../lib/api";
 import { clock, formatInClinic } from "../lib/almaty";
 import { toast } from "../lib/toast";
@@ -69,7 +69,6 @@ export default function DoctorVisitPage() {
   if (error || !slot) {
     return (
       <div className="dw-page">
-        <Link className="dw-back" to="/doctor/visits">← Visits</Link>
         <div className="dw-alert" role="alert"><span>{error || "Visit not found."}</span><button type="button" className="dw-mini" onClick={() => void load()}>Retry</button></div>
       </div>
     );
@@ -96,7 +95,6 @@ export default function DoctorVisitPage() {
 
   return (
     <div className="dw-page">
-      <Link className="dw-back" to="/doctor/visits">← Visits</Link>
 
       <header className="dw-card dw-visit-head">
         <div className="dw-visit-title">
