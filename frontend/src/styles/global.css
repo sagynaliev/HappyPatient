@@ -2509,10 +2509,6 @@ table th { color: #3b4562; }
 
 /* Sprint 4: medical history and front-desk additions (existing tokens). */
 
-.fd-slot-status { margin-top: 16px; color: var(--text-primary); }
-.fd-slot-status ul { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
-.fd-slot-status li { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; }
-.fd-slot-status .status-pill { color: var(--text-secondary); }
 
 /* Sprint 5–6 operations */
 .pr-form{display:flex;gap:12px;flex-wrap:wrap;padding:16px}.pr-form label{display:grid;gap:6px}.pr-form input,.pr-form select{min-height:42px;padding:8px;border:1px solid var(--border);border-radius:8px}.ad-output{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px}.admin-shell nav{padding:12px;display:flex;gap:10px;flex-wrap:wrap}

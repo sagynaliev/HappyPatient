@@ -1,4 +1,3 @@
-import FrontDeskSlotStatus from "../components/FrontDeskSlotStatus";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { authApi, FrontDeskAppointment, Receipt } from "../lib/api";
@@ -143,7 +142,6 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
             <legend className="sr-only">Doctor and time</legend>
             <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">2</span>Doctor and time</h3>
             <WalkInSlotPicker value={picked} onChange={setPicked} refreshKey={pickerRefresh} disabled={busy} />
-            {picked && <FrontDeskSlotStatus key={picked.doctorId + picked.startAt} doctorId={picked.doctorId} startAt={picked.startAt} />}
           </fieldset>
         </form></section>}
     </div>
