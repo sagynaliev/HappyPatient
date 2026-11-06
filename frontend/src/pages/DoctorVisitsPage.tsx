@@ -16,6 +16,8 @@ export default function DoctorVisitsPage() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("today");
   const [query, setQuery] = useState("");
+  const [order, setOrder] = useState<"auto" | "asc" | "desc">("auto");
+  const [day, setDay] = useState("");
   const request = useRef(0);
 
   const load = useCallback(async () => {
@@ -40,14 +42,16 @@ export default function DoctorVisitsPage() {
     const needle = query.trim().toLowerCase();
     const inTab = slots.filter((slot) => {
       const key = dayKey(slot.startAt);
-      const matchesTab = tab === "today" ? key === today : tab === "upcoming" ? key > today : key < today;
+      const matchesTab = day ? key === day : tab === "today" ? key === today : tab === "upcoming" ? key > today : key < today;
       return matchesTab && (!needle || `${patientName(slot)} ${slot.visitPurpose ?? ""}`.toLowerCase().includes(needle));
     });
-    const ordered = tab === "past" ? inTab.slice().reverse() : inTab;
+    // Natural order: past visits latest first, everything else earliest first.
+    const direction = order === "auto" ? (tab === "past" && !day ? "desc" : "asc") : order;
+    const ordered = direction === "desc" ? inTab.slice().reverse() : inTab;
     const byDay = new Map<string, ScheduleSlot[]>();
     for (const slot of ordered) byDay.set(dayKey(slot.startAt), [...(byDay.get(dayKey(slot.startAt)) ?? []), slot]);
     return [...byDay.entries()];
-  }, [slots, tab, query, today]);
+  }, [slots, tab, query, today, order, day]);
   const counts = {
     today: slots.filter((slot) => dayKey(slot.startAt) === today).length,
     upcoming: slots.filter((slot) => dayKey(slot.startAt) > today).length,
@@ -68,21 +72,29 @@ export default function DoctorVisitsPage() {
         <div className="dw-visits-toolbar">
           <div className="dw-segment" role="group" aria-label="Visit range">
             {(["today", "upcoming", "past"] as Tab[]).map((item) => (
-              <button key={item} type="button" aria-pressed={tab === item} onClick={() => setTab(item)}>{item[0].toUpperCase() + item.slice(1)} <span className="dw-count">{loading ? "–" : counts[item]}</span></button>
+              <button key={item} type="button" aria-pressed={!day && tab === item} onClick={() => { setTab(item); setDay(""); }}>{item[0].toUpperCase() + item.slice(1)} <span className="dw-count">{loading ? "–" : counts[item]}</span></button>
             ))}
           </div>
+          <div className="dw-visits-tools">
+            <label className="dw-date"><span className="sr-only">Visits on a date</span><input type="date" value={day} onChange={(event) => setDay(event.target.value)} aria-label="Visits on a date" /></label>
+            {day && <button type="button" className="dw-mini" onClick={() => setDay("")}>Clear date</button>}
+            <label className="dw-order"><span className="sr-only">Sort by date</span><select value={order} onChange={(event) => setOrder(event.target.value as typeof order)} aria-label="Sort by date">
+              <option value="auto">{tab === "past" && !day ? "Latest first" : "Earliest first"}</option>
+              <option value={tab === "past" && !day ? "asc" : "desc"}>{tab === "past" && !day ? "Earliest first" : "Latest first"}</option>
+            </select></label>
           <label className="dw-search"><Icon name="search" size={16} /><span className="sr-only">Search visits</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search patient or reason" /></label>
+          </div>
         </div>
 
         {loading ? <div className="pt-empty" role="status">Loading visits…</div> : groups.length === 0 ? (
           <div className="pt-empty">
             <span className="pt-empty-icon"><Icon name="users" size={26} /></span>
-            <h3>{query ? "No matching visits" : tab === "today" ? "No patients today" : tab === "upcoming" ? "No upcoming visits" : "No past visits"}</h3>
+            <h3>{query ? "No matching visits" : day ? `No visits on ${formatDayKey(day, { day: "numeric", month: "long" })}` : tab === "today" ? "No patients today" : tab === "upcoming" ? "No upcoming visits" : "No past visits"}</h3>
             <p>{query ? "Try another name or reason." : "Visits appear here when patients book your time."}</p>
           </div>
         ) : groups.map(([key, items]) => (
           <section key={key} className="dw-visit-day" aria-label={formatDayKey(key, { weekday: "long", day: "numeric", month: "long" })}>
-            {tab !== "today" && <h2 className="dw-visit-day-title">{formatDayKey(key, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h2>}
+            {(tab !== "today" || day) && <h2 className="dw-visit-day-title">{formatDayKey(key, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h2>}
             <ol className="dw-agenda">
               {items.map((slot) => {
                 const kind = slotKind(slot);

@@ -83,7 +83,7 @@ export default function AdminDashboard() {
             <p className="ad-empty">{loading ? "Loading appointments…" : "No booked appointments yet."}</p>
           ) : (
             <ul className="ad-appointment-list">
-              {appointments.slice(0, 6).map((item) => (
+              {appointments.filter((item) => Date.parse(item.date) >= Date.now() - 30 * 60_000).slice(0, 6).map((item) => (
                 <li key={item.id}>
                   <span className="ad-avatar" aria-hidden="true">{initials(item.patient)}</span>
                   <div><strong>{item.patient}</strong><small>{item.doctor} · {item.specialty}</small></div>

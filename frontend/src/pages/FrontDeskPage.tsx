@@ -115,7 +115,9 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
       </section>}
       {view === "walk-in" && <section className="front-desk-card fdk-walkin" aria-label="Register walk-in patient">
         <form onSubmit={register} className="front-desk-form" aria-describedby={error ? "fd-form-error" : undefined}>
-          <fieldset className="fdk-step">
+          {/* Patient and confirmation stay in view while the long doctor list scrolls. */}
+          <div className="fdk-walkin-side">
+          <fieldset className="fdk-step is-patient">
             <legend className="sr-only">Patient</legend>
             <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">1</span>Patient</h3>
             <p className="front-desk-muted fdk-step-hint">Search by IIN first. A matching patient record is reused automatically.</p>
@@ -123,13 +125,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
             <div className="front-desk-two"><label>First name<input required value={patient.firstName} onChange={(event) => setPatient({ ...patient, firstName: event.target.value })} /></label><label>Last name<input required value={patient.lastName} onChange={(event) => setPatient({ ...patient, lastName: event.target.value })} /></label></div>
             <div className="front-desk-two"><label>Email<input type="email" value={patient.email} onChange={(event) => setPatient({ ...patient, email: event.target.value })} /></label><label>Phone<input value={patient.phone ?? ""} onChange={(event) => setPatient({ ...patient, phone: event.target.value })} /></label></div>
           </fieldset>
-          <fieldset className="fdk-step">
-            <legend className="sr-only">Doctor and time</legend>
-            <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">2</span>Doctor and time</h3>
-            <WalkInSlotPicker value={picked} onChange={setPicked} refreshKey={pickerRefresh} disabled={busy} />
-            {picked && <FrontDeskSlotStatus key={picked.doctorId + picked.startAt} doctorId={picked.doctorId} startAt={picked.startAt} />}
-          </fieldset>
-          <fieldset className="fdk-step">
+          <fieldset className="fdk-step is-confirm">
             <legend className="sr-only">Confirm</legend>
             <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">3</span>Confirm</h3>
             {picked ? (
@@ -141,6 +137,13 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
             ) : <p className="fdk-picked-empty">Pick a free time above.</p>}
             <label>Visit purpose<input required value={purpose} onChange={(event) => setPurpose(event.target.value)} maxLength={300} /></label>
             <button className="button" disabled={busy || !picked}>{busy ? "Saving…" : picked ? `Register and book ${timeText(picked.startAt)}` : "Register and book"}</button>
+          </fieldset>
+          </div>
+          <fieldset className="fdk-step is-doctor">
+            <legend className="sr-only">Doctor and time</legend>
+            <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">2</span>Doctor and time</h3>
+            <WalkInSlotPicker value={picked} onChange={setPicked} refreshKey={pickerRefresh} disabled={busy} />
+            {picked && <FrontDeskSlotStatus key={picked.doctorId + picked.startAt} doctorId={picked.doctorId} startAt={picked.startAt} />}
           </fieldset>
         </form></section>}
     </div>
