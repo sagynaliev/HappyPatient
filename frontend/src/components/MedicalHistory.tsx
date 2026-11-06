@@ -71,10 +71,10 @@ function VisitGroup({ group, open, onToggle }: { group: EntryGroup; open: boolea
 
 export function MedicalEntryList({ entries, openAll = false }: { entries: MedicalEntry[]; openAll?: boolean }) {
   const groups = groupEntries(entries);
-  // Only the newest visit starts open so a long history stays short; searches open everything they found.
+  // Visits start closed so a long history stays short; a search (or a single-visit view) opens what it found.
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
-  const isOpen = (group: EntryGroup, index: number) => toggled[group.key] ?? (openAll || index === 0);
-  return <ol className="mh-list">{groups.map((group, index) => <VisitGroup key={group.key} group={group} open={isOpen(group, index)} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group, index) }))} />)}</ol>;
+  const isOpen = (group: EntryGroup) => toggled[group.key] ?? openAll;
+  return <ol className="mh-list">{groups.map((group) => <VisitGroup key={group.key} group={group} open={isOpen(group)} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group) }))} />)}</ol>;
 }
 
 export function MedicalNoteForm({ appointmentId, onSave, onCancel }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void }) {
