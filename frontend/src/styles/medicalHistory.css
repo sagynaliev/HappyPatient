@@ -61,6 +61,10 @@
 
 /* Compact notes */
 .mh-entry { min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 12px; background: #f8faff; overflow-wrap: anywhere; }
+.mh-entry.is-new { border-color: #b8cafc; background: #eef3ff; box-shadow: 0 0 0 3px var(--accent); animation: mh-new-in .5s ease-out; }
+.mh-new-badge { padding: 3px 9px; border-radius: 999px; background: var(--primary); color: #fff; font-size: 11.5px; font-weight: 700; }
+@keyframes mh-new-in { from { background: #dbe6ff; } to { background: #eef3ff; } }
+@media (prefers-reduced-motion: reduce) { .mh-entry.is-new { animation: none; } }
 .mh-entry.is-test { border-left-color: #0b6fb8; }
 .mh-entry.is-anamnesis { border-left-color: #6a4fd8; }
 .mh-entry.is-conclusion { border-left-color: #0f8a63; }

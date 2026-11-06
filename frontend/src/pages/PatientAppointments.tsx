@@ -235,6 +235,8 @@ export default function PatientAppointments() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelChoice, setCancelChoice] = useState("");
   const [expandedCancelledId, setExpandedCancelledId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<"auto" | "soonest" | "latest" | "doctor">("auto");
   const [pendingCancellation, setPendingCancellation] = useState<{ appointment: PatientAppointment; reason: string } | null>(null);
   const cancelDialogRef = useRef<HTMLElement>(null);
   const keepAppointmentRef = useRef<HTMLButtonElement>(null);
@@ -390,7 +392,17 @@ export default function PatientAppointments() {
     catch (cause: unknown) { setActionMessage(cause instanceof Error ? cause.message : "Receipt is not available."); }
   }
 
-  const visibleAppointments = activeTab === "upcoming" ? upcoming : activeTab === "past" ? past : [];
+  // Search and sort apply to the open tab. "auto" keeps each tab's natural order: upcoming soonest first, past and cancelled latest first.
+  const matches = (needle: string, ...fields: Array<string | null | undefined>) => !needle || fields.some((field) => field?.toLowerCase().includes(needle));
+  const needle = search.trim().toLowerCase();
+  const order = <T extends { startAt: string; doctor: { name: string } }>(items: T[]) => {
+    const mode = sortMode === "auto" ? (activeTab === "upcoming" ? "soonest" : "latest") : sortMode;
+    return items.slice().sort((a, b) => mode === "doctor" ? a.doctor.name.localeCompare(b.doctor.name) || Date.parse(a.startAt) - Date.parse(b.startAt) : mode === "soonest" ? Date.parse(a.startAt) - Date.parse(b.startAt) : Date.parse(b.startAt) - Date.parse(a.startAt));
+  };
+  const visibleAppointments = order((activeTab === "upcoming" ? upcoming : activeTab === "past" ? past : []).filter((item) => matches(needle, item.doctor.name, item.doctor.specialty, item.doctor.office, item.visitPurpose, item.reference)));
+  const visibleCancelled = order(cancelled.filter((item) => matches(needle, item.doctor.name, item.doctor.specialty, item.reason, item.visitPurpose, item.reference)));
+  const tabTotal = activeTab === "upcoming" ? upcoming.length : activeTab === "past" ? past.length : cancelled.length;
+  const tabShown = activeTab === "cancelled" ? visibleCancelled.length : visibleAppointments.length;
 
   function selectTab(tab: AppointmentTab) {
     setSearchParams(tab === "upcoming" ? {} : { tab });
@@ -443,6 +455,18 @@ export default function PatientAppointments() {
           </button>
         </div>
 
+        {!loading && !error && tabTotal > 0 && (
+          <div className="pa-toolbar" role="search" aria-label="Find appointments">
+            <label className="pa-search"><Icon name="search" size={16} /><span className="sr-only">Search appointments</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search doctor, specialty, reason or booking ID" /></label>
+            <label className="pa-sort"><span className="sr-only">Sort appointments</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value as typeof sortMode)}>
+              <option value="auto">{activeTab === "upcoming" ? "Soonest first" : "Latest first"}</option>
+              <option value={activeTab === "upcoming" ? "latest" : "soonest"}>{activeTab === "upcoming" ? "Latest first" : "Oldest first"}</option>
+              <option value="doctor">Doctor A–Z</option>
+            </select></label>
+            {needle && <span className="pa-toolbar-count" aria-live="polite">{tabShown} of {tabTotal}</span>}
+          </div>
+        )}
+
         {actionMessage && <div className="alert success" role="status">{actionMessage}</div>}
 
         <div id="appointments-panel" role="tabpanel" aria-labelledby={`appointments-tab-${activeTab}`} tabIndex={0}>
@@ -453,9 +477,16 @@ export default function PatientAppointments() {
               <p>Failed to load appointments. {error}</p>
               <button className="button button-outline" type="button" onClick={() => void loadAppointments()}>Retry</button>
             </div>
+          ) : needle && tabTotal > 0 && tabShown === 0 ? (
+            <div className="patient-appointments-message">
+              <span aria-hidden="true">⌕</span>
+              <h2>No matching appointments</h2>
+              <p>Nothing in this tab matches “{search.trim()}”.</p>
+              <button className="button button-outline" type="button" onClick={() => setSearch("")}>Clear search</button>
+            </div>
           ) : activeTab === "cancelled" && cancelled.length > 0 ? (
             <div className="patient-appointments-grid">
-              {cancelled.map((item) => <CancelledCard key={item.id} item={item} expanded={expandedCancelledId === item.slotId} onToggle={() => setExpandedCancelledId((current) => current === item.slotId ? null : item.slotId)} />)}
+              {visibleCancelled.map((item) => <CancelledCard key={item.id} item={item} expanded={expandedCancelledId === item.slotId} onToggle={() => setExpandedCancelledId((current) => current === item.slotId ? null : item.slotId)} />)}
             </div>
           ) : visibleAppointments.length > 0 ? (
             <>

@@ -498,16 +498,21 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .fdk-banner-link:hover { background: var(--accent); }
 .fdk-walkin-layout .fdk-walkin { padding: 26px 28px; }
 .fdk-walkin-layout .fdk-walkin .front-desk-form {
-  display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); grid-template-areas: "patient doctor" "confirm doctor";
+  display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); grid-template-areas: "side doctor";
   align-items: start; column-gap: 32px;
 }
-.fdk-walkin-layout .fdk-step:nth-of-type(1) { grid-area: patient; padding-top: 6px; border-top: 0; }
-.fdk-walkin-layout .fdk-step:nth-of-type(2) { grid-area: doctor; align-self: stretch; padding: 6px 0 0 32px; border-top: 0; border-left: 1px solid var(--border); }
-.fdk-walkin-layout .fdk-step:nth-of-type(3) { grid-area: confirm; padding-bottom: 0; }
+/* Patient and confirm stay visible while the doctor list scrolls: the walk-in is about this patient. */
+.fdk-walkin-layout .fdk-walkin-side { grid-area: side; position: sticky; top: 84px; display: grid; max-height: calc(100vh - 100px); overflow-y: auto; overscroll-behavior: contain; }
+.fdk-walkin-layout .fdk-step.is-patient { padding-top: 6px; border-top: 0; }
+.fdk-walkin-layout .fdk-step.is-doctor { grid-area: doctor; align-self: stretch; padding: 6px 0 0 32px; border-top: 0; border-left: 1px solid var(--border); }
+.fdk-walkin-layout .fdk-step.is-confirm { padding-bottom: 4px; }
 .fdk-walkin-layout .wi-doctors { max-height: 560px; }
 @media (max-width: 1100px) {
   .fdk-walkin-layout .fdk-walkin .front-desk-form { grid-template-columns: 1fr; grid-template-areas: "patient" "doctor" "confirm"; }
-  .fdk-walkin-layout .fdk-step:nth-of-type(2) { padding: 20px 0; border-left: 0; border-top: 1px solid var(--border); }
+  .fdk-walkin-layout .fdk-walkin-side { display: contents; }
+  .fdk-walkin-layout .fdk-step.is-patient { grid-area: patient; }
+  .fdk-walkin-layout .fdk-step.is-confirm { grid-area: confirm; }
+  .fdk-walkin-layout .fdk-step.is-doctor { padding: 20px 0; border-left: 0; border-top: 1px solid var(--border); }
 }
 .fdk-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .fdk-section-head h2 { margin: 0; }

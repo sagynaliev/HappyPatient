@@ -116,3 +116,15 @@
   .ad-audit-list li { grid-template-columns: minmax(0, 1fr); }
   .ad-audit-list small { grid-column: 1; }
 }
+
+/* Admin appointments: search, filters, sortable headers */
+.ad-appts-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.ad-appts-search { display: flex; flex: 1 1 280px; align-items: center; gap: 8px; height: 42px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-secondary); }
+.ad-appts-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text-primary); font: inherit; font-size: 14px; }
+.ad-appts-search input:focus, .ad-appts-search input:focus-visible { outline: none !important; box-shadow: none; }
+.ad-appts-search:focus-within, .ad-appts-select select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--accent); }
+.ad-appts-select select { height: 42px; padding: 0 34px 0 14px; border: 1px solid var(--border); border-radius: 999px; background-color: var(--surface); color: var(--text-primary); font: inherit; font-size: 14px; outline: none; }
+.ad-appts-count { margin-left: auto; color: var(--text-secondary); font-size: 13px; }
+.ad-sort { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; white-space: nowrap; }
+.ad-sort span { color: #a3acc2; }
+.ad-sort.is-active, .ad-sort.is-active span { color: var(--primary); }

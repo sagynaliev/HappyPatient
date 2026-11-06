@@ -20,11 +20,12 @@ const LONG_NOTE = 160;
 const doctorName = (entry: MedicalEntry) => `Dr. ${entry.doctor.user.firstName} ${entry.doctor.user.lastName}`;
 
 /** One note, compact: category, title, when it was written and a two-line preview. */
-function MedicalEntryCard({ entry, showDoctor }: { entry: MedicalEntry; showDoctor: boolean }) {
+function MedicalEntryCard({ entry, showDoctor, isNew }: { entry: MedicalEntry; showDoctor: boolean; isNew?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const long = entry.body.length > LONG_NOTE || entry.body.split('\n').length > 2;
-  return <article className={`mh-entry is-${entry.category}`}>
+  return <article className={`mh-entry is-${entry.category}${isNew ? ' is-new' : ''}`} ref={element => { if (isNew && element?.scrollIntoView) element.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }}>
     <header className="mh-entry-head">
+      {isNew && <span className="mh-new-badge">Just added</span>}
       <span className={`mh-pill is-${entry.category}`}><Icon name={categoryIcons[entry.category]} size={13} /> {categoryLabels[entry.category]}</span>
       <h4>{entry.title}</h4>
       <time className="mh-entry-time" dateTime={entry.createdAt} title="When the note was written">Written {writtenText.format(new Date(entry.createdAt))}</time>
@@ -50,7 +51,7 @@ function groupEntries(entries: MedicalEntry[]) {
 }
 
 /** A visit as a collapsible card: date, doctor and what was recorded, with the notes inside. */
-function VisitGroup({ group, open, onToggle }: { group: EntryGroup; open: boolean; onToggle: () => void }) {
+function VisitGroup({ group, open, onToggle, newId }: { group: EntryGroup; open: boolean; onToggle: () => void; newId?: string }) {
   const first = group.entries[0];
   const doctors = new Set(group.entries.map(doctorName));
   const tally = (Object.keys(categoryLabels) as MedicalCategory[]).map(key => [key, group.entries.filter(entry => entry.category === key).length] as const).filter(([, count]) => count);
@@ -65,19 +66,20 @@ function VisitGroup({ group, open, onToggle }: { group: EntryGroup; open: boolea
       <span className="mh-group-tally">{tally.map(([key, count]) => <span key={key} className={`mh-pill is-${key}`}>{count} {categoryLabels[key]}</span>)}</span>
       <Icon name="arrow-right" size={18} className="mh-group-chevron" />
     </button>
-    {open && <div className="mh-group-body" id={panelId}>{group.entries.map(entry => <MedicalEntryCard key={entry.id} entry={entry} showDoctor={doctors.size > 1} />)}</div>}
+    {open && <div className="mh-group-body" id={panelId}>{group.entries.map(entry => <MedicalEntryCard key={entry.id} entry={entry} showDoctor={doctors.size > 1} isNew={entry.id === newId} />)}</div>}
   </li>;
 }
 
-export function MedicalEntryList({ entries, openAll = false }: { entries: MedicalEntry[]; openAll?: boolean }) {
+export function MedicalEntryList({ entries, openAll = false, newId }: { entries: MedicalEntry[]; openAll?: boolean; newId?: string }) {
   const groups = groupEntries(entries);
   // Visits start closed so a long history stays short; a search (or a single-visit view) opens what it found.
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
-  const isOpen = (group: EntryGroup) => toggled[group.key] ?? openAll;
-  return <ol className="mh-list">{groups.map((group) => <VisitGroup key={group.key} group={group} open={isOpen(group)} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group) }))} />)}</ol>;
+  // The visit holding a note that was just added always stays open, so the doctor sees what was saved.
+  const isOpen = (group: EntryGroup) => (newId !== undefined && group.entries.some(entry => entry.id === newId)) || (toggled[group.key] ?? openAll);
+  return <ol className="mh-list">{groups.map((group) => <VisitGroup key={group.key} group={group} open={isOpen(group)} newId={newId} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group) }))} />)}</ol>;
 }
 
-export function MedicalNoteForm({ appointmentId, onSave, onCancel }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void }) {
+export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 0 }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void; savedCount?: number }) {
   const [category, setCategory] = useState<MedicalCategory>('anamnesis');
   const [title, setTitle] = useState(''); const [body, setBody] = useState('');
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
@@ -85,18 +87,19 @@ export function MedicalNoteForm({ appointmentId, onSave, onCancel }: { appointme
     event.preventDefault(); setError('');
     if (!title.trim() || title.trim().length > 120 || !body.trim() || body.trim().length > 5000) { setError('Enter a title (1–120) and note (1–5000 characters).'); return; }
     setBusy(true);
-    try { const result = await api<{ entry: MedicalEntry }>('/medical-history', { method: 'POST', body: JSON.stringify({ appointmentId, category, title: title.trim(), body: body.trim() }) }); onSave(result.entry); }
+    try { const result = await api<{ entry: MedicalEntry }>('/medical-history', { method: 'POST', body: JSON.stringify({ appointmentId, category, title: title.trim(), body: body.trim() }) }); setTitle(''); setBody(''); onSave(result.entry); }
     catch { setError('Unable to save the note. Please try again.'); }
     finally { setBusy(false); }
   }
   return <form className="mh-form" onSubmit={submit} noValidate>
-    <h3>Add medical note</h3>
+    <h3>{savedCount ? 'Add another note' : 'Add medical note'}</h3>
+    {savedCount > 0 && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> {savedCount === 1 ? 'Note saved' : `${savedCount} notes saved`} — it is highlighted below. Add another or close the form.</p>}
     {error && <p id="mh-form-error" className="alert error" role="alert">{error}</p>}
     <label htmlFor="mh-category">Category</label><select id="mh-category" value={category} onChange={event => setCategory(event.target.value as MedicalCategory)} disabled={busy} required>{Object.entries(categoryLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select>
     <label htmlFor="mh-title">Title</label><input id="mh-title" value={title} maxLength={120} required disabled={busy} aria-describedby={error ? 'mh-form-error' : undefined} onChange={event => setTitle(event.target.value)} />
     <label htmlFor="mh-body">Note</label><textarea id="mh-body" value={body} maxLength={5000} rows={7} required disabled={busy} aria-describedby={`mh-counter${error ? ' mh-form-error' : ''}`} onChange={event => setBody(event.target.value)} />
     <small id="mh-counter">{body.length}/5000 characters</small>
-    <div className="mh-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save note'}</button><button className="button button-outline" type="button" disabled={busy} onClick={onCancel}>Cancel</button></div>
+    <div className="mh-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save note'}</button><button className="button button-outline" type="button" disabled={busy} onClick={onCancel}>{savedCount ? 'Close' : 'Cancel'}</button></div>
   </form>;
 }
 
@@ -109,6 +112,7 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
   const [error, setError] = useState(''); const [success, setSuccess] = useState(false);
   const [filter, setFilter] = useState<MedicalCategory | 'all'>('all'); const [adding, setAdding] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [newId, setNewId] = useState<string>(); const [savedCount, setSavedCount] = useState(0);
   const [search, setSearch] = useState(''); const [query, setQuery] = useState('');
   const [specialty, setSpecialty] = useState(''); const [period, setPeriod] = useState<'all' | '30' | '182' | '365'>('all');
   const [specialties, setSpecialties] = useState<NonNullable<HistoryResponse['specialties']>>([]);
@@ -157,8 +161,8 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
         <label className="mh-select"><span className="sr-only">Period</span><select value={period} onChange={event => setPeriod(event.target.value as typeof period)}><option value="all">All time</option><option value="30">Last 30 days</option><option value="182">Last 6 months</option><option value="365">Last year</option></select></label>
         {narrowed && <button type="button" className="mh-clear" onClick={() => { setSearch(''); setQuery(''); setSpecialty(''); setPeriod('all'); }}>Clear filters</button>}
       </div>}
-      {adding && appointmentId && <MedicalNoteForm appointmentId={appointmentId} onCancel={() => setAdding(false)} onSave={() => { setFilter('all'); setAdding(false); setSuccess(true); setRetry(value => value + 1); toast.success('Medical note saved', 'It is now in the patient’s timeline.'); }} />}
-      {success && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> Medical note saved.</p>}
+      {adding && appointmentId && <MedicalNoteForm appointmentId={appointmentId} savedCount={savedCount} onCancel={() => { setAdding(false); setSavedCount(0); }} onSave={entry => { setFilter('all'); setNewId(entry.id); setSavedCount(count => count + 1); setSuccess(true); setRetry(value => value + 1); toast.success('Medical note saved', 'It is highlighted in the timeline.'); }} />}
+      {success && !adding && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> Medical note saved.</p>}
       {error && <div className="mh-alert is-error" role="alert"><span>{error}</span> <button className="button button-outline small" type="button" onClick={() => { if (entries.length) void loadMore(); else setRetry(value => value + 1); }}>Retry</button></div>}
       {loading && entries.length === 0 && <div role="status" className="mh-loading"><span className="sr-only">Loading medical history…</span><div className="skeleton mh-skeleton" /><div className="skeleton mh-skeleton" /></div>}
       {!loading && !error && entries.length === 0 && <div className="mh-empty">
@@ -166,7 +170,7 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
         <h3>{narrowed ? 'No matching records' : filter === 'all' ? emptyText?.title ?? 'No records yet' : `No ${categoryLabels[filter].toLowerCase()} yet`}</h3>
         <p>{narrowed ? 'Try another word, specialty or period.' : filter === 'all' ? emptyText?.body ?? 'No medical records yet. Entries added by your doctor after a visit will appear here.' : 'No entries in this category.'}</p>
       </div>}
-      <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} />
+      <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} newId={newId} />
       {hasMore && <button className="button button-outline mh-load-more" type="button" disabled={loading} onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load more'}</button>}
       {loading && entries.length > 0 && <p role="status" className="sr-only">Loading medical history…</p>}
     </div>

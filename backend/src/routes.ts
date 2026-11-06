@@ -946,7 +946,8 @@ router.get('/admin/appointments', requireAuth, requireRole(Role.ADMIN), async (_
   const appointments = await prisma.scheduleSlot.findMany({
     where: { status: { in: ['BOOKED', 'OCCUPIED'] }, patientId: { not: null } },
     orderBy: { startAt: 'asc' },
-    take: 20,
+    // Enough for the admin list to search and sort on the client.
+    take: 1000,
     include: {
       doctor: { include: { user: { select: { firstName: true, lastName: true } }, category: true } },
       patient: { select: { firstName: true, lastName: true, email: true } },
