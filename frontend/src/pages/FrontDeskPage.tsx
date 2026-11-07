@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { authApi, FrontDeskAppointment, Receipt } from "../lib/api";
 import WalkInSlotPicker, { PickedSlot } from "../components/WalkInSlotPicker";
@@ -30,6 +30,22 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
   const [message, setMessage] = useState("");
   const [walkInConfirmation, setWalkInConfirmation] = useState<{ patientName: string; doctorName: string; specialty: string; office: string; startAt: string; endAt: string; status: string; reference: string; slotId: string } | null>(null);
   const [error, setError] = useState("");
+  const walkInCard = useRef<HTMLElement>(null);
+  // The walk-in card ends at the bottom of the window, whatever the screen height, so nothing needs page scrolling.
+  useLayoutEffect(() => {
+    const card = walkInCard.current;
+    if (view !== "walk-in" || !card) return;
+    // 16px matches the content padding left under the card on this page.
+    const fit = () => card.style.setProperty("--walkin-h", `${Math.max(560, Math.floor(window.innerHeight - (card.getBoundingClientRect().top + window.scrollY) - 16))}px`);
+    fit();
+    const frame = requestAnimationFrame(fit);
+    // Content above the card (banner, alerts) can settle after the first paint; refit whenever it moves.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    const page = card.closest(".front-desk-page");
+    if (observer && page) Array.from(page.children).forEach((child) => { if (child !== card.parentElement) observer.observe(child); });
+    window.addEventListener("resize", fit);
+    return () => { cancelAnimationFrame(frame); observer?.disconnect(); window.removeEventListener("resize", fit); };
+  }, [view, message, error]);
   const [busy, setBusy] = useState(false);
 
   const loadAppointments = useCallback(async () => {
@@ -79,8 +95,8 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
     catch (cause: unknown) { setError(cause instanceof Error ? cause.message : "Receipt is not available."); }
   }
 
-  return <main className="front-desk-page">
-    <header className="front-desk-heading fdk-banner">
+  return <main className={`front-desk-page${view === "walk-in" ? " is-walkin" : ""}`}>
+    <header className={`front-desk-heading fdk-banner${view === "walk-in" ? " is-slim" : ""}`}>
       <div className="fdk-banner-copy">{view === "walk-in" ? <><h1>Walk-in registration</h1><p>Register a patient who arrived without a booking and give them the next free time.</p></> : <><h1>Front desk</h1><p>Find appointments and confirm arrivals.</p></>}</div>
       {view === "walk-in" ? <Link className="fdk-banner-link" to="/front-desk">Today’s appointments</Link> : <dl className="fdk-stats">
         <div><dt>Today’s visits</dt><dd>{appointments.filter((item) => item.startAt.slice(0, 10) && new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty" }).format(new Date(item.startAt)) === today()).length}</dd></div>
@@ -112,15 +128,14 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
           </div>
         </article>) : <p className="front-desk-empty">No booked or checked-in appointments found.</p>}</div>
       </section>}
-      {view === "walk-in" && <section className="front-desk-card fdk-walkin" aria-label="Register walk-in patient">
+      {view === "walk-in" && <section ref={walkInCard} className="front-desk-card fdk-walkin" aria-label="Register walk-in patient">
         <form onSubmit={register} className="front-desk-form" aria-describedby={error ? "fd-form-error" : undefined}>
-          {/* Patient and confirmation stay in view while the long doctor list scrolls. */}
+          {/* The card fills one screen: Patient on top, Confirm at the bottom, only the doctor list scrolls. */}
           <div className="fdk-walkin-side">
           <fieldset className="fdk-step is-patient">
             <legend className="sr-only">Patient</legend>
             <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">1</span>Patient</h3>
-            <p className="front-desk-muted fdk-step-hint">Search by IIN first. A matching patient record is reused automatically.</p>
-            <div className="front-desk-inline"><label>IIN<input required inputMode="numeric" maxLength={12} value={patient.iin} onChange={(event) => setPatient({ ...patient, iin: event.target.value.replace(/\D/g, "").slice(0, 12) })} /></label><button className="button button-outline" type="button" disabled={busy} onClick={() => void lookup()}>Find patient</button></div>
+            <div className="front-desk-inline"><label>IIN<input required inputMode="numeric" maxLength={12} placeholder="12 digits — finds an existing patient" value={patient.iin} onChange={(event) => setPatient({ ...patient, iin: event.target.value.replace(/\D/g, "").slice(0, 12) })} /></label><button className="button button-outline" type="button" disabled={busy} onClick={() => void lookup()}>Find patient</button></div>
             <div className="front-desk-two"><label>First name<input required value={patient.firstName} onChange={(event) => setPatient({ ...patient, firstName: event.target.value })} /></label><label>Last name<input required value={patient.lastName} onChange={(event) => setPatient({ ...patient, lastName: event.target.value })} /></label></div>
             <div className="front-desk-two"><label>Email<input type="email" value={patient.email} onChange={(event) => setPatient({ ...patient, email: event.target.value })} /></label><label>Phone<input value={patient.phone ?? ""} onChange={(event) => setPatient({ ...patient, phone: event.target.value })} /></label></div>
           </fieldset>
@@ -134,7 +149,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
                 <button type="button" className="fdk-picked-clear" onClick={() => setPicked(null)}>Change</button>
               </div>
             ) : <p className="fdk-picked-empty">Pick a free time above.</p>}
-            <label>Visit purpose<input required value={purpose} onChange={(event) => setPurpose(event.target.value)} maxLength={300} /></label>
+            <label className="fdk-purpose">Visit purpose<textarea required value={purpose} onChange={(event) => setPurpose(event.target.value)} maxLength={300} rows={1} /></label>
             <button className="button" disabled={busy || !picked}>{busy ? "Saving…" : picked ? `Register and book ${timeText(picked.startAt)}` : "Register and book"}</button>
           </fieldset>
           </div>

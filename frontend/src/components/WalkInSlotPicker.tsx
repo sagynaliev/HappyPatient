@@ -71,6 +71,7 @@ export default function WalkInSlotPicker({ value, onChange, refreshKey = 0, disa
 
   return (
     <div className="wi-picker">
+      <div className="wi-filters">
       <div className="wi-row">
         <div className="wi-days" role="group" aria-label="Day">
           <button type="button" className={isToday ? "is-active" : ""} aria-pressed={isToday} onClick={() => setDay(dayKey())} disabled={disabled}>Today</button>
@@ -88,6 +89,7 @@ export default function WalkInSlotPicker({ value, onChange, refreshKey = 0, disa
       </div>
 
       <SpecialtyMultiSelect options={categories} value={specialties} onChange={setSpecialties} counts={counts} disabled={disabled} />
+      </div>
 
       <div className="wi-results" aria-live="polite" aria-busy={loading}>
         <p className="wi-count">
