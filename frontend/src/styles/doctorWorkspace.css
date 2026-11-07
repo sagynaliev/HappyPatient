@@ -116,12 +116,22 @@
 .dw-visit-header h1 { margin: 0; font-size: clamp(24px, 2.4vw, 30px); font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
 .dw-visit-who > span { overflow: hidden; margin-top: 2px; color: var(--text-secondary); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .dw-visit-header .dw-visit-actions { flex-wrap: wrap; justify-content: flex-end; }
-.dw-visit-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; margin: 0; border-top: 1px solid var(--border); }
-.dw-visit-info > div { display: grid; align-content: start; gap: 4px; padding: 14px 16px 0 0; }
-.dw-visit-info dt { color: var(--text-secondary); font-size: 12.5px; }
-.dw-visit-info dd { display: grid; margin: 0; color: var(--text-primary); font-size: 14.5px; font-weight: 600; line-height: 1.35; }
-.dw-visit-info dd span { font-weight: 500; white-space: nowrap; }
-.dw-visit-info dd small { color: var(--status-success, #17633f); font-size: 12.5px; font-weight: 500; }
+.dw-visit-info { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 14px; }
+.dw-info-group { display: grid; align-content: start; gap: 10px; padding: 14px 16px 16px; border-radius: 16px; background: #f6f8ff; }
+.dw-info-group.is-history { background: #f7f8fb; }
+.dw-info-group h2 { margin: 0; color: var(--text-secondary); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.dw-info-group dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin: 0; }
+.dw-info-group.is-history dl { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.dw-info-group dl > div { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; align-items: center; }
+.dw-info-group dl svg { grid-row: span 2; box-sizing: content-box; padding: 8px; border-radius: 10px; background: #fff; color: var(--primary); }
+.dw-info-group dt { color: var(--text-secondary); font-size: 12.5px; line-height: 1.3; }
+.dw-info-group dd { margin: 0; color: var(--text-primary); font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.dw-info-group dd small { display: block; color: var(--status-success, #17633f); font-size: 12.5px; font-weight: 500; }
+.dw-info-group.is-history dl > div { grid-template-columns: 34px minmax(0, 1fr) auto; }
+.dw-info-group.is-history dl svg { grid-row: auto; padding: 6px; }
+.dw-info-group.is-history dl > div { grid-template-columns: 30px minmax(0, 1fr) auto; }
+.dw-info-group.is-history dt { font-size: 13.5px; }
+.dw-info-group.is-history dd { text-align: right; }
 .dw-visit-work { display: grid; gap: 20px; }
 .dw-dialog-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: rgb(16 27 59 / 42%); animation: dw-fade-in .15s ease-out; }
 .dw-dialog { display: grid; gap: 14px; width: min(640px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; padding: 22px 24px 24px; border-radius: 22px; background: var(--surface); box-shadow: 0 24px 60px rgb(16 27 59 / 28%); animation: dw-pop-in .18s ease-out; }
@@ -210,7 +220,8 @@ a.dw-agenda-row:hover .dw-row-arrow { color: var(--primary); }
 @media (max-width: 700px) {
   .dw-visit-header { padding: 16px; }
   .dw-visit-header .dw-visit-actions { width: 100%; justify-content: flex-start; }
-  .dw-visit-info { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dw-visit-info { grid-template-columns: minmax(0, 1fr); }
+  .dw-info-group dl { grid-template-columns: minmax(0, 1fr); }
   .dw-dialog-backdrop { align-items: end; padding: 0; }
   .dw-dialog { width: 100%; max-height: 92vh; border-radius: 22px 22px 0 0; padding: 18px 16px 22px; }
   .dw-visits-tools { justify-content: flex-start; flex-basis: 100%; }

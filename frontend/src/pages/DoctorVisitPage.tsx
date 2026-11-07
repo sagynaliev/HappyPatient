@@ -112,15 +112,25 @@ export default function DoctorVisitPage() {
           {canCancel && !cancelling && <button type="button" className="dw-mini is-danger" onClick={() => setCancelling(true)}>Cancel visit</button>}
         </div>
         </div>
-        <dl className="dw-visit-info">
-          <div><dt>Date and time</dt><dd>{shortWeekday(slot.startAt)}<span>{clock(slot.startAt)}–{clock(slot.endAt)}</span>{slot.checkedInAt && <small>Arrived {clock(slot.checkedInAt)}</small>}</dd></div>
-          <div><dt>Reason</dt><dd>{slot.visitPurpose || "Not provided"}</dd></div>
-          <div><dt>Consultation</dt><dd>{doctor?.category.name ?? "Visit"} · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min</dd></div>
-          <div><dt>Office</dt><dd>{doctor?.office || "Not listed"}</dd></div>
-          <div><dt>Visits with you</dt><dd>{history.length}</dd></div>
-          <div><dt>Last visit</dt><dd>{past.length ? shortDay(past[past.length - 1].startAt) : "First visit"}</dd></div>
-          <div><dt>Next visit</dt><dd>{next ? `${next.id === slot.id ? "This visit · " : ""}${shortDay(next.startAt)}, ${clock(next.startAt)}` : "None booked"}</dd></div>
-        </dl>
+        <div className="dw-visit-info">
+          <section className="dw-info-group" aria-label="This visit">
+            <h2>This visit</h2>
+            <dl>
+              <div><Icon name="calendar" size={18} /><dt>Date and time</dt><dd>{shortWeekday(slot.startAt)} · {clock(slot.startAt)}–{clock(slot.endAt)}{slot.checkedInAt && <small>Arrived {clock(slot.checkedInAt)}</small>}</dd></div>
+              <div><Icon name="file" size={18} /><dt>Reason</dt><dd>{slot.visitPurpose || "Not provided"}</dd></div>
+              <div><Icon name="stethoscope" size={18} /><dt>Consultation</dt><dd>{doctor?.category.name ?? "Visit"} · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min</dd></div>
+              <div><Icon name="pin" size={18} /><dt>Office</dt><dd>{doctor?.office || "Not listed"}</dd></div>
+            </dl>
+          </section>
+          <section className="dw-info-group is-history" aria-label="With you">
+            <h2>With you</h2>
+            <dl>
+              <div><Icon name="users" size={18} /><dt>Visits</dt><dd>{history.length}</dd></div>
+              <div><Icon name="clock" size={18} /><dt>Last visit</dt><dd>{past.length ? shortDay(past[past.length - 1].startAt) : "First visit"}</dd></div>
+              <div><Icon name="calendar" size={18} /><dt>Next visit</dt><dd>{next ? `${next.id === slot.id ? "This visit · " : ""}${shortDay(next.startAt)}, ${clock(next.startAt)}` : "None booked"}</dd></div>
+            </dl>
+          </section>
+        </div>
         {cancelling && (
           <form className="dw-cancel" onSubmit={cancelVisit}>
             <label htmlFor="dw-cancel-reason">Why are you cancelling? The patient will see this.</label>
