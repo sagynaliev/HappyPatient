@@ -107,7 +107,7 @@
 .mh-form h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
 .mh-form label { color: #33406a; font-size: 13px; font-weight: 600; }
 .mh-form input, .mh-form select, .mh-form textarea { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text-primary); font: inherit; }
-.mh-form input:focus, .mh-form select:focus, .mh-form textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px var(--accent); }
+.mh-form input:focus, .mh-form select:focus, .mh-form textarea:focus, .mh-form input:focus-visible, .mh-form select:focus-visible, .mh-form textarea:focus-visible { border-color: var(--primary); outline: none !important; box-shadow: 0 0 0 3px var(--accent); }
 .mh-form textarea { resize: vertical; }
 .mh-form small { color: var(--text-secondary); }
 .mh-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
@@ -141,12 +141,12 @@
 .mh-chip strong { color: var(--text-primary); font-weight: 600; }
 .mh-chip:hover { border-color: var(--accent-strong); }
 .mh-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--accent); color: var(--primary-deep); }
-/* Note form that stays beside the timeline */
-.mh-form.is-persistent { gap: 10px; padding: 20px; border-color: var(--border); background: var(--surface); box-shadow: var(--shadow-card); }
-.mh-form.is-persistent textarea { min-height: 140px; }
+/* Note form opened from the note bar */
+.mh-form.is-inline { gap: 10px; padding: 18px 20px; border-color: var(--accent-strong); background: var(--surface); box-shadow: var(--shadow-card); }
+.mh-form.is-inline textarea { min-height: 120px; }
 .mh-category-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .mh-category-chips legend { margin-bottom: 6px; padding: 0; color: #33406a; font-size: 13px; font-weight: 600; }
 .mh-category-chips button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .mh-category-chips button[aria-pressed="true"] { border-color: var(--primary); background: var(--accent); color: var(--primary-deep); }
-.mh-form.is-persistent .mh-alert { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; margin: 0; }
-.mh-form.is-persistent .mh-alert svg { flex: 0 0 auto; margin-top: 3px; }
+.mh-form.is-inline .mh-alert { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; margin: 0; }
+.mh-form.is-inline .mh-alert svg { flex: 0 0 auto; margin-top: 3px; }

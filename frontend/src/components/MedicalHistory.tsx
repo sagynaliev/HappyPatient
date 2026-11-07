@@ -79,8 +79,8 @@ export function MedicalEntryList({ entries, openAll = false, newId }: { entries:
   return <ol className="mh-list">{groups.map((group) => <VisitGroup key={group.key} group={group} open={isOpen(group)} newId={newId} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group) }))} />)}</ol>;
 }
 
-/** persistent: the form stays on screen beside the timeline (doctor visit page), so it has no Cancel and picks a category with chips. */
-export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 0, persistent = false }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void; savedCount?: number; persistent?: boolean }) {
+/** chips: picks the category with one tap and focuses the title, for the note bar on the doctor visit page. */
+export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 0, chips = false }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void; savedCount?: number; chips?: boolean }) {
   const [category, setCategory] = useState<MedicalCategory>('anamnesis');
   const [title, setTitle] = useState(''); const [body, setBody] = useState('');
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
@@ -92,23 +92,23 @@ export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 
     catch { setError('Unable to save the note. Please try again.'); }
     finally { setBusy(false); }
   }
-  return <form className={`mh-form${persistent ? ' is-persistent' : ''}`} onSubmit={submit} noValidate>
-    <h3>{persistent ? 'Write a note' : savedCount ? 'Add another note' : 'Add medical note'}</h3>
-    {savedCount > 0 && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> {savedCount === 1 ? 'Note saved' : `${savedCount} notes saved`} — {persistent ? 'it is highlighted in the timeline. You can write the next one.' : 'it is highlighted below. Add another or close the form.'}</p>}
+  return <form className={`mh-form${chips ? ' is-inline' : ''}`} onSubmit={submit} noValidate>
+    <h3>{savedCount ? 'Add another note' : chips ? 'Write a note' : 'Add medical note'}</h3>
+    {savedCount > 0 && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> {savedCount === 1 ? 'Note saved' : `${savedCount} notes saved`} — it is highlighted below. Add another or close the form.</p>}
     {error && <p id="mh-form-error" className="alert error" role="alert">{error}</p>}
-    {persistent
+    {chips
       ? <fieldset className="mh-category-chips"><legend>Category</legend>{(Object.keys(categoryLabels) as MedicalCategory[]).map(key => <button type="button" key={key} className={`is-${key}`} aria-pressed={category === key} disabled={busy} onClick={() => setCategory(key)}><Icon name={categoryIcons[key]} size={15} /> {categoryLabels[key]}</button>)}</fieldset>
       : <><label htmlFor="mh-category">Category</label><select id="mh-category" value={category} onChange={event => setCategory(event.target.value as MedicalCategory)} disabled={busy} required>{Object.entries(categoryLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></>}
-    <label htmlFor="mh-title">Title</label><input id="mh-title" value={title} maxLength={120} required disabled={busy} aria-describedby={error ? 'mh-form-error' : undefined} onChange={event => setTitle(event.target.value)} />
+    <label htmlFor="mh-title">Title</label><input id="mh-title" autoFocus={chips} value={title} maxLength={120} required disabled={busy} aria-describedby={error ? 'mh-form-error' : undefined} onChange={event => setTitle(event.target.value)} />
     <label htmlFor="mh-body">Note</label><textarea id="mh-body" value={body} maxLength={5000} rows={7} required disabled={busy} aria-describedby={`mh-counter${error ? ' mh-form-error' : ''}`} onChange={event => setBody(event.target.value)} />
     <small id="mh-counter">{body.length}/5000 characters</small>
-    <div className="mh-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save note'}</button>{!persistent && <button className="button button-outline" type="button" disabled={busy} onClick={onCancel}>{savedCount ? 'Close' : 'Cancel'}</button>}</div>
+    <div className="mh-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save note'}</button><button className="button button-outline" type="button" disabled={busy} onClick={onCancel}>{savedCount ? 'Close' : 'Cancel'}</button></div>
   </form>;
 }
 
 /** appointmentId enables adding notes to that visit; scope limits the list to one visit (only) or everything but one visit (except).
  * compact puts the category counts in a chip row inside the timeline; refreshKey reloads and highlightId marks a note saved from outside. */
-export default function MedicalHistory({ patientId, appointmentId, scope, emptyText, compact = false, refreshKey = 0, highlightId }: { patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string }; compact?: boolean; refreshKey?: number; highlightId?: string }) {
+export default function MedicalHistory({ patientId, appointmentId, scope, emptyText, compact = false, refreshKey = 0, highlightId, onAddNote }: { patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string }; compact?: boolean; refreshKey?: number; highlightId?: string; onAddNote?: () => void }) {
   const [direction,setDirection]=useState<'asc'|'desc'>('desc');
   const [entries, setEntries] = useState<MedicalEntry[]>([]);
   const [counts, setCounts] = useState<HistoryResponse['counts']>({});
@@ -158,6 +158,7 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
             <button type="button" aria-pressed={direction === 'asc'} onClick={() => setDirection('asc')}>Oldest first</button>
           </div>
           {appointmentId && !adding && <button className="button small" type="button" onClick={() => { setAdding(true); setSuccess(false); }}>Add note</button>}
+          {onAddNote && <button className="button small" type="button" onClick={onAddNote}>Add note</button>}
         </div>
       </header>
       {compact && <div className="mh-chips" role="group" aria-label="Filter medical entries">

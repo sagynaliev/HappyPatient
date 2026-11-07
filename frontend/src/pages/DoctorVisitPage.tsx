@@ -1,4 +1,5 @@
-import { FormEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, Suspense, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
 import { authApi, DoctorProfile, ScheduleSlot } from "../lib/api";
 import { clock, formatInClinic } from "../lib/almaty";
@@ -12,10 +13,11 @@ import "../styles/doctorWorkspace.css";
 // Same limit as the API: notes up to 24 hours after the visit ends.
 const NOTE_WINDOW_MS = 24 * 60 * 60_000;
 const reference = (slotId: string) => `HP-${slotId.slice(-8).toUpperCase()}`;
+const shortWeekday = (value: string) => formatInClinic(value, { weekday: "short", day: "numeric", month: "short" });
 const shortDay = (value: string) => formatInClinic(value, { day: "numeric", month: "short", year: "numeric" });
 const statusText = { booked: "Booked", arrived: "Checked in", free: "Free", blocked: "Blocked" } as const;
 
-/** One visit: a pinned patient banner, the note form and the timeline side by side. */
+/** One visit: patient and visit facts on top, the timeline below, and notes written in a pop-up. */
 export default function DoctorVisitPage() {
   const { slotId = "" } = useParams();
   const [slot, setSlot] = useState<ScheduleSlot | null>(null);
@@ -28,11 +30,9 @@ export default function DoctorVisitPage() {
   const [busy, setBusy] = useState(false);
   const [notesTab, setNotesTab] = useState<"visit" | "earlier">("visit");
   const [earlierVisit, setEarlierVisit] = useState<string>("all");
-  const [savedCount, setSavedCount] = useState(0);
   const [highlightId, setHighlightId] = useState<string>();
   const [refresh, setRefresh] = useState(0);
-  const pageRef = useRef<HTMLDivElement>(null);
-  const bannerRef = useRef<HTMLElement>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,15 +51,6 @@ export default function DoctorVisitPage() {
   }, [slotId]);
 
   useEffect(() => { void load(); }, [load]);
-
-  // The note form sticks just under the banner, so it needs the banner's live height.
-  useEffect(() => {
-    const banner = bannerRef.current; const page = pageRef.current;
-    if (!banner || !page || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => page.style.setProperty("--dw-banner-h", `${banner.offsetHeight}px`));
-    observer.observe(banner);
-    return () => observer.disconnect();
-  }, [loading, slot]);
 
   async function cancelVisit(event: FormEvent) {
     event.preventDefault();
@@ -107,30 +98,29 @@ export default function DoctorVisitPage() {
       : "";
 
   return (
-    <div className="dw-page dw-visit-page" ref={pageRef}>
-      <header className="dw-card dw-visit-banner" ref={bannerRef}>
-        <div className="dw-banner-id">
+    <div className="dw-page dw-visit-page">
+      <header className="dw-card dw-visit-header">
+        <div className="dw-visit-top">
           <span className="dw-avatar is-large" aria-hidden="true">{initials}</span>
-          <div className="dw-banner-name">
+          <div className="dw-visit-who">
             <p className="dw-eyebrow">Visit · {reference(slot.id)}</p>
             <h1>{slot.patient ? patientName(slot) : "No patient"}</h1>
-            <small>{slot.patient?.email ?? "Email not available"}</small>
+            <span>{slot.patient?.email ?? "Email not available"}</span>
           </div>
-        </div>
-        <ul className="dw-banner-facts" aria-label="Visit details">
-          <li><Icon name="calendar" size={15} /> {shortDay(slot.startAt)} · {clock(slot.startAt)}–{clock(slot.endAt)}</li>
-          {slot.checkedInAt && <li><Icon name="check" size={15} /> Arrived {clock(slot.checkedInAt)}</li>}
-          <li><span className="dw-fact-label">Reason</span> {slot.visitPurpose || "Not provided"}</li>
-          <li><span className="dw-fact-label">Consultation</span> {doctor?.category.name ?? "Visit"} · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min</li>
-          <li><span className="dw-fact-label">Office</span> {doctor?.office || "Not listed"}</li>
-          <li><span className="dw-fact-label">Visits with you</span> {history.length}</li>
-          <li><span className="dw-fact-label">Last visit</span> {past.length ? shortDay(past[past.length - 1].startAt) : "First visit"}</li>
-          <li><span className="dw-fact-label">Next visit</span> {next ? `${next.id === slot.id ? "This visit · " : ""}${shortDay(next.startAt)}, ${clock(next.startAt)}` : "None booked"}</li>
-        </ul>
         <div className="dw-visit-actions">
           <span className={`dw-pill is-${kind}`}>{statusText[kind]}</span>
           {canCancel && !cancelling && <button type="button" className="dw-mini is-danger" onClick={() => setCancelling(true)}>Cancel visit</button>}
         </div>
+        </div>
+        <dl className="dw-visit-info">
+          <div><dt>Date and time</dt><dd>{shortWeekday(slot.startAt)}<span>{clock(slot.startAt)}–{clock(slot.endAt)}</span>{slot.checkedInAt && <small>Arrived {clock(slot.checkedInAt)}</small>}</dd></div>
+          <div><dt>Reason</dt><dd>{slot.visitPurpose || "Not provided"}</dd></div>
+          <div><dt>Consultation</dt><dd>{doctor?.category.name ?? "Visit"} · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min</dd></div>
+          <div><dt>Office</dt><dd>{doctor?.office || "Not listed"}</dd></div>
+          <div><dt>Visits with you</dt><dd>{history.length}</dd></div>
+          <div><dt>Last visit</dt><dd>{past.length ? shortDay(past[past.length - 1].startAt) : "First visit"}</dd></div>
+          <div><dt>Next visit</dt><dd>{next ? `${next.id === slot.id ? "This visit · " : ""}${shortDay(next.startAt)}, ${clock(next.startAt)}` : "None booked"}</dd></div>
+        </dl>
         {cancelling && (
           <form className="dw-cancel" onSubmit={cancelVisit}>
             <label htmlFor="dw-cancel-reason">Why are you cancelling? The patient will see this.</label>
@@ -143,25 +133,7 @@ export default function DoctorVisitPage() {
         )}
       </header>
 
-      <div className={`dw-visit-work${slot.patient && canWriteNotes ? " has-composer" : ""}`}>
-        {slot.patient && canWriteNotes && (
-          <aside className="dw-composer" aria-label="Write a note">
-            <MedicalNoteForm
-              appointmentId={slot.id}
-              persistent
-              savedCount={savedCount}
-              onCancel={() => setSavedCount(0)}
-              onSave={(entry) => {
-                setNotesTab("visit");
-                setHighlightId(entry.id);
-                setSavedCount((count) => count + 1);
-                setRefresh((value) => value + 1);
-                toast.success("Medical note saved", "It is highlighted in the timeline.");
-              }}
-            />
-          </aside>
-        )}
-
+      <div className="dw-visit-work">
         <section className="dw-notes" aria-label="Medical notes">
           {slot.patient && canReadHistory ? <>
             <div className="dw-notes-bar">
@@ -183,7 +155,7 @@ export default function DoctorVisitPage() {
             {notesTab === "earlier" && <p className="dw-notice"><Icon name="info" size={18} /> Read-only. {earlierVisit === "all" ? "All records from earlier visits, including other doctors’ notes." : "Notes written during the selected visit."}</p>}
             <Suspense fallback={<p className="dw-muted" role="status">Loading medical history…</p>}>
               {notesTab === "visit"
-                ? <MedicalHistory key={`visit-${slot.id}`} compact patientId={slot.patient.id} scope={{ only: slot.id }} refreshKey={refresh} highlightId={highlightId} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Write the first note in the form — tests, anamnesis or a conclusion." : "Notes written during this visit will appear here." }} />
+                ? <MedicalHistory key={`visit-${slot.id}`} compact onAddNote={canWriteNotes ? () => setComposerOpen(true) : undefined} patientId={slot.patient.id} scope={{ only: slot.id }} refreshKey={refresh} highlightId={highlightId} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Use Add note to record tests, anamnesis or a conclusion." : "Notes written during this visit will appear here." }} />
                 : <MedicalHistory key={`earlier-${earlierVisit}`} compact patientId={slot.patient.id} scope={earlierVisit === "all" ? { except: slot.id } : { only: earlierVisit }} emptyText={{ title: "No earlier records", body: earlierVisit === "all" ? "This patient has no notes from earlier visits." : "No notes were written during that visit." }} />}
             </Suspense>
           </> : (
@@ -198,6 +170,49 @@ export default function DoctorVisitPage() {
           )}
         </section>
       </div>
+      {composerOpen && slot.patient && (
+        <NoteDialog
+          title={`New note · ${patientName(slot)}`}
+          subtitle={`${shortWeekday(slot.startAt)}, ${clock(slot.startAt)} · ${slot.visitPurpose || "Visit"}`}
+          onClose={() => setComposerOpen(false)}
+        >
+          <MedicalNoteForm
+            appointmentId={slot.id}
+            chips
+            onCancel={() => setComposerOpen(false)}
+            onSave={(entry) => {
+              setComposerOpen(false);
+              setNotesTab("visit");
+              setHighlightId(entry.id);
+              setRefresh((value) => value + 1);
+              toast.success("Medical note saved", "It is highlighted in the timeline.");
+            }}
+          />
+        </NoteDialog>
+      )}
     </div>
+  );
+}
+
+/** Centered pop-up for writing a note; Escape or the backdrop closes it and the page behind does not scroll. */
+function NoteDialog({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", onKey); };
+  }, [onClose]);
+  return createPortal(
+    <div className="dw-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="dw-dialog" role="dialog" aria-modal="true" aria-labelledby="dw-dialog-title">
+        <header className="dw-dialog-head">
+          <div><h2 id="dw-dialog-title">{title}</h2><p>{subtitle}</p></div>
+          <button type="button" className="dw-dialog-close" aria-label="Close" onClick={onClose}><Icon name="close" size={18} /></button>
+        </header>
+        {children}
+      </div>
+    </div>,
+    document.body,
   );
 }
