@@ -1,22 +1,21 @@
-import { FormEvent, lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { authApi, DoctorProfile, ScheduleSlot } from "../lib/api";
 import { clock, formatInClinic } from "../lib/almaty";
 import { toast } from "../lib/toast";
 import { Icon } from "../components/Icons";
 import { patientName, slotKind } from "./DoctorSchedulePage";
+import MedicalHistory, { MedicalNoteForm } from "../components/MedicalHistory";
 import "../styles/medicalHistory.css";
 import "../styles/doctorWorkspace.css";
 
-const MedicalHistory = lazy(() => import("../components/MedicalHistory"));
 // Same limit as the API: notes up to 24 hours after the visit ends.
 const NOTE_WINDOW_MS = 24 * 60 * 60_000;
 const reference = (slotId: string) => `HP-${slotId.slice(-8).toUpperCase()}`;
-const longDay = (value: string) => formatInClinic(value, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const shortDay = (value: string) => formatInClinic(value, { day: "numeric", month: "short", year: "numeric" });
 const statusText = { booked: "Booked", arrived: "Checked in", free: "Free", blocked: "Blocked" } as const;
 
-/** One visit: patient, visit facts and the medical notes, opened from the schedule. */
+/** One visit: a pinned patient banner, the note form and the timeline side by side. */
 export default function DoctorVisitPage() {
   const { slotId = "" } = useParams();
   const [slot, setSlot] = useState<ScheduleSlot | null>(null);
@@ -29,6 +28,11 @@ export default function DoctorVisitPage() {
   const [busy, setBusy] = useState(false);
   const [notesTab, setNotesTab] = useState<"visit" | "earlier">("visit");
   const [earlierVisit, setEarlierVisit] = useState<string>("all");
+  const [savedCount, setSavedCount] = useState(0);
+  const [highlightId, setHighlightId] = useState<string>();
+  const [refresh, setRefresh] = useState(0);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const bannerRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,6 +51,15 @@ export default function DoctorVisitPage() {
   }, [slotId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // The note form sticks just under the banner, so it needs the banner's live height.
+  useEffect(() => {
+    const banner = bannerRef.current; const page = pageRef.current;
+    if (!banner || !page || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => page.style.setProperty("--dw-banner-h", `${banner.offsetHeight}px`));
+    observer.observe(banner);
+    return () => observer.disconnect();
+  }, [loading, slot]);
 
   async function cancelVisit(event: FormEvent) {
     event.preventDefault();
@@ -94,21 +107,26 @@ export default function DoctorVisitPage() {
       : "";
 
   return (
-    <div className="dw-page">
-
-      <header className="dw-card dw-visit-head">
-        <div className="dw-visit-title">
-          <span className="dw-visit-icon" aria-hidden="true"><Icon name="stethoscope" size={24} /></span>
-          <div>
+    <div className="dw-page dw-visit-page" ref={pageRef}>
+      <header className="dw-card dw-visit-banner" ref={bannerRef}>
+        <div className="dw-banner-id">
+          <span className="dw-avatar is-large" aria-hidden="true">{initials}</span>
+          <div className="dw-banner-name">
             <p className="dw-eyebrow">Visit · {reference(slot.id)}</p>
             <h1>{slot.patient ? patientName(slot) : "No patient"}</h1>
-            <p className="dw-visit-meta">
-              <span><Icon name="calendar" size={15} /> {longDay(slot.startAt)}</span>
-              <span><Icon name="clock" size={15} /> {clock(slot.startAt)}–{clock(slot.endAt)}</span>
-              {slot.checkedInAt && <span><Icon name="check" size={15} /> Arrived {clock(slot.checkedInAt)}</span>}
-            </p>
+            <small>{slot.patient?.email ?? "Email not available"}</small>
           </div>
         </div>
+        <ul className="dw-banner-facts" aria-label="Visit details">
+          <li><Icon name="calendar" size={15} /> {shortDay(slot.startAt)} · {clock(slot.startAt)}–{clock(slot.endAt)}</li>
+          {slot.checkedInAt && <li><Icon name="check" size={15} /> Arrived {clock(slot.checkedInAt)}</li>}
+          <li><span className="dw-fact-label">Reason</span> {slot.visitPurpose || "Not provided"}</li>
+          <li><span className="dw-fact-label">Consultation</span> {doctor?.category.name ?? "Visit"} · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min</li>
+          <li><span className="dw-fact-label">Office</span> {doctor?.office || "Not listed"}</li>
+          <li><span className="dw-fact-label">Visits with you</span> {history.length}</li>
+          <li><span className="dw-fact-label">Last visit</span> {past.length ? shortDay(past[past.length - 1].startAt) : "First visit"}</li>
+          <li><span className="dw-fact-label">Next visit</span> {next ? `${next.id === slot.id ? "This visit · " : ""}${shortDay(next.startAt)}, ${clock(next.startAt)}` : "None booked"}</li>
+        </ul>
         <div className="dw-visit-actions">
           <span className={`dw-pill is-${kind}`}>{statusText[kind]}</span>
           {canCancel && !cancelling && <button type="button" className="dw-mini is-danger" onClick={() => setCancelling(true)}>Cancel visit</button>}
@@ -125,32 +143,24 @@ export default function DoctorVisitPage() {
         )}
       </header>
 
-      <div className="dw-visit-grid">
-        <aside className="dw-visit-side">
-          <section className="dw-card dw-patient-card" aria-labelledby="dw-patient-title">
-            <h2 id="dw-patient-title">Patient</h2>
-            <div className="dw-patient-id">
-              <span className="dw-avatar is-large" aria-hidden="true">{initials}</span>
-              <div><strong>{slot.patient ? patientName(slot) : "Not assigned"}</strong><small>{slot.patient?.email ?? "Email not available"}</small></div>
-            </div>
-            <dl className="dw-facts">
-              <div><dt>Visits with you</dt><dd>{history.length}</dd></div>
-              <div><dt>Last visit</dt><dd>{past.length ? shortDay(past[past.length - 1].startAt) : "First visit"}</dd></div>
-              <div><dt>Next visit</dt><dd>{next ? `${next.id === slot.id ? "This visit · " : ""}${shortDay(next.startAt)}, ${clock(next.startAt)}` : "None booked"}</dd></div>
-            </dl>
-          </section>
-
-          <section className="dw-card" aria-labelledby="dw-details-title">
-            <h2 id="dw-details-title">Visit details</h2>
-            <dl className="dw-facts">
-              <div><dt>Reason</dt><dd>{slot.visitPurpose || "Not provided"}</dd></div>
-              <div><dt>Consultation</dt><dd>{doctor?.category.name ?? "Visit"} · in person · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min</dd></div>
-              <div><dt>Office</dt><dd>{doctor?.office || "Not listed"}</dd></div>
-              <div><dt>Booking ID</dt><dd>{reference(slot.id)}</dd></div>
-              <div><dt>Status</dt><dd>{statusText[kind]}</dd></div>
-            </dl>
-          </section>
-        </aside>
+      <div className={`dw-visit-work${slot.patient && canWriteNotes ? " has-composer" : ""}`}>
+        {slot.patient && canWriteNotes && (
+          <aside className="dw-composer" aria-label="Write a note">
+            <MedicalNoteForm
+              appointmentId={slot.id}
+              persistent
+              savedCount={savedCount}
+              onCancel={() => setSavedCount(0)}
+              onSave={(entry) => {
+                setNotesTab("visit");
+                setHighlightId(entry.id);
+                setSavedCount((count) => count + 1);
+                setRefresh((value) => value + 1);
+                toast.success("Medical note saved", "It is highlighted in the timeline.");
+              }}
+            />
+          </aside>
+        )}
 
         <section className="dw-notes" aria-label="Medical notes">
           {slot.patient && canReadHistory ? <>
@@ -173,8 +183,8 @@ export default function DoctorVisitPage() {
             {notesTab === "earlier" && <p className="dw-notice"><Icon name="info" size={18} /> Read-only. {earlierVisit === "all" ? "All records from earlier visits, including other doctors’ notes." : "Notes written during the selected visit."}</p>}
             <Suspense fallback={<p className="dw-muted" role="status">Loading medical history…</p>}>
               {notesTab === "visit"
-                ? <MedicalHistory key={`visit-${slot.id}`} patientId={slot.patient.id} appointmentId={canWriteNotes ? slot.id : undefined} scope={{ only: slot.id }} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Use Add note to record tests, anamnesis or a conclusion for this visit." : "Notes written during this visit will appear here." }} />
-                : <MedicalHistory key={`earlier-${earlierVisit}`} patientId={slot.patient.id} scope={earlierVisit === "all" ? { except: slot.id } : { only: earlierVisit }} emptyText={{ title: "No earlier records", body: earlierVisit === "all" ? "This patient has no notes from earlier visits." : "No notes were written during that visit." }} />}
+                ? <MedicalHistory key={`visit-${slot.id}`} compact patientId={slot.patient.id} scope={{ only: slot.id }} refreshKey={refresh} highlightId={highlightId} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Write the first note in the form — tests, anamnesis or a conclusion." : "Notes written during this visit will appear here." }} />
+                : <MedicalHistory key={`earlier-${earlierVisit}`} compact patientId={slot.patient.id} scope={earlierVisit === "all" ? { except: slot.id } : { only: earlierVisit }} emptyText={{ title: "No earlier records", body: earlierVisit === "all" ? "This patient has no notes from earlier visits." : "No notes were written during that visit." }} />}
             </Suspense>
           </> : (
             <div className="mh-card dw-notes-locked">
