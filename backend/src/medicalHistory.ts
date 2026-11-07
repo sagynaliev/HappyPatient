@@ -12,6 +12,8 @@ export const medicalEntrySchema = z.object({
   title: z.string().trim().min(1).max(120),
   body: z.string().trim().min(1).max(5000),
 });
+/** Editing changes the note's content only; the visit, patient and creation time stay fixed. */
+export const medicalEntryUpdateSchema = medicalEntrySchema.omit({ appointmentId: true });
 const querySchema = z.object({
   offset: z.coerce.number().int().min(0).max(100000).default(0), direction: z.enum(['asc','desc']).default('asc'), category: z.enum(['test','anamnesis','conclusion']).optional(),
   // Visit scope: only one visit's notes, or everything except one visit (earlier history on a visit page).
@@ -35,7 +37,7 @@ export const medicalHistoryRouter = Router();
 medicalHistoryRouter.use('/medical-history', (req,res,next) => {
   res.set('Cache-Control','no-store');
   if(!req.header('authorization')) {
-    const endpoint=req.method==='POST'?'create':req.path.endsWith('/export')?'export':req.path==='/'||req.path==='/medical-history'?'list':'get';
+    const endpoint=req.method==='POST'?'create':req.method==='PATCH'?'update':req.path.endsWith('/export')?'export':req.path==='/'||req.path==='/medical-history'?'list':'get';
     void prisma.historyAccessAudit.create({data:{actorId:null,actorRole:null,targetPatientId:typeof req.query.patientId==='string'?req.query.patientId:'unknown',endpoint,outcome:'denied'}}).catch(()=>undefined);
     return res.status(401).json({error:'Authentication required.'});
   }
@@ -115,4 +117,23 @@ medicalHistoryRouter.post('/medical-history', privateRoute(async (req, res) => {
     return res.status(404).json({ error: 'Visit unavailable for medical notes.' });
   }
   return res.status(201).json({ entry });
+}));
+medicalHistoryRouter.patch('/medical-history/:entryId', privateRoute(async (req, res) => {
+  const deny = async (patientId = 'unknown') => {
+    await prisma.historyAccessAudit.create({data:{actorId:req.user?.id,actorRole:req.user?.role,targetPatientId:patientId,endpoint:'update',outcome:'denied'}}).catch(()=>undefined);
+    return res.status(404).json({ error: 'Only the doctor who wrote a note can edit it, within 24 hours after the visit.' });
+  };
+  if (req.user?.role !== Role.DOCTOR) return deny();
+  const input = medicalEntryUpdateSchema.safeParse(req.body);
+  if (!input.success) return res.status(400).json({ error: 'Choose a category and enter a title (1–120) and note (1–5000 characters).' });
+  // Same rule as writing a note: the author, on a checked-in visit, until 24 hours after it ended.
+  const editable = await prisma.medicalEntry.findFirst({
+    where: { id: String(req.params.entryId), doctor: { userId: req.user.id }, appointment: { status: 'OCCUPIED', endAt: { gte: new Date(Date.now() - NOTE_WINDOW_MS) } } },
+    select: { id: true, patientId: true },
+  });
+  if (!editable) return deny();
+  if (!await canAccessMedicalHistory(req.user, editable.patientId)) return deny(editable.patientId);
+  // updatedAt is set explicitly so it follows the app clock, like createdAt does.
+  const entry = await prisma.medicalEntry.update({ where: { id: editable.id }, data: { ...input.data, updatedAt: new Date() }, include });
+  return res.json({ entry });
 }));

@@ -6,7 +6,7 @@ import { clock, formatInClinic } from "../lib/almaty";
 import { toast } from "../lib/toast";
 import { Icon } from "../components/Icons";
 import { patientName, slotKind } from "./DoctorSchedulePage";
-import MedicalHistory, { MedicalNoteForm } from "../components/MedicalHistory";
+import MedicalHistory, { MedicalEntry, MedicalNoteForm } from "../components/MedicalHistory";
 import "../styles/medicalHistory.css";
 import "../styles/doctorWorkspace.css";
 
@@ -33,6 +33,8 @@ export default function DoctorVisitPage() {
   const [highlightId, setHighlightId] = useState<string>();
   const [refresh, setRefresh] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [editing, setEditing] = useState<MedicalEntry | null>(null);
+  const [highlightLabel, setHighlightLabel] = useState("Just added");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,7 +167,7 @@ export default function DoctorVisitPage() {
             {notesTab === "earlier" && <p className="dw-notice"><Icon name="info" size={18} /> Read-only. {earlierVisit === "all" ? "All records from earlier visits, including other doctors’ notes." : "Notes written during the selected visit."}</p>}
             <Suspense fallback={<p className="dw-muted" role="status">Loading medical history…</p>}>
               {notesTab === "visit"
-                ? <MedicalHistory key={`visit-${slot.id}`} compact onAddNote={canWriteNotes ? () => setComposerOpen(true) : undefined} patientId={slot.patient.id} scope={{ only: slot.id }} refreshKey={refresh} highlightId={highlightId} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Use Add note to record tests, anamnesis or a conclusion." : "Notes written during this visit will appear here." }} />
+                ? <MedicalHistory key={`visit-${slot.id}`} compact onAddNote={canWriteNotes ? () => setComposerOpen(true) : undefined} onEditEntry={canWriteNotes ? setEditing : undefined} highlightLabel={highlightLabel} patientId={slot.patient.id} scope={{ only: slot.id }} refreshKey={refresh} highlightId={highlightId} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Use Add note to record tests, anamnesis or a conclusion." : "Notes written during this visit will appear here." }} />
                 : <MedicalHistory key={`earlier-${earlierVisit}`} compact patientId={slot.patient.id} scope={earlierVisit === "all" ? { except: slot.id } : { only: earlierVisit }} emptyText={{ title: "No earlier records", body: earlierVisit === "all" ? "This patient has no notes from earlier visits." : "No notes were written during that visit." }} />}
             </Suspense>
           </> : (
@@ -193,9 +195,32 @@ export default function DoctorVisitPage() {
             onSave={(entry) => {
               setComposerOpen(false);
               setNotesTab("visit");
+              setHighlightLabel("Just added");
               setHighlightId(entry.id);
               setRefresh((value) => value + 1);
               toast.success("Medical note saved", "It is highlighted in the timeline.");
+            }}
+          />
+        </NoteDialog>
+      )}
+      {editing && slot.patient && (
+        <NoteDialog
+          title={`Edit note · ${patientName(slot)}`}
+          subtitle={`${shortWeekday(slot.startAt)}, ${clock(slot.startAt)} · ${slot.visitPurpose || "Visit"}`}
+          onClose={() => setEditing(null)}
+        >
+          <MedicalNoteForm
+            key={editing.id}
+            appointmentId={slot.id}
+            entry={editing}
+            chips
+            onCancel={() => setEditing(null)}
+            onSave={(entry) => {
+              setEditing(null);
+              setHighlightLabel("Updated");
+              setHighlightId(entry.id);
+              setRefresh((value) => value + 1);
+              toast.success("Note updated", "The change is highlighted in the timeline.");
             }}
           />
         </NoteDialog>

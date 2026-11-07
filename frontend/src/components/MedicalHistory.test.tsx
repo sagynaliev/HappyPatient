@@ -57,3 +57,43 @@ describe('medical history shared doctor/patient view', () => {
     await waitFor(() => expect(api).toHaveBeenLastCalledWith('/medical-history?direction=desc&'));
   });
 });
+
+describe('editing a note', () => {
+  it('opens prefilled, saves with PATCH and keeps the visit and patient out of the request', async () => {
+    const save = vi.fn();
+    vi.mocked(api).mockResolvedValueOnce({ entry: { ...entry, title: 'Blood test, repeated', updatedAt: '2026-11-02T06:00:00Z' } });
+    render(<MedicalNoteForm appointmentId="visit" entry={entry} chips onSave={save} onCancel={vi.fn()} />);
+    expect(screen.getByLabelText('Title')).toHaveValue('Blood test');
+    expect(screen.getByRole('button', { name: /Tests/ })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Blood test, repeated' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const [path, options] = vi.mocked(api).mock.calls[0];
+    expect(path).toBe('/medical-history/1');
+    expect(options?.method).toBe('PATCH');
+    const sent = JSON.parse(String(options?.body));
+    expect(sent).toEqual({ category: 'test', title: 'Blood test, repeated', body: 'First line\nSecond line <script>' });
+  });
+  it('shows the server reason when an edit is refused', async () => {
+    vi.mocked(api).mockRejectedValueOnce(new Error('Only the doctor who wrote a note can edit it, within 24 hours after the visit.'));
+    render(<MedicalNoteForm appointmentId="visit" entry={entry} chips onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Only the doctor who wrote a note');
+  });
+  it('offers Edit only when allowed and marks edited notes', async () => {
+    const edited = { ...entry, id: '2', title: 'Changed later', appointmentId: 'v1', updatedAt: '2026-11-02T07:30:00Z' };
+    vi.mocked(api).mockResolvedValue({ entries: [edited], hasMore: false, counts: { test: 1 } });
+    const onEdit = vi.fn();
+    render(<MedicalHistory patientId="p" scope={{ only: 'v1' }} compact onEditEntry={onEdit} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit note Changed later' }));
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: '2' }));
+    expect(screen.getByText(/^Edited /)).toBeInTheDocument();
+    cleanup();
+    vi.mocked(api).mockResolvedValue({ entries: [{ ...entry, appointmentId: 'v1' }], hasMore: false, counts: { test: 1 } });
+    render(<MedicalHistory patientId="p" scope={{ only: 'v1' }} compact />);
+    await screen.findByText('Blood test');
+    expect(screen.queryByRole('button', { name: /Edit note/ })).toBeNull();
+    expect(screen.queryByText(/^Edited /)).toBeNull();
+  });
+});
+

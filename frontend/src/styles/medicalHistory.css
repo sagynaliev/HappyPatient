@@ -150,3 +150,10 @@
 .mh-category-chips button[aria-pressed="true"] { border-color: var(--primary); background: var(--accent); color: var(--primary-deep); }
 .mh-form.is-inline .mh-alert { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; margin: 0; }
 .mh-form.is-inline .mh-alert svg { flex: 0 0 auto; margin-top: 3px; }
+
+/* Editing a note: Edit button and an "Edited" stamp next to the written time */
+.mh-entry-when { display: grid; justify-items: end; gap: 2px; margin-left: auto; }
+.mh-entry-edited { color: var(--text-secondary); font-size: 12px; font-style: italic; }
+.mh-edit { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--primary-deep); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.mh-edit:hover { border-color: var(--accent-strong); background: var(--accent); }
+@container (max-width: 460px) { .mh-entry-when { width: 100%; margin-left: 0; justify-items: start; } }
