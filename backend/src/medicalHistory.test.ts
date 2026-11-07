@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { Role } from '@prisma/client';
-const db = vi.hoisted(() => ({ scheduleSlot: { findFirst: vi.fn() }, historyAccessAudit: { create: vi.fn() }, medicalEntry: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), groupBy: vi.fn() }, $queryRaw: vi.fn(), $queryRawUnsafe: vi.fn(), $transaction: vi.fn() }));
+const db = vi.hoisted(() => ({ scheduleSlot: { findFirst: vi.fn() }, historyAccessAudit: { create: vi.fn() }, medicalEntry: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), groupBy: vi.fn() }, $queryRaw: vi.fn(), $queryRawUnsafe: vi.fn(), $transaction: vi.fn() }));
 vi.mock('./prisma', () => ({ prisma: db }));
 let app: express.Express;
 let token: (role: Role) => string;
@@ -12,7 +12,7 @@ beforeAll(async () => {
   token = role => `Bearer ${signToken({ id: 'session-user', email: 'test@example.test', role })}`;
   app = express(); app.use(express.json()); app.use(medicalHistoryRouter);
 });
-beforeEach(() => { vi.resetAllMocks(); db.$transaction.mockImplementation(callback => callback(db)); db.historyAccessAudit.create.mockResolvedValue({id:'audit'}); db.scheduleSlot.findFirst.mockResolvedValue({ id: 'visit', patientId: 'patient', doctorId: 'doctor' }); db.medicalEntry.create.mockResolvedValue({ id: 'note' }); db.medicalEntry.findMany.mockResolvedValue([]); db.medicalEntry.findUnique.mockResolvedValue(null); db.medicalEntry.groupBy.mockResolvedValue([]); db.$queryRaw.mockResolvedValue([]); db.$queryRawUnsafe.mockResolvedValue([]); });
+beforeEach(() => { vi.resetAllMocks(); db.$transaction.mockImplementation(callback => callback(db)); db.historyAccessAudit.create.mockResolvedValue({id:'audit'}); db.scheduleSlot.findFirst.mockResolvedValue({ id: 'visit', patientId: 'patient', doctorId: 'doctor' }); db.medicalEntry.create.mockResolvedValue({ id: 'note' }); db.medicalEntry.findMany.mockResolvedValue([]); db.medicalEntry.findUnique.mockResolvedValue(null); db.medicalEntry.groupBy.mockResolvedValue([]); db.medicalEntry.findFirst.mockResolvedValue({ id: 'note', patientId: 'patient' }); db.medicalEntry.update.mockResolvedValue({ id: 'note', title: 'Edited' }); db.$queryRaw.mockResolvedValue([]); db.$queryRawUnsafe.mockResolvedValue([]); });
 const valid = { appointmentId: 'visit', category: 'anamnesis', title: 'Title', body: 'Note' };
 describe('medical history authorization and validation', () => {
   it.each(['test', 'anamnesis', 'conclusion'])('doctor creates %s entry from authorized visit', async category => {
@@ -74,4 +74,33 @@ describe('medical history authorization and validation', () => {
     expect(db.$queryRawUnsafe).toHaveBeenCalled(); expect(db.$queryRawUnsafe.mock.calls[0][1]).toBe('session-user');
   });
   it('returns generic errors without logging private data', async () => { const log = vi.spyOn(console, 'error'); db.medicalEntry.create.mockRejectedValue(new Error('private content')); const result = await request(app).post('/medical-history').set('Authorization', token(Role.DOCTOR)).send(valid); expect(result.status).toBe(500); expect(JSON.stringify(result.body)).not.toContain('private content'); expect(log).not.toHaveBeenCalled(); log.mockRestore(); });
+});
+
+describe('editing medical notes', () => {
+  const edit = { category: 'conclusion', title: 'Edited', body: 'Corrected note' };
+  it('lets the author change category, title and text within the note window', async () => {
+    const result = await request(app).patch('/medical-history/note').set('Authorization', token(Role.DOCTOR)).send({ ...edit, patientId: 'forged', appointmentId: 'other-visit', createdAt: '2020-01-01' });
+    expect(result.status).toBe(200);
+    const where = db.medicalEntry.findFirst.mock.calls[0][0].where;
+    expect(where).toEqual(expect.objectContaining({ id: 'note', doctor: { userId: 'session-user' }, appointment: expect.objectContaining({ status: 'OCCUPIED' }) }));
+    expect(where.appointment.endAt.gte.getTime()).toBeGreaterThan(Date.now() - 24 * 60 * 60_000 - 5000);
+    const data = db.medicalEntry.update.mock.calls[0][0].data;
+    expect(data).toEqual(expect.objectContaining(edit));
+    expect(data.updatedAt).toBeInstanceOf(Date);
+    expect(data).not.toHaveProperty('patientId'); expect(data).not.toHaveProperty('appointmentId'); expect(data).not.toHaveProperty('createdAt');
+  });
+  it('refuses another doctor or a note past the window and audits it', async () => {
+    db.medicalEntry.findFirst.mockResolvedValue(null);
+    const result = await request(app).patch('/medical-history/note').set('Authorization', token(Role.DOCTOR)).send(edit);
+    expect(result.status).toBe(404); expect(db.medicalEntry.update).not.toHaveBeenCalled();
+    expect(db.historyAccessAudit.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ endpoint: 'update', outcome: 'denied' }) }));
+  });
+  it.each([Role.PATIENT, Role.ADMIN, Role.FRONT_DESK])('refuses edits from %s', async role => {
+    expect((await request(app).patch('/medical-history/note').set('Authorization', token(role)).send(edit)).status).toBe(404);
+    expect(db.medicalEntry.update).not.toHaveBeenCalled();
+  });
+  it.each([{ category: 'other' }, { title: '' }, { body: '   ' }, { body: 'x'.repeat(5001) }])('rejects invalid edits', async invalid => {
+    expect((await request(app).patch('/medical-history/note').set('Authorization', token(Role.DOCTOR)).send({ ...edit, ...invalid })).status).toBe(400);
+    expect(db.medicalEntry.update).not.toHaveBeenCalled();
+  });
 });

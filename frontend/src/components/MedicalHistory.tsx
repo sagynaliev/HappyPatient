@@ -20,15 +20,21 @@ const LONG_NOTE = 160;
 const doctorName = (entry: MedicalEntry) => `Dr. ${entry.doctor.user.firstName} ${entry.doctor.user.lastName}`;
 
 /** One note, compact: category, title, when it was written and a two-line preview. */
-function MedicalEntryCard({ entry, showDoctor, isNew }: { entry: MedicalEntry; showDoctor: boolean; isNew?: boolean }) {
+function MedicalEntryCard({ entry, showDoctor, isNew, newLabel = 'Just added', onEdit }: { entry: MedicalEntry; showDoctor: boolean; isNew?: boolean; newLabel?: string; onEdit?: (entry: MedicalEntry) => void }) {
   const [expanded, setExpanded] = useState(false);
+  // A minute of slack: the database sets both stamps on creation, so only a real later change counts as an edit.
+  const edited = Date.parse(entry.updatedAt) - Date.parse(entry.createdAt) > 60_000;
   const long = entry.body.length > LONG_NOTE || entry.body.split('\n').length > 2;
   return <article className={`mh-entry is-${entry.category}${isNew ? ' is-new' : ''}`} ref={element => { if (isNew && element?.scrollIntoView) element.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }}>
     <header className="mh-entry-head">
-      {isNew && <span className="mh-new-badge">Just added</span>}
+      {isNew && <span className="mh-new-badge">{newLabel}</span>}
       <span className={`mh-pill is-${entry.category}`}><Icon name={categoryIcons[entry.category]} size={13} /> {categoryLabels[entry.category]}</span>
       <h4>{entry.title}</h4>
-      <time className="mh-entry-time" dateTime={entry.createdAt} title="When the note was written">Written {writtenText.format(new Date(entry.createdAt))}</time>
+      <span className="mh-entry-when">
+        <time className="mh-entry-time" dateTime={entry.createdAt} title="When the note was written">Written {writtenText.format(new Date(entry.createdAt))}</time>
+        {edited && <time className="mh-entry-edited" dateTime={entry.updatedAt} title="When the note was last changed">Edited {writtenText.format(new Date(entry.updatedAt))}</time>}
+      </span>
+      {onEdit && <button type="button" className="mh-edit" onClick={() => onEdit(entry)} aria-label={`Edit note ${entry.title}`}>Edit</button>}
     </header>
     <p className={`mh-body${long && !expanded ? ' is-clamped' : ''}`}>{entry.body}</p>
     {long && <button className="mh-more" type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? 'Show less' : 'Show more'}</button>}
@@ -51,7 +57,7 @@ function groupEntries(entries: MedicalEntry[]) {
 }
 
 /** A visit as a collapsible card: date, doctor and what was recorded, with the notes inside. */
-function VisitGroup({ group, open, onToggle, newId }: { group: EntryGroup; open: boolean; onToggle: () => void; newId?: string }) {
+function VisitGroup({ group, open, onToggle, newId, newLabel, onEdit }: { group: EntryGroup; open: boolean; onToggle: () => void; newId?: string; newLabel?: string; onEdit?: (entry: MedicalEntry) => void }) {
   const first = group.entries[0];
   const doctors = new Set(group.entries.map(doctorName));
   const tally = (Object.keys(categoryLabels) as MedicalCategory[]).map(key => [key, group.entries.filter(entry => entry.category === key).length] as const).filter(([, count]) => count);
@@ -66,30 +72,37 @@ function VisitGroup({ group, open, onToggle, newId }: { group: EntryGroup; open:
       <span className="mh-group-tally">{tally.map(([key, count]) => <span key={key} className={`mh-pill is-${key}`}>{count} {categoryLabels[key]}</span>)}</span>
       <Icon name="arrow-right" size={18} className="mh-group-chevron" />
     </button>
-    {open && <div className="mh-group-body" id={panelId}>{group.entries.map(entry => <MedicalEntryCard key={entry.id} entry={entry} showDoctor={doctors.size > 1} isNew={entry.id === newId} />)}</div>}
+    {open && <div className="mh-group-body" id={panelId}>{group.entries.map(entry => <MedicalEntryCard key={entry.id} entry={entry} showDoctor={doctors.size > 1} isNew={entry.id === newId} newLabel={newLabel} onEdit={onEdit} />)}</div>}
   </li>;
 }
 
-export function MedicalEntryList({ entries, openAll = false, newId }: { entries: MedicalEntry[]; openAll?: boolean; newId?: string }) {
+export function MedicalEntryList({ entries, openAll = false, newId, newLabel, onEdit }: { entries: MedicalEntry[]; openAll?: boolean; newId?: string; newLabel?: string; onEdit?: (entry: MedicalEntry) => void }) {
   const groups = groupEntries(entries);
   // Visits start closed so a long history stays short; a search (or a single-visit view) opens what it found.
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   // The visit holding a note that was just added always stays open, so the doctor sees what was saved.
   const isOpen = (group: EntryGroup) => (newId !== undefined && group.entries.some(entry => entry.id === newId)) || (toggled[group.key] ?? openAll);
-  return <ol className="mh-list">{groups.map((group) => <VisitGroup key={group.key} group={group} open={isOpen(group)} newId={newId} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group) }))} />)}</ol>;
+  return <ol className="mh-list">{groups.map((group) => <VisitGroup key={group.key} group={group} open={isOpen(group)} newId={newId} newLabel={newLabel} onEdit={onEdit} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group) }))} />)}</ol>;
 }
 
 /** chips: picks the category with one tap and focuses the title, for the note bar on the doctor visit page. */
-export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 0, chips = false }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void; savedCount?: number; chips?: boolean }) {
-  const [category, setCategory] = useState<MedicalCategory>('anamnesis');
-  const [title, setTitle] = useState(''); const [body, setBody] = useState('');
+/** entry: edit that note instead of writing a new one. */
+export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 0, chips = false, entry }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void; savedCount?: number; chips?: boolean; entry?: MedicalEntry }) {
+  const [category, setCategory] = useState<MedicalCategory>(entry?.category ?? 'anamnesis');
+  const [title, setTitle] = useState(entry?.title ?? ''); const [body, setBody] = useState(entry?.body ?? '');
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault(); setError('');
     if (!title.trim() || title.trim().length > 120 || !body.trim() || body.trim().length > 5000) { setError('Enter a title (1–120) and note (1–5000 characters).'); return; }
     setBusy(true);
-    try { const result = await api<{ entry: MedicalEntry }>('/medical-history', { method: 'POST', body: JSON.stringify({ appointmentId, category, title: title.trim(), body: body.trim() }) }); setTitle(''); setBody(''); onSave(result.entry); }
-    catch { setError('Unable to save the note. Please try again.'); }
+    try {
+      const result = entry
+        ? await api<{ entry: MedicalEntry }>(`/medical-history/${encodeURIComponent(entry.id)}`, { method: 'PATCH', body: JSON.stringify({ category, title: title.trim(), body: body.trim() }) })
+        : await api<{ entry: MedicalEntry }>('/medical-history', { method: 'POST', body: JSON.stringify({ appointmentId, category, title: title.trim(), body: body.trim() }) });
+      if (!entry) { setTitle(''); setBody(''); }
+      onSave(result.entry);
+    }
+    catch (caught) { setError(entry && caught instanceof Error && caught.message ? caught.message : 'Unable to save the note. Please try again.'); }
     finally { setBusy(false); }
   }
   return <form className={`mh-form${chips ? ' is-inline' : ''}`} onSubmit={submit} noValidate>
@@ -102,13 +115,13 @@ export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 
     <label htmlFor="mh-title">Title</label><input id="mh-title" autoFocus={chips} value={title} maxLength={120} required disabled={busy} aria-describedby={error ? 'mh-form-error' : undefined} onChange={event => setTitle(event.target.value)} />
     <label htmlFor="mh-body">Note</label><textarea id="mh-body" value={body} maxLength={5000} rows={7} required disabled={busy} aria-describedby={`mh-counter${error ? ' mh-form-error' : ''}`} onChange={event => setBody(event.target.value)} />
     <small id="mh-counter">{body.length}/5000 characters</small>
-    <div className="mh-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save note'}</button><button className="button button-outline" type="button" disabled={busy} onClick={onCancel}>{savedCount ? 'Close' : 'Cancel'}</button></div>
+    <div className="mh-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : entry ? 'Save changes' : 'Save note'}</button><button className="button button-outline" type="button" disabled={busy} onClick={onCancel}>{savedCount ? 'Close' : 'Cancel'}</button></div>
   </form>;
 }
 
 /** appointmentId enables adding notes to that visit; scope limits the list to one visit (only) or everything but one visit (except).
  * compact puts the category counts in a chip row inside the timeline; refreshKey reloads and highlightId marks a note saved from outside. */
-export default function MedicalHistory({ patientId, appointmentId, scope, emptyText, compact = false, refreshKey = 0, highlightId, onAddNote }: { patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string }; compact?: boolean; refreshKey?: number; highlightId?: string; onAddNote?: () => void }) {
+export default function MedicalHistory({ patientId, appointmentId, scope, emptyText, compact = false, refreshKey = 0, highlightId, highlightLabel, onAddNote, onEditEntry }: { patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string }; compact?: boolean; refreshKey?: number; highlightId?: string; highlightLabel?: string; onAddNote?: () => void; onEditEntry?: (entry: MedicalEntry) => void }) {
   const [direction,setDirection]=useState<'asc'|'desc'>('desc');
   const [entries, setEntries] = useState<MedicalEntry[]>([]);
   const [counts, setCounts] = useState<HistoryResponse['counts']>({});
@@ -179,7 +192,7 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
         <h3>{narrowed ? 'No matching records' : filter === 'all' ? emptyText?.title ?? 'No records yet' : `No ${categoryLabels[filter].toLowerCase()} yet`}</h3>
         <p>{narrowed ? 'Try another word, specialty or period.' : filter === 'all' ? emptyText?.body ?? 'No medical records yet. Entries added by your doctor after a visit will appear here.' : 'No entries in this category.'}</p>
       </div>}
-      <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} newId={highlighted} />
+      <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} newId={highlighted} newLabel={highlightId ? highlightLabel : undefined} onEdit={onEditEntry} />
       {hasMore && <button className="button button-outline mh-load-more" type="button" disabled={loading} onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load more'}</button>}
       {loading && entries.length > 0 && <p role="status" className="sr-only">Loading medical history…</p>}
     </div>
