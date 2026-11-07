@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DoctorVisitPage from "./DoctorVisitPage";
@@ -49,5 +49,18 @@ describe("doctor visit page", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Earlier visits/ }));
     await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) => String(path).includes("excludeAppointmentId=slot-abcdefgh"))).toBe(true));
     expect(await screen.findByText("No earlier records")).toBeTruthy();
+  });
+  it("keeps the note form open beside the timeline for a checked-in visit", async () => {
+    const start = new Date(Date.now() - 10 * 60_000);
+    const live = { ...visit, status: "OCCUPIED" as const, startAt: start.toISOString(), endAt: new Date(start.getTime() + 18e5).toISOString(), checkedInAt: start.toISOString() };
+    vi.mocked(authApi.slotDetails).mockResolvedValue({ slot: live });
+    vi.mocked(authApi.getSchedule).mockResolvedValue({ doctor, slots: [live] });
+    renderPage();
+    expect(await screen.findByRole("heading", { name: "Write a note" })).toBeTruthy();
+    const composer = screen.getByRole("complementary", { name: "Write a note" });
+    expect(within(composer).getByRole("button", { name: "Conclusions" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: "Add note" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(await screen.findByText("No notes for this visit yet")).toBeTruthy();
   });
 });

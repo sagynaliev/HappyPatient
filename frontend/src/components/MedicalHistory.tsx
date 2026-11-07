@@ -79,7 +79,8 @@ export function MedicalEntryList({ entries, openAll = false, newId }: { entries:
   return <ol className="mh-list">{groups.map((group) => <VisitGroup key={group.key} group={group} open={isOpen(group)} newId={newId} onToggle={() => setToggled(current => ({ ...current, [group.key]: !isOpen(group) }))} />)}</ol>;
 }
 
-export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 0 }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void; savedCount?: number }) {
+/** persistent: the form stays on screen beside the timeline (doctor visit page), so it has no Cancel and picks a category with chips. */
+export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 0, persistent = false }: { appointmentId: string; onSave: (entry: MedicalEntry) => void; onCancel: () => void; savedCount?: number; persistent?: boolean }) {
   const [category, setCategory] = useState<MedicalCategory>('anamnesis');
   const [title, setTitle] = useState(''); const [body, setBody] = useState('');
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
@@ -91,20 +92,23 @@ export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 
     catch { setError('Unable to save the note. Please try again.'); }
     finally { setBusy(false); }
   }
-  return <form className="mh-form" onSubmit={submit} noValidate>
-    <h3>{savedCount ? 'Add another note' : 'Add medical note'}</h3>
-    {savedCount > 0 && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> {savedCount === 1 ? 'Note saved' : `${savedCount} notes saved`} — it is highlighted below. Add another or close the form.</p>}
+  return <form className={`mh-form${persistent ? ' is-persistent' : ''}`} onSubmit={submit} noValidate>
+    <h3>{persistent ? 'Write a note' : savedCount ? 'Add another note' : 'Add medical note'}</h3>
+    {savedCount > 0 && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> {savedCount === 1 ? 'Note saved' : `${savedCount} notes saved`} — {persistent ? 'it is highlighted in the timeline. You can write the next one.' : 'it is highlighted below. Add another or close the form.'}</p>}
     {error && <p id="mh-form-error" className="alert error" role="alert">{error}</p>}
-    <label htmlFor="mh-category">Category</label><select id="mh-category" value={category} onChange={event => setCategory(event.target.value as MedicalCategory)} disabled={busy} required>{Object.entries(categoryLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select>
+    {persistent
+      ? <fieldset className="mh-category-chips"><legend>Category</legend>{(Object.keys(categoryLabels) as MedicalCategory[]).map(key => <button type="button" key={key} className={`is-${key}`} aria-pressed={category === key} disabled={busy} onClick={() => setCategory(key)}><Icon name={categoryIcons[key]} size={15} /> {categoryLabels[key]}</button>)}</fieldset>
+      : <><label htmlFor="mh-category">Category</label><select id="mh-category" value={category} onChange={event => setCategory(event.target.value as MedicalCategory)} disabled={busy} required>{Object.entries(categoryLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></>}
     <label htmlFor="mh-title">Title</label><input id="mh-title" value={title} maxLength={120} required disabled={busy} aria-describedby={error ? 'mh-form-error' : undefined} onChange={event => setTitle(event.target.value)} />
     <label htmlFor="mh-body">Note</label><textarea id="mh-body" value={body} maxLength={5000} rows={7} required disabled={busy} aria-describedby={`mh-counter${error ? ' mh-form-error' : ''}`} onChange={event => setBody(event.target.value)} />
     <small id="mh-counter">{body.length}/5000 characters</small>
-    <div className="mh-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save note'}</button><button className="button button-outline" type="button" disabled={busy} onClick={onCancel}>{savedCount ? 'Close' : 'Cancel'}</button></div>
+    <div className="mh-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save note'}</button>{!persistent && <button className="button button-outline" type="button" disabled={busy} onClick={onCancel}>{savedCount ? 'Close' : 'Cancel'}</button>}</div>
   </form>;
 }
 
-/** appointmentId enables adding notes to that visit; scope limits the list to one visit (only) or everything but one visit (except). */
-export default function MedicalHistory({ patientId, appointmentId, scope, emptyText }: { patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string } }) {
+/** appointmentId enables adding notes to that visit; scope limits the list to one visit (only) or everything but one visit (except).
+ * compact puts the category counts in a chip row inside the timeline; refreshKey reloads and highlightId marks a note saved from outside. */
+export default function MedicalHistory({ patientId, appointmentId, scope, emptyText, compact = false, refreshKey = 0, highlightId }: { patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string }; compact?: boolean; refreshKey?: number; highlightId?: string }) {
   const [direction,setDirection]=useState<'asc'|'desc'>('desc');
   const [entries, setEntries] = useState<MedicalEntry[]>([]);
   const [counts, setCounts] = useState<HistoryResponse['counts']>({});
@@ -125,7 +129,7 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
     let active = true; setLoading(true); setError('');
     api<HistoryResponse>(path).then(result => { if (active) { setEntries(result.entries); setCounts(result.counts); setHasMore(result.hasMore); if (result.specialties) setSpecialties(result.specialties); } }).catch(() => { if (active) setError('Unable to load medical history.'); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [path, retry]);
+  }, [path, retry, refreshKey]);
   async function loadMore() {
     setLoading(true); setError('');
     try { const result = await api<HistoryResponse>(`${path}offset=${entries.length}`); setEntries(current => [...current, ...result.entries]); setCounts(result.counts); setHasMore(result.hasMore); }
@@ -137,13 +141,14 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
     { key: 'all' as const, label: 'All records', icon: 'heart' as const, count: total },
     ...(Object.keys(categoryLabels) as MedicalCategory[]).map(key => ({ key, label: categoryLabels[key], icon: categoryIcons[key], count: counts[key] ?? 0 })),
   ];
-  return <section className="mh-history" aria-label="Medical history" aria-busy={loading}>
-    <div className="mh-filters" role="group" aria-label="Filter medical entries">
+  const highlighted = highlightId ?? newId;
+  return <section className={`mh-history${compact ? ' is-compact' : ''}`} aria-label="Medical history" aria-busy={loading}>
+    {!compact && <div className="mh-filters" role="group" aria-label="Filter medical entries">
       {filters.map(item => <button type="button" className={`mh-filter is-${item.key}`} aria-pressed={filter === item.key} aria-label={`${item.label} (${item.count})`} key={item.key} onClick={() => setFilter(item.key)}>
         <span className="mh-filter-icon"><Icon name={item.icon} size={20} /></span>
         <span className="mh-filter-text"><strong>{item.count}</strong><span>{item.label}</span></span>
       </button>)}
-    </div>
+    </div>}
     <div className="mh-card">
       <header className="mh-heading">
         <h2>Timeline</h2>
@@ -155,6 +160,9 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
           {appointmentId && !adding && <button className="button small" type="button" onClick={() => { setAdding(true); setSuccess(false); }}>Add note</button>}
         </div>
       </header>
+      {compact && <div className="mh-chips" role="group" aria-label="Filter medical entries">
+        {filters.map(item => <button type="button" className={`mh-chip is-${item.key}`} aria-pressed={filter === item.key} aria-label={`${item.label} (${item.count})`} key={item.key} onClick={() => setFilter(item.key)}><Icon name={item.icon} size={14} /> {item.key === 'all' ? 'All' : item.label} <strong>{item.count}</strong></button>)}
+      </div>}
       {showFinder && <div className="mh-finder" role="search" aria-label="Find records">
         <label className="mh-search"><Icon name="search" size={16} /><span className="sr-only">Search records</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search notes, e.g. blood test" /></label>
         {specialties.length > 1 && <label className="mh-select"><span className="sr-only">Specialty</span><select value={specialty} onChange={event => setSpecialty(event.target.value)}><option value="">All specialties</option>{specialties.map(item => <option key={item.name} value={item.name}>{item.name} ({item.count})</option>)}</select></label>}
@@ -170,7 +178,7 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
         <h3>{narrowed ? 'No matching records' : filter === 'all' ? emptyText?.title ?? 'No records yet' : `No ${categoryLabels[filter].toLowerCase()} yet`}</h3>
         <p>{narrowed ? 'Try another word, specialty or period.' : filter === 'all' ? emptyText?.body ?? 'No medical records yet. Entries added by your doctor after a visit will appear here.' : 'No entries in this category.'}</p>
       </div>}
-      <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} newId={newId} />
+      <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} newId={highlighted} />
       {hasMore && <button className="button button-outline mh-load-more" type="button" disabled={loading} onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load more'}</button>}
       {loading && entries.length > 0 && <p role="status" className="sr-only">Loading medical history…</p>}
     </div>

@@ -134,3 +134,19 @@
   .mh-banner-copy { padding: 24px 22px; }
   .mh-banner-art { display: none; }
 }
+
+/* Compact category chips inside the timeline (doctor visit page) */
+.mh-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 4px; }
+.mh-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.mh-chip strong { color: var(--text-primary); font-weight: 600; }
+.mh-chip:hover { border-color: var(--accent-strong); }
+.mh-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--accent); color: var(--primary-deep); }
+/* Note form that stays beside the timeline */
+.mh-form.is-persistent { gap: 10px; padding: 20px; border-color: var(--border); background: var(--surface); box-shadow: var(--shadow-card); }
+.mh-form.is-persistent textarea { min-height: 140px; }
+.mh-category-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.mh-category-chips legend { margin-bottom: 6px; padding: 0; color: #33406a; font-size: 13px; font-weight: 600; }
+.mh-category-chips button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.mh-category-chips button[aria-pressed="true"] { border-color: var(--primary); background: var(--accent); color: var(--primary-deep); }
+.mh-form.is-persistent .mh-alert { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; margin: 0; }
+.mh-form.is-persistent .mh-alert svg { flex: 0 0 auto; margin-top: 3px; }
