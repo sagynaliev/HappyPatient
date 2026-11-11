@@ -4,111 +4,6 @@
   color: #0f172a;
 }
 
-.admin-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 18px 32px;
-  background: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
-}
-
-.admin-brand-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.admin-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-  color: #fff;
-  font-size: 20px;
-}
-
-.admin-brand {
-  font-size: 1.1rem;
-  font-weight: 800;
-}
-
-.admin-brand-wrap small {
-  display: block;
-  color: #64748b;
-  font-size: 0.72rem;
-}
-
-.admin-nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.admin-nav a {
-  padding: 8px 12px;
-  border-radius: 10px;
-  color: #475569;
-  font-size: 0.92rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.admin-nav a.active {
-  background: var(--accent);
-  color: var(--primary-hover);
-}
-
-.admin-user-tools {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.admin-icon-button {
-  width: 36px;
-  height: 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 50%;
-  background: #fff;
-  cursor: pointer;
-}
-
-.admin-user-pill {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  background: #f8fafc;
-}
-
-.admin-user-avatar {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #dbeafe;
-  color: var(--primary-hover);
-  font-size: 0.7rem;
-  font-weight: 800;
-}
-
-.admin-signout {
-  border: 0;
-  background: transparent;
-  color: var(--primary-hover);
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .admin-main {
   max-width: 1280px;
   margin: 0 auto;
@@ -159,8 +54,7 @@
 }
 
 .admin-metric-card,
-.admin-panel,
-.admin-report-card {
+.admin-panel {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 18px;
@@ -189,16 +83,6 @@
 .admin-metric-card small {
   color: #64748b;
   font-size: 0.78rem;
-}
-
-.admin-content-grid {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 18px;
-}
-
-.lower-grid {
-  grid-template-columns: 1fr 1fr;
 }
 
 .admin-panel {
@@ -257,13 +141,6 @@
   font-size: 0.74rem;
 }
 
-.admin-caption {
-  margin: 12px 0 0;
-  color: #64748b;
-  font-size: 0.82rem;
-}
-
-.admin-feed,
 .admin-list {
   list-style: none;
   margin: 0;
@@ -272,7 +149,6 @@
   gap: 12px;
 }
 
-.admin-feed li,
 .admin-list li {
   display: flex;
   align-items: center;
@@ -282,27 +158,18 @@
   border-bottom: 1px solid #e2e8f0;
 }
 
-.admin-feed li:last-child,
 .admin-list li:last-child {
   border-bottom: 0;
 }
 
-.admin-feed strong,
 .admin-list strong {
   display: block;
   margin-bottom: 2px;
 }
 
-.admin-feed small,
-.admin-list small,
-.admin-feed em {
+.admin-list small {
   color: #64748b;
   font-style: normal;
-}
-
-.admin-feed span {
-  color: #64748b;
-  min-width: 48px;
 }
 
 .admin-status {
@@ -534,52 +401,17 @@
   gap: 8px;
 }
 
-.admin-report-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.admin-report-card {
-  display: grid;
-  gap: 8px;
-  padding: 18px 20px;
-}
-
-.admin-report-card span {
-  color: #64748b;
-}
-
-.admin-report-card strong {
-  font-size: 2rem;
-}
-
-.admin-footer {
-  padding: 20px 32px 30px;
-  text-align: center;
-}
-
-.admin-footer a {
-  color: var(--primary);
-  font-weight: 700;
-  text-decoration: none;
-}
-
 @media (max-width: 900px) {
-  .admin-topbar {
-    flex-wrap: wrap;
-  }
+  
   .admin-metrics-grid,
-  .admin-content-grid,
   .admin-two-column,
-  .admin-report-grid,
   .admin-toolbar {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 @media (max-width: 640px) {
-  .admin-topbar,
+  
   .admin-main {
     padding-left: 16px;
     padding-right: 16px;
@@ -591,9 +423,7 @@
     padding-right: 16px;
   }
   .admin-metrics-grid,
-  .admin-content-grid,
   .admin-two-column,
-  .admin-report-grid,
   .admin-toolbar,
   .admin-form-grid {
     grid-template-columns: 1fr;

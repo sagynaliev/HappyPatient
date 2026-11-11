@@ -1,10 +1,4 @@
-.find-doctor-shell {
-  min-width: 0;
-}
 
-.find-directory-shell {
-  font-family: Onest, sans-serif;
-}
 
 .fd-page {
   min-width: 0;
@@ -776,7 +770,6 @@
   font: 400 14px Onest, sans-serif;
 }
 
-
 .fd-page :is(button, a, input, select):focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
@@ -864,8 +857,7 @@
   font-size: 14px;
 }
 
-.dp-badges,
-.dp-languages {
+.dp-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -1314,35 +1306,13 @@
     padding: 0 8px;
   }
 
-  .find-doctor-shell .topbar--app {
-    height: 64px;
-    flex-basis: 64px;
-    padding: 0 16px;
-  }
+  
 
-  .find-doctor-shell .topbar--app .nav {
-    position: absolute;
-    top: calc(100% + 1px);
-    right: 0;
-    left: 0;
-    display: none;
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0;
-    margin: 0;
-    padding: 8px 16px 14px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-  }
+  
 
-  .find-doctor-shell .topbar--app .nav.open {
-    display: flex;
-  }
+  
 
-  .find-doctor-shell .topbar--app .menu-button {
-    display: block;
-    margin-left: auto;
-  }
+  
 
   .dp-profile-header {
     grid-template-columns: 80px minmax(0, 1fr);

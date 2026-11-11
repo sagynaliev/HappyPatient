@@ -56,14 +56,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 /* ---------- Booking flow ---------- */
 .hp-content .bk-page { padding: 0; background: transparent; }
 .bk-page-heading h1 { font-size: clamp(30px, 3.2vw, 42px); font-weight: 600; letter-spacing: -0.04em; }
-.bk-stepper { gap: 8px; padding: 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
-.bk-step { display: flex; align-items: center; justify-content: center; gap: 0; min-height: 40px; padding: 0 12px; border-radius: 999px; }
-.bk-step-bar { display: none; }
-.bk-step-label { font-size: 13px; font-weight: 500; }
-.bk-step--completed { background: var(--accent); }
-.bk-step--completed .bk-step-label { color: var(--primary-deep); }
-.bk-step--current { background: var(--primary); box-shadow: 0 8px 18px rgb(43 99 246 / 28%); }
-.bk-step--current .bk-step-label { color: #fff; font-weight: 600; }
+
 .bk-card { border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
 .bk-summary { overflow: hidden; padding-top: 0; }
 .bk-summary > h2 { margin: 0 -24px 18px; padding: 16px 24px; background: var(--primary); color: #fff; font-size: 16px; font-weight: 600; }
@@ -72,11 +65,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .bk-summary-price { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
 .bk-consult-option[aria-checked="true"], .bk-consult-option.is-selected { border-color: var(--primary); background: #f5f8ff; }
 .bk-action-bar { border-radius: 20px; }
-@media (max-width: 900px) {
-  .bk-stepper { border-radius: 20px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .bk-step { padding: 0 6px; }
-  .bk-step-label { font-size: 12px; }
-}
+
 @media (max-width: 540px) { .bk-summary > h2 { margin: 0 -17px 16px; padding: 14px 17px; } }
 
 /* ---------- Patient appointments ---------- */
@@ -113,7 +102,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .patient-appointment-actions .pa-cancel { border-color: #f3c6ca; color: #c2373f; }
 .patient-appointment-actions .pa-cancel:hover { background: #fdecee; }
 .patient-appointment-hint { margin-right: auto; color: var(--text-secondary); font-size: 13px; }
-.patient-appointments-policy { border-radius: 20px; }
+
 @media (max-width: 640px) {
   .patient-appointment-card { grid-template-columns: 1fr; }
   .pa-date { grid-auto-flow: column; justify-content: start; gap: 8px; height: auto; padding: 10px 14px; }
@@ -125,7 +114,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 /* ---------- Public footer & header ---------- */
 /* global.css paints the footer dark blue; keep the light app-shell footer so its dark text stays readable. */
 footer.hp-footer { align-items: center; padding: 32px max(24px, calc((100vw - 1232px) / 2)); border-top: 1px solid var(--border); background: var(--surface); }
-.hp-footer .footer-brand .brand-mark { background: var(--primary); color: #fff; }
+
 .hp-footer .footer-links a:hover { color: var(--primary); }
 footer.hp-footer, .hp-footer .footer-brand, .hp-footer .footer-brand > span { color: var(--text-primary); font-size: 17px; font-weight: 600; }
 .hp-footer .footer-brand > span > span { color: var(--primary); }
@@ -177,43 +166,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .schedule-matrix-pill.available { border: 1px dashed #c9d5f2; background: #fbfcff; color: var(--text-secondary); }
 .schedule-matrix-pill.booked { border-color: transparent; background: #e8ecff; color: #26307a; }
 .schedule-matrix-pill.occupied { border-color: transparent; background: #e2f6ea; color: #17633f; }
-.page-heading .eyebrow, .doctor-portal-eyebrow { display: none; }
-
-/* ---------- Doctor dashboard (Medcare style) ---------- */
-.provider-dashboard { width: min(100%, 1280px); margin: 0 auto; }
-.provider-dashboard .pd-eyebrow { display: none; }
-.provider-dashboard .pd-heading {
-  position: relative; overflow: hidden; align-items: center; margin-bottom: 24px; padding: 34px 36px;
-  border-radius: var(--radius-lg); background: var(--primary); color: #fff;
-}
-.provider-dashboard .pd-heading::after { content: ""; position: absolute; right: -50px; top: -90px; width: 300px; height: 300px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 22%); box-shadow: 0 0 0 46px rgb(255 255 255 / 6%), 0 0 0 92px rgb(255 255 255 / 4%); pointer-events: none; }
-.provider-dashboard .pd-heading h1 { color: #fff; font-size: clamp(26px, 3vw, 36px); font-weight: 600; letter-spacing: -0.035em; }
-.provider-dashboard .pd-heading p { color: #fff; }
-.provider-dashboard .pd-heading .pd-button { position: relative; z-index: 1; border: 0; border-radius: 999px; background: #fff; color: var(--primary-deep); font-weight: 600; }
-.provider-dashboard .pd-metric { border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
-.provider-dashboard .pd-metric strong { color: var(--text-primary); font-size: 32px; font-weight: 600; letter-spacing: -0.03em; }
-.provider-dashboard .pd-metric:nth-child(1) { border-top: 4px solid var(--primary); }
-.provider-dashboard .pd-metric:nth-child(2) { border-top: 4px solid #7c5cf0; }
-.provider-dashboard .pd-metric:nth-child(3) { border-top: 4px solid #12a37a; }
-.provider-dashboard .pd-metric:nth-child(4) { border-top: 4px solid #f0627a; }
-.provider-dashboard .pd-card { border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
-.provider-dashboard .pd-card h2 { font-weight: 600; }
-.provider-dashboard .pd-agenda { border: 0; border-radius: 14px; }
-.provider-dashboard .pd-agenda-free { border: 1px dashed #c9d5f2; background: #fbfcff; }
-.provider-dashboard .pd-agenda-booked { background: #e8ecff; }
-.provider-dashboard .pd-agenda-occupied { background: #e2f6ea; }
-.provider-dashboard .pd-state { border-radius: 999px; }
-.provider-dashboard .pd-button-primary { border-radius: 999px; background: var(--primary); }
-.provider-dashboard .pd-button-outline { border-radius: 999px; }
-.provider-dashboard .pd-tabs button { border-radius: 999px; }
-.provider-dashboard .pd-tabs button.is-active { background: var(--primary); border-color: var(--primary); color: #fff; }
-.provider-dashboard .pd-disclaimer { border-radius: 16px; }
-.dd-notes { display: grid; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; }
-.dd-notes li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; }
-.dd-notes li.is-unread { background: #f5f8ff; }
-.dd-notes strong { font-size: 13.5px; font-weight: 600; }
-.dd-notes span { color: var(--text-secondary); font-size: 12.5px; line-height: 1.4; }
-.dd-notes small { color: #8b95b0; font-size: 11.5px; }
+.page-heading .eyebrow { display: none; }
 
 /* ---------- Front desk (reception workspace) ---------- */
 .front-desk-page { width: min(100%, 1240px); margin: 0 auto; padding: 0; }
@@ -234,7 +187,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 /* ---------- Admin dashboard (Holistic style) ---------- */
 .admin-shell { padding: 0; background: transparent; }
 .admin-main { padding: 0; }
-.admin-footer { display: none; }
+
 .ad-page { width: min(100%, 1240px); margin: 0 auto; }
 .ad-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
 .ad-head h1 { margin: 0; font-size: clamp(30px, 3.2vw, 40px); font-weight: 600; letter-spacing: -0.04em; }
@@ -333,7 +286,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .hp-top-actions { margin-left: auto; }
 
 /* ---------- Quiet section labels: no tracked-out uppercase eyebrows ---------- */
-.eyebrow, .mini-eyebrow, .admin-eyebrow, .da-eyebrow, .pd-eyebrow, .front-desk-eyebrow { display: none !important; }
+.eyebrow, .mini-eyebrow, .admin-eyebrow { display: none !important; }
 .availability-dialog-eyebrow, .patient-appointments-eyebrow { text-transform: none !important; letter-spacing: 0 !important; font-weight: 500 !important; }
 
 /* ---------- Sign in / register ---------- */
@@ -376,25 +329,6 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .fd-card { height: 100%; }
 .fd-card-actions { margin-top: auto; }
 
-/* ---------- Booking confirmation ---------- */
-.bk-step-check { display: inline-grid; width: 18px; height: 18px; margin-right: 6px; place-items: center; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; vertical-align: -3px; }
-.bk-confirmation { display: grid; justify-items: center; gap: 0; width: min(100%, 620px); margin: 8px auto 0; padding: 36px 36px 28px; text-align: center; }
-.bk-confirm-icon { display: grid; width: 76px; height: 76px; margin-bottom: 16px; place-items: center; border-radius: 50%; background: #e3f7ee; color: #0f8a63; box-shadow: 0 0 0 8px #f1fbf6; }
-.bk-confirm-icon svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.bk-confirmation .bk-badge { margin-bottom: 10px; border-radius: 999px; background: #e3f7ee; color: #0f7a57; }
-.bk-confirmation h2 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -0.03em; }
-.bk-confirm-meta { margin: 0 0 22px; color: var(--primary); font-weight: 500; }
-.bk-confirm-details { width: 100%; margin: 0 0 18px; padding: 6px 18px; border-radius: 18px; background: #f6f8fd; text-align: left; }
-.bk-confirm-details > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
-.bk-confirm-details > div:last-child { border-bottom: 0; }
-.bk-confirm-details dt { color: var(--text-secondary); font-size: 14px; }
-.bk-confirm-details dd { margin: 0; overflow-wrap: anywhere; font-size: 14.5px; font-weight: 600; text-align: right; }
-.bk-confirmation .bk-info--success { width: 100%; margin: 0 0 20px; padding: 12px 16px; border: 0; border-radius: 14px; background: #e9f8f1; color: #17633f; font-size: 14px; text-align: left; }
-.bk-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
-.bk-confirm-actions .button { justify-content: center; min-height: 48px; }
-.bk-confirmation .bk-home-link { margin-top: 16px; color: var(--primary); font-weight: 600; }
-@media (max-width: 520px) { .bk-confirmation { padding: 26px 18px 22px; } .bk-confirm-actions { grid-template-columns: 1fr; } }
-
 /* ---------- Cancellation: dialog and history ---------- */
 .pa-cancel-dialog { display: grid; gap: 14px; width: min(100% - 32px, 480px); }
 .pa-cancel-dialog h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
@@ -424,10 +358,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .slot-modal-chip.is-selected { border-color: var(--primary); background: var(--accent); color: var(--primary-deep); }
 .slot-modal-reason { display: grid; gap: 6px; font-size: 13px; font-weight: 500; }
 .slot-modal-reason textarea { padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; font: inherit; font-size: 14px; resize: vertical; }
-.dd-muted { margin: 8px 0 0; color: var(--text-secondary); font-size: 13.5px; }
 
-/* ---------- Walk-in registration: steps + slot picker ---------- */
-.front-desk-page .front-desk-grid { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items: start; }
 .fdk-walkin .front-desk-form { gap: 18px; }
 .fdk-step { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 18px; border: 1px solid var(--border); border-radius: 18px; }
 .fdk-step legend { display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; font-size: 15px; font-weight: 600; }
@@ -445,10 +376,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .wi-search:focus-within { border-color: var(--primary); box-shadow: 0 0 0 4px rgb(43 99 246 / 12%); }
 .front-desk-page .wi-search input { height: 40px; min-height: 0; padding: 0; border: 0; box-shadow: none; }
 .front-desk-page .wi-search input:focus { box-shadow: none; }
-.wi-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
-.wi-chips button { flex: 0 0 auto; height: 34px; padding: 0 13px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text-primary); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
-.wi-chips button:hover { border-color: var(--accent-strong); }
-.wi-chips button.is-active { border-color: var(--primary); background: var(--primary); color: #fff; }
+
 .wi-results { display: grid; gap: 8px; }
 .wi-count { margin: 0; color: var(--text-secondary); font-size: 13px; }
 .wi-doctors { display: grid; gap: 8px; max-height: 380px; margin: 0; padding: 0 2px 0 0; overflow-y: auto; list-style: none; }
@@ -471,7 +399,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .fdk-picked small { color: var(--text-secondary); font-size: 12.5px; }
 .fdk-picked-clear { border: 0; background: none; color: var(--primary); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .fdk-picked-empty { margin: 0; padding: 12px 14px; border: 1px dashed var(--border); border-radius: 14px; color: var(--text-secondary); font-size: 13.5px; }
-@media (max-width: 1100px) { .front-desk-page .front-desk-grid { grid-template-columns: 1fr; } }
+
 .front-desk-page .front-desk-form .wi-search { display: flex; grid-template-columns: none; gap: 8px; color: var(--text-secondary); font-weight: 400; } .front-desk-page .front-desk-form .wi-date { display: inline-flex; }
 
 /* Walk-in form: flat steps separated by dividers instead of nested boxes */
@@ -485,7 +413,6 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 /* Free times: an even grid so "+N more" sits in line with the times */
 .wi-times { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
 .wi-times button { min-width: 0; width: 100%; }
-.wi-chips { -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); padding-right: 24px; }
 
 /* Appointment rows: doctor and time on their own lines, never wrapping mid-date */
 .front-desk-page .fdk-info .fdk-meta, .front-desk-page .fdk-info .fdk-when { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -553,7 +480,7 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .fdk-section-head h2 { margin: 0; }
 .fdk-walkin-link { padding: 9px 16px; border: 1px solid var(--accent-strong); border-radius: 999px; background: var(--accent); color: var(--primary-deep); font-size: 14px; font-weight: 600; }
 .fdk-walkin-link:hover { border-color: var(--primary); }
-.fdk-step-hint { margin: -6px 0 2px; }
+
 /* Steps keep their content at the top even when the column is stretched */
 .fdk-step, .wi-picker, .wi-results { align-content: start; }
 .wi-row { align-items: center; }
@@ -737,9 +664,6 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 .sms-popover label.sms-search input,
 .sms-popover label.sms-search input:focus { flex: 1; width: auto; height: 100%; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; outline: none; background: transparent; box-shadow: none; color: var(--text-primary); font: inherit; }
 
-/* ---------- Booking confirmation: card + "what happens next" side by side ---------- */
-.bk-done { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); align-items: start; gap: 24px; }
-.bk-done .bk-confirmation { width: 100%; margin: 0; }
 .bk-next { display: grid; gap: 16px; }
 .bk-next-card { padding: 24px; }
 .bk-next-card h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
@@ -752,9 +676,9 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 .bk-next-icon { position: relative; z-index: 1; display: grid; width: 36px; height: 36px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--primary); }
 .bk-next-change { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 18px 20px; }
 .bk-next-change .button { min-height: 40px; padding: 0 16px; }
-@media (max-width: 1000px) { .bk-done { grid-template-columns: minmax(0, 1fr); } }
+
 @media (min-width: 1001px) {
-  .bk-done { align-items: stretch; }
+  
   .bk-next { grid-template-rows: 1fr auto; }
   .bk-next-card { display: flex; flex-direction: column; }
   .bk-next-steps { flex: 1; align-content: space-evenly; }
@@ -765,14 +689,8 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 .fdk-walkin-layout.has-walkin-notice { padding-bottom: 210px; }
 @media (max-width: 640px) { .fdk-walkin-layout.has-walkin-notice { padding-bottom: 300px; } }
 
-@media (max-width: 700px) { .provider-dashboard { width: min(100% - 32px, 1280px); } }
-
 .bk-consult-option:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 
-/* ---------- Health records: same page frame as My appointments ---------- */
-
-/* ---------- Booking: confirmation and recap stay inside the booking layout ---------- */
-.bk-main .bk-confirmation { width: 100%; margin: 0; }
 .bk-recap-back { margin-top: 20px; }
 /* Next steps sit under the confirmation in the main column, so they are visible without scrolling the sidebar. */
 .bk-main .bk-next { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }

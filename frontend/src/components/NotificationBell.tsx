@@ -5,7 +5,8 @@ import { NotificationItem } from "./NotificationItem";
 import { onNotificationsChanged } from "../lib/notificationEvents";
 import "../styles/notificationBell.css";
 
-const POLL_MS = 15_000;
+// Every signed-in tab asks on this timer, so it is the steady background load on the API.
+const POLL_MS = 30_000;
 
 export function NotificationBell() {
   const { user } = useAuth();
@@ -27,13 +28,16 @@ export function NotificationBell() {
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(), POLL_MS);
+    // A tab nobody is looking at does not poll; it catches up the moment it is shown again.
+    const timer = window.setInterval(() => { if (!document.hidden) void load(); }, POLL_MS);
+    const onVisible = () => { if (!document.hidden) void load(); };
+    document.addEventListener("visibilitychange", onVisible);
     const unsubscribe = onNotificationsChanged(() => {
       void load();
       // notifications are recorded right after the action, so check again shortly
       window.setTimeout(() => void load(), 1500);
     });
-    return () => { window.clearInterval(timer); unsubscribe(); };
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); unsubscribe(); };
   }, [load]);
 
   useEffect(() => {

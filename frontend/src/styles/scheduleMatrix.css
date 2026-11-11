@@ -36,7 +36,7 @@
 .schedule-matrix-table thead th:first-child { width: 58px; }
 .schedule-matrix-table thead th.is-today { border-bottom-color: #2b63f6; color: #2b63f6; }
 .schedule-matrix-table thead th strong { display: block; white-space: nowrap; }
-.schedule-matrix-today { display: block; margin-top: 1px; color: #2b63f6; font-size: 9px; }
+
 .schedule-matrix-table tbody th { width: 58px; padding: 5px 3px; color: var(--text-secondary); font-size: 12px; font-weight: 650; white-space: nowrap; }
 .schedule-matrix-cell { min-width: 0; }
 .schedule-matrix-slot {

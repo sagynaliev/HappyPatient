@@ -14,6 +14,7 @@ const prismaMock = vi.hoisted(() => ({
   cancelledAppointment: { create: vi.fn(), findMany: vi.fn() },
   user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn(), update: vi.fn() },
   $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
 }));
 const notificationMock = vi.hoisted(() => vi.fn());
 const sendEmail = vi.hoisted(() => vi.fn());
@@ -320,17 +321,38 @@ describe('authenticated self profile endpoints', () => {
         status: true,
         visitPurpose: true,
         checkedInAt: true,
+        updatedAt: true,
+        doctorId: true,
         doctor: {
           select: {
             id: true,
             office: true,
             consultationFee: true,
+            categoryId: true,
+            locationId: true,
             category: { select: { name: true } },
             user: { select: { firstName: true, lastName: true } },
           },
         },
       },
     });
+    // Internal pricing fields never reach the patient.
+    expect(response.body.appointments[0]).not.toHaveProperty('updatedAt');
+    expect(response.body.appointments[0].doctor).not.toHaveProperty('categoryId');
+  });
+
+  it('prices a whole appointment list with one rules query and one booking-time query', async () => {
+    const slot = (id: string, fee: number) => ({ id, doctorId: 'doctor-1', startAt: new Date('2099-05-10T09:00:00.000Z'), endAt: new Date('2099-05-10T09:30:00.000Z'), status: 'BOOKED', visitPurpose: null, updatedAt: new Date('2026-11-02T00:00:00.000Z'), doctor: { id: 'doctor-1', office: null, consultationFee: fee, categoryId: 'cat-1', locationId: null, category: { name: 'Cardiology' }, user: { firstName: 'Sam', lastName: 'Doctor' } } });
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([slot('slot-a', 10000), slot('slot-b', 12000), slot('slot-c', 14000)]);
+    prismaMock.cancelledAppointment.findMany.mockResolvedValue([]);
+    prismaMock.notification.findMany.mockResolvedValue([{ slotId: 'slot-a', createdAt: new Date('2026-11-03T00:00:00.000Z') }]);
+    prismaMock.pricingRule.findMany.mockResolvedValue([{ id: 'rule', kind: 'visit', doctorId: 'doctor-1', categoryId: null, consultationType: null, officeId: null, effectiveFrom: new Date('2026-11-02T12:00:00.000Z'), effectiveTo: null, amountKzt: 18000 }]);
+    const response = await request(app).get('/api/me/appointments').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(200);
+    // slot-a was booked after the rule started; the others fall back to the slot's own time, before the rule.
+    expect(response.body.appointments.map((item: { priceKzt: number }) => item.priceKzt)).toEqual([18000, 12000, 14000]);
+    expect(prismaMock.pricingRule.findMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.notification.findMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.scheduleSlot.findFirst).not.toHaveBeenCalled();
   });
 
   it('requires a patient role to view their appointments', async () => {
@@ -385,11 +407,29 @@ describe('Sprint 2 doctor endpoints', () => {
       { clinicName: { contains: 'cardio', mode: 'insensitive' } },
     ]));
     expect(query.where.scheduleSlots.some).toEqual(expect.objectContaining({ status: 'FREE' }));
-    expect(query.include.scheduleSlots).toEqual(expect.objectContaining({
-      where: expect.objectContaining({ status: 'FREE' }),
-      orderBy: { startAt: 'asc' },
-      take: 1,
-    }));
+    // The next free time comes from its own query, not a nested include that loads every slot.
+    expect(query.include).not.toHaveProperty('scheduleSlots');
+  });
+
+  it('adds each doctor\'s next free time from one query and leaves doctors without one empty', async () => {
+    prismaMock.doctor.findMany.mockResolvedValue([
+      { id: 'doctor-1', category: { name: 'Cardiology' }, user: { firstName: 'Sam', lastName: 'Doctor' } },
+      { id: 'doctor-2', category: { name: 'Neurology' }, user: { firstName: 'Ann', lastName: 'Other' } },
+    ]);
+    prismaMock.$queryRaw.mockResolvedValue([{ id: 'slot-7', doctorId: 'doctor-1', startAt: new Date('2099-05-10T09:00:00.000Z'), endAt: new Date('2099-05-10T09:30:00.000Z') }]);
+    const response = await request(app).get('/api/doctors?availability=today&timeOfDay=morning&timeZone=Asia/Almaty').expect(200);
+    expect(response.body.doctors[0].scheduleSlots).toEqual([{ id: 'slot-7', startAt: '2099-05-10T09:00:00.000Z', endAt: '2099-05-10T09:30:00.000Z' }]);
+    expect(response.body.doctors[1].scheduleSlots).toEqual([]);
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = prismaMock.$queryRaw.mock.calls[0][0];
+    expect(sql.sql).toContain('DISTINCT ON (s."doctorId")');
+    expect(sql.values).toEqual(expect.arrayContaining(['doctor-1', 'doctor-2']));
+  });
+
+  it('does not query slots when no doctor matches', async () => {
+    prismaMock.doctor.findMany.mockResolvedValue([]);
+    await request(app).get('/api/doctors?q=nobody').expect(200);
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
   });
 
   it('matches full doctor names, including the displayed doctor title', async () => {
@@ -945,3 +985,31 @@ describe('admin appointment labels', () => {
     expect(response.body.appointments.map((item: { status: string }) => item.status)).toEqual(['Booked', 'Checked in']);
   });
 });
+
+describe('sign-in under load and admin user edits', () => {
+  it('upgrades a bcrypt password hash to scrypt after a successful sign-in', async () => {
+    const bcrypt = (await import('bcryptjs')).default;
+    prismaMock.user.findUnique.mockResolvedValueOnce({ id: 'u1', email: 'old@example.test', firstName: 'Old', lastName: 'User', role: Role.PATIENT, phone: null, passwordHash: await bcrypt.hash('Demo@12345', 4) });
+    prismaMock.user.update.mockResolvedValue({});
+    const response = await request(app).post('/api/auth/login').send({ email: 'old@example.test', password: 'Demo@12345' }).expect(200);
+    expect(response.body.token).toBeTruthy();
+    await vi.waitFor(() => expect(prismaMock.user.update).toHaveBeenCalled());
+    const saved = prismaMock.user.update.mock.calls[0][0];
+    expect(saved.where).toEqual({ id: 'u1' });
+    expect(saved.data.passwordHash.startsWith('scrypt$')).toBe(true);
+  });
+  it('locks sign-in for an account after ten wrong passwords from one address', async () => {
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    const attempt = () => request(app).post('/api/auth/login').send({ email: 'guess@example.test', password: 'Wrong-pass-1' });
+    for (let index = 0; index < 10; index += 1) expect((await attempt()).status).toBe(401);
+    const blocked = await attempt();
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toMatch(/Too many sign-in attempts/);
+  });
+  it('rejects an invalid role or email in an admin user edit before touching the database', async () => {
+    await request(app).patch('/api/admin/users/u1').set('Authorization', bearer(Role.ADMIN)).send({ role: 'SUPERUSER' }).expect(400);
+    await request(app).patch('/api/admin/users/u1').set('Authorization', bearer(Role.ADMIN)).send({ email: 'not-an-email' }).expect(400);
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+});
+

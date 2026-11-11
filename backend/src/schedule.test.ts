@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clinicDateBounds, clinicTimeToUtc, generateScheduleSlots, localDateAt, localTimeToUtc, utcDateBounds } from './schedule';
+import { clinicDateBounds, clinicTimeToUtc, generateScheduleSlots, localDateAt, localTimeToUtc } from './schedule';
 
 describe('schedule slot generation', () => {
   it('treats entered times as clinic-local (Asia/Almaty, UTC+5) and creates contiguous 30-minute slots', () => {
@@ -19,12 +19,6 @@ describe('schedule slot generation', () => {
     const bounds = clinicDateBounds('2026-10-22');
     expect(bounds.start.toISOString()).toBe('2026-10-21T19:00:00.000Z');
     expect(bounds.end.toISOString()).toBe('2026-10-22T19:00:00.000Z');
-  });
-
-  it('returns UTC day boundaries for filtering', () => {
-    const bounds = utcDateBounds('2099-05-10');
-    expect(bounds.start.toISOString()).toBe('2099-05-10T00:00:00.000Z');
-    expect(bounds.end.toISOString()).toBe('2099-05-11T00:00:00.000Z');
   });
 
   it('converts local calendar and time boundaries across time zones', () => {

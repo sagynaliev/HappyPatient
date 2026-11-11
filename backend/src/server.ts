@@ -8,12 +8,34 @@ import { releaseUnattendedSlots, sendUpcomingReminders } from './appointmentLife
 import { runDailyIntegrityIfDue } from './adminOperations';
 
 const server = app.listen(config.PORT, () => console.log(`API listening on ${config.PORT}`));
-void releaseUnattendedSlots().catch(()=>undefined);
-void sendUpcomingReminders().catch(()=>undefined);
-void runDailyIntegrityIfDue().catch(()=>undefined);
-const releaseTimer = setInterval(() => { void releaseUnattendedSlots().catch((error: unknown) => console.error('Unattended slot release failed', { name: error instanceof Error ? error.name : undefined })); }, config.SLOT_RELEASE_INTERVAL_MS);
-const reminderTimer = setInterval(() => { void sendUpcomingReminders().catch(() => undefined); }, config.REMINDER_INTERVAL_MS);
-const integrityTimer = setInterval(() => { void runDailyIntegrityIfDue().catch(() => undefined); }, config.INTEGRITY_INTERVAL_MS);
-const shutdown = async () => { await prisma.$disconnect(); server.close(() => process.exit(0)); };
-process.on('SIGINT', () => { clearInterval(releaseTimer); clearInterval(reminderTimer); clearInterval(integrityTimer); void shutdown(); });
-process.on('SIGTERM', () => { clearInterval(releaseTimer); clearInterval(reminderTimer); clearInterval(integrityTimer); void shutdown(); });
+
+/** Runs a background job on a timer without stacking runs: a slow run is skipped over, not doubled. */
+function every(name: string, intervalMs: number, job: () => Promise<unknown>) {
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try { await job(); } catch (error: unknown) { console.error(`${name} failed`, { name: error instanceof Error ? error.name : undefined }); } finally { running = false; }
+  };
+  void run();
+  return setInterval(() => void run(), intervalMs);
+}
+const timers = [
+  every('Unattended slot release', config.SLOT_RELEASE_INTERVAL_MS, releaseUnattendedSlots),
+  every('Visit reminders', config.REMINDER_INTERVAL_MS, sendUpcomingReminders),
+  every('Daily integrity check', config.INTEGRITY_INTERVAL_MS, runDailyIntegrityIfDue),
+];
+// One failed background promise must not take the API down for everyone.
+process.on('unhandledRejection', (reason: unknown) => console.error('Unhandled rejection', { name: reason instanceof Error ? reason.name : typeof reason }));
+
+let closing = false;
+function shutdown() {
+  if (closing) return;
+  closing = true;
+  timers.forEach(clearInterval);
+  // Let requests in flight finish, then release the database connections.
+  server.close(() => { void prisma.$disconnect().finally(() => process.exit(0)); });
+  setTimeout(() => process.exit(0), 10_000).unref();
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

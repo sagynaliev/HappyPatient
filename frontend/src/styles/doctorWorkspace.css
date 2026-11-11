@@ -168,7 +168,7 @@
 .dw-week .dw-week-bars { flex: 1; min-height: 170px; height: auto; }
 .dw-more { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin-top: auto; padding: 10px 8px 0; color: var(--primary); font-size: 14px; font-weight: 600; }
 .dw-more:hover { text-decoration: underline; }
-.dw-today, .dw-week, .dw-alerts { padding: 22px 24px; }
+.dw-today, .dw-week { padding: 22px 24px; }
 .dw-today-note { margin: -8px 0 10px; font-size: 13px; }
 .dw-agenda { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .dw-agenda-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-radius: 14px; color: inherit; }

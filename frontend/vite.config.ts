@@ -16,16 +16,6 @@ const spaFallback = (): Plugin => ({
 
 export default defineConfig({
   plugins: [react(), spaFallback()],
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('/node_modules/jspdf/')) return 'pdf-vendor';
-          if (id.includes('/node_modules/html2canvas/')) return 'canvas-vendor';
-        },
-      },
-    },
-  },
   server: {
     host: "0.0.0.0",
     port: 5173,

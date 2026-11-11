@@ -27,11 +27,6 @@ export function generateScheduleSlots(input: unknown, timeZone = CLINIC_TIME_ZON
   return slots;
 }
 
-export function utcDateBounds(date: string) {
-  const start = new Date(`${date}T00:00:00.000Z`);
-  return { start, end: new Date(start.getTime() + 24 * 60 * 60_000) };
-}
-
 /** UTC range covering one clinic-local calendar day. */
 export function clinicDateBounds(date: string, timeZone = CLINIC_TIME_ZONE) {
   const next = new Date(`${date}T00:00:00.000Z`);

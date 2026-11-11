@@ -1,3 +1,4 @@
+import "./styles/all";
 import { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -11,26 +12,32 @@ const MedicalHistoryPage = lazy(() => import("./pages/MedicalHistoryPage"));
 import Home from "./pages/Home";
 import { Login, Register, Forgot, Reset } from "./pages/AuthPages";
 import Search from "./pages/Search";
-import Dashboard from "./pages/Dashboard";
-import PatientAppointments from "./pages/PatientAppointments";
-import AdminDashboard from "./pages/AdminDashboard";
-import AdminLayout from "./pages/AdminLayout";
-import AdminUsersPage from "./pages/AdminUsersPage";
-import AdminDoctorsPage from "./pages/AdminDoctorsPage";
-import AdminAppointmentsPage from "./pages/AdminAppointmentsPage";
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const PatientAppointments = lazy(() => import("./pages/PatientAppointments"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminLayout = lazy(() => import("./pages/AdminLayout"));
+const AdminUsersPage = lazy(() => import("./pages/AdminUsersPage"));
+const AdminDoctorsPage = lazy(() => import("./pages/AdminDoctorsPage"));
+const AdminAppointmentsPage = lazy(() => import("./pages/AdminAppointmentsPage"));
 const AdminOperationsPage = lazy(() => import("./pages/AdminOperationsPage"));
 const AdminTimePage = lazy(() => import("./pages/AdminTimePage"));
-import Schedule from "./pages/Schedule";
-import DoctorProfilePage from "./pages/DoctorProfilePage";
-import ProfilePage from "./pages/ProfilePage";
-import DoctorSchedulePage from "./pages/DoctorSchedulePage";
-import DoctorVisitPage from "./pages/DoctorVisitPage";
-import DoctorVisitsPage from "./pages/DoctorVisitsPage";
+const Schedule = lazy(() => import("./pages/Schedule"));
+const DoctorProfilePage = lazy(() => import("./pages/DoctorProfilePage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const DoctorSchedulePage = lazy(() => import("./pages/DoctorSchedulePage"));
+const DoctorVisitPage = lazy(() => import("./pages/DoctorVisitPage"));
+const DoctorVisitsPage = lazy(() => import("./pages/DoctorVisitsPage"));
 import { LegacyDoctorAppointments } from "./components/RouteGuards";
-import DoctorDashboard from "./pages/DoctorDashboard";
-import FrontDeskPage from "./pages/FrontDeskPage";
-import "./styles/global.css";
-import "./styles/redesign.css";
+const DoctorDashboard = lazy(() => import("./pages/DoctorDashboard"));
+const FrontDeskPage = lazy(() => import("./pages/FrontDeskPage"));
+// After a new release an open tab still points at the old screen files; reload once to pick up the new ones.
+window.addEventListener("vite:preloadError", () => {
+  // At most one reload a minute, so a file that is really missing cannot loop the page.
+  const last = Number(sessionStorage.getItem("hp_reloaded_for_update") ?? 0);
+  if (performance.timeOrigin - last < 60_000) return;
+  sessionStorage.setItem("hp_reloaded_for_update", String(performance.timeOrigin));
+  window.location.reload();
+});
 // Read the demo clock before the first render so every screen starts with the same "now".
 void syncAppClock().finally(() => createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -39,6 +46,8 @@ void syncAppClock().finally(() => createRoot(document.getElementById("root")!).r
         <Toaster />
         <DemoTimeBadge />
         <Layout>
+          {/* Each role's screens load on demand, so the first visit downloads only the public pages. */}
+          <Suspense fallback={<p className="skeleton" role="status">Loading…</p>}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/search" element={<Search />} />
@@ -52,7 +61,7 @@ void syncAppClock().finally(() => createRoot(document.getElementById("root")!).r
               <Route path="/profile" element={<ProfilePage />} />
               <Route element={<ProtectedRoute roles={["PATIENT"]} />}>
                 <Route path="/appointments" element={<PatientAppointments />} />
-                <Route path="/medical-history" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><MedicalHistoryPage /></Suspense>} />
+                <Route path="/medical-history" element={<MedicalHistoryPage />} />
               </Route>
               <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
               <Route path="/admin" element={<AdminLayout />}>
@@ -62,11 +71,11 @@ void syncAppClock().finally(() => createRoot(document.getElementById("root")!).r
                 <Route path="doctors" element={<AdminDoctorsPage />} />
                 <Route path="appointments" element={<AdminAppointmentsPage />} />
                 <Route path="reports" element={<Navigate to="/admin/statistics" replace />} />
-                <Route path="pricing" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="pricing" /></Suspense>} />
-                <Route path="statistics" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="statistics" /></Suspense>} />
-                <Route path="integrity" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="integrity" /></Suspense>} />
-                <Route path="time" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminTimePage /></Suspense>} />
-                <Route path="reference-data" element={<Suspense fallback={<p className="skeleton" role="status">Loading…</p>}><AdminOperationsPage view="reference" /></Suspense>} />
+                <Route path="pricing" element={<AdminOperationsPage view="pricing" />} />
+                <Route path="statistics" element={<AdminOperationsPage view="statistics" />} />
+                <Route path="integrity" element={<AdminOperationsPage view="integrity" />} />
+                <Route path="time" element={<AdminTimePage />} />
+                <Route path="reference-data" element={<AdminOperationsPage view="reference" />} />
               </Route>
             </Route>
             </Route>
@@ -89,6 +98,7 @@ void syncAppClock().finally(() => createRoot(document.getElementById("root")!).r
               <Route path="/front-desk/walk-in" element={<FrontDeskPage view="walk-in" />} />
             </Route>
           </Routes>
+          </Suspense>
         </Layout>
       </AuthProvider>
     </BrowserRouter>

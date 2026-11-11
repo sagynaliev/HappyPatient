@@ -116,8 +116,8 @@ model ScheduleSlot {
   cancellations CancelledAppointment[]
 
   @@unique([doctorId, startAt])
-  @@index([doctorId, startAt])
-  @@index([patientId])
+  @@index([patientId, startAt])
+  @@index([status, startAt])
   @@index([checkedInById])
 }
 
@@ -219,6 +219,8 @@ model MedicalEntry {
   doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Restrict)
   appointment ScheduleSlot? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   @@index([patientId, createdAt, id])
+  @@index([appointmentId])
+  @@index([doctorId])
   @@unique([patientId, patientSequence])
 }
 

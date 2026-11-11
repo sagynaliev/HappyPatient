@@ -106,6 +106,13 @@ To inspect local tables, run `npm run db:studio` from the repository root and op
 
 No real credentials or secrets are committed. Use `.env.example` as the configuration template.
 
+## Running under load
+
+- **Sign-in protection.** Ten wrong passwords for one account from one address lock sign-in for 15 minutes, and one address can make at most 100 sign-in, registration or recovery requests in 15 minutes. Counters are kept in the API's memory, which fits a single API instance. `RATE_LIMIT=off` turns the limits off for load tests.
+- **Passwords** are hashed with scrypt on Node's thread pool, so a burst of sign-ins does not stall other requests. Accounts created earlier (bcrypt) still sign in and are upgraded at their next sign-in.
+- **Database connections.** Prisma opens `CPU cores × 2 + 1` connections by default. On a small host with a small database plan, cap it in the connection string, for example `?connection_limit=5`.
+- **One API instance.** The demo clock, the sign-in counters and the background jobs (auto-release, reminders, integrity check) live in the API process. Run a single instance; several instances would each keep their own.
+
 ## Demo time (for class demonstrations)
 
 Admins can move the platform clock in **Admin → Demo time** to show time-based rules without waiting: the 10-minute auto-release, 24 h / 2 h reminders, the 30-minute check-in window and medical notes after a visit starts. Every user sees the same shifted time and an orange "Demo time" badge; moving the clock immediately releases overdue bookings and sends due reminders. The shift is kept in server memory, so a server restart returns to real time. Sign-in sessions last one day in app time, so shifting more than a day ahead signs people out. Set `TIME_CONTROL=off` to disable the feature.

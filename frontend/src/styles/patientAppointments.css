@@ -260,35 +260,6 @@
   to { background-position: -200% 0; }
 }
 
-.patient-appointments-policy {
-  display: flex;
-  gap: 13px;
-  margin-top: 24px;
-  padding: 20px;
-  border: 1px solid #b9d8ea;
-  border-radius: 14px;
-  background: #eef2fc;
-  color: #315469;
-}
-
-.patient-appointments-policy > span {
-  flex: 0 0 auto;
-  color: var(--primary);
-  font-size: 20px;
-}
-
-.patient-appointments-policy h2 {
-  margin: 0 0 5px;
-  color: var(--text-primary);
-  font-size: 16px;
-}
-
-.patient-appointments-policy p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 .patient-appointment-dialog-backdrop {
   position: fixed;
   z-index: 100;
@@ -377,9 +348,7 @@
     width: 100%;
   }
 
-  .patient-appointments-policy {
-    padding: 16px;
-  }
+  
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -389,7 +358,6 @@
 }
 
 .patient-appointment-hint { color: #64748b; font-size: 0.85rem; align-self: center; }
-.patient-receipt-dialog { max-height: calc(100vh - 32px); overflow-y: auto; background: #f2f5fc; }
 
 /* Search and sort above the list */
 .pa-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }

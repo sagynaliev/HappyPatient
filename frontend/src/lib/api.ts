@@ -97,7 +97,6 @@ export type CancelledAppointment = {
   reference?: string;
   doctor: { name: string; specialty: string; office: string | null; consultationFee: number };
 };
-export type DoctorCancellation = { id: string; slotId: string; startAt: string; endAt: string; visitPurpose?: string | null; reason: string; cancelledBy: 'PATIENT' | 'CLINIC'; createdAt: string; patientName: string };
 export type AvailabilityDoctor = { id: string; name: string; specialty: string; office: string | null; consultationFee: number; slots: Array<{ id: string; startAt: string; endAt: string }> };
 export type FrontDeskAppointment = { id: string; startAt: string; endAt: string; status: ScheduleSlot['status']; visitPurpose?: string | null; checkedInAt?: string | null; reference: string; patient: { id: string; name: string; email: string; phone: string | null } | null; doctor: { name: string; specialty: string; office: string | null } };
 export type AppNotification = { id: string; slotId?: string | null; type: string; channel: string; status: string; subject: string; message: string; createdAt: string; readAt?: string | null };
@@ -119,43 +118,6 @@ export type Receipt = {
   endAt: string;
   checkedInAt?: string | null;
   checkedInBy?: string | null;
-};
-export type DoctorProfileDraft = {
-  firstName?: string;
-  lastName?: string;
-  specialty?: string;
-  qualification?: string;
-  experience?: string;
-  consultationFee?: number;
-  languages?: string[];
-  email?: string;
-  phone?: string;
-  office?: string;
-  city?: string | null;
-  clinicName?: string | null;
-  streetAddress?: string | null;
-  officeNumber?: string | null;
-  bio?: string;
-  license?: string;
-  inPerson?: boolean;
-  online?: boolean;
-};
-export type TimeOffRequest = {
-  startDate: string;
-  endDate: string;
-  allDay?: boolean;
-  startTime?: string;
-  endTime?: string;
-  reason?: string;
-  note?: string;
-  hideFromSearch?: boolean;
-};
-export type RescheduleRequest = {
-  newSlotId?: string;
-  newDate?: string;
-  newTime?: string;
-  patientMessage?: string;
-  sendNotification?: boolean;
 };
 export type AdminMetrics = {
   totalUsers: number;
@@ -201,7 +163,6 @@ export const authApi = {
   me: () => api<{ user: ProfileUser }>('/me'),
   updateProfile: (body: ProfileUpdate) => api<{ user: ProfileUser }>('/me', { method: 'PATCH', body: JSON.stringify(body) }),
   myAppointments: () => api<{ appointments: PatientAppointment[]; cancelled?: CancelledAppointment[] }>('/me/appointments'),
-  doctorCancellations: () => api<{ cancellations: DoctorCancellation[] }>('/doctors/me/cancellations'),
   rescheduleMyAppointment: (slotId: string, newSlotId: string) => api<{ slot: ScheduleSlot; reference?: string; previousReference?: string }>(`/appointments/${encodeURIComponent(slotId)}/reschedule`, { method: 'POST', body: JSON.stringify({ newSlotId }) }),
   cancelAppointment: (slotId: string, reason: string) => api<{ cancelled: boolean; reference: string }>(`/appointments/${slotId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   checkInAppointment: (slotId: string) => api<{ checkedIn: boolean; reference: string; receipt: { id: string } }>(`/appointments/${slotId}/check-in`, { method: 'POST' }),
@@ -213,23 +174,7 @@ export const authApi = {
   frontDeskAppointments: (query = '') => api<{ appointments: FrontDeskAppointment[] }>(`/front-desk/appointments${query ? `?q=${encodeURIComponent(query)}` : ''}`),
   frontDeskAvailability: (params: { date: string; categories?: string[]; q?: string }) =>
     api<{ date: string; doctors: AvailabilityDoctor[]; specialtyCounts?: Record<string, number> }>(`/front-desk/availability?${new URLSearchParams({ date: params.date, ...(params.categories?.length ? { category: params.categories.join(",") } : {}), ...(params.q ? { q: params.q } : {}) }).toString()}`),
-  frontDeskSchedule: (doctorId: string, date: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule?date=${encodeURIComponent(date)}`),
   frontDeskWalkIn: (body: { firstName: string; lastName: string; iin: string; email?: string; phone?: string; doctorId: string; slotId: string; visitPurpose: string }) => api<{ patient: { id: string; firstName: string; lastName: string }; slot: { id: string; status: ScheduleSlot['status'] }; reference: string }>('/front-desk/walk-ins', { method: 'POST', body: JSON.stringify(body) }),
-  updateDoctorProfile: (body: DoctorProfileDraft) =>
-    api<{ doctor: DoctorProfile }>('/doctors/me/profile', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-  createTimeOff: (body: TimeOffRequest) =>
-    api<{ message: string }>('/doctors/me/time-off', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  rescheduleAppointment: (appointmentId: string, body: RescheduleRequest) =>
-    api<{ message: string }>(`/doctors/me/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
   adminMetrics: () => api<AdminMetrics>('/admin/metrics'),
   adminUsers: (query?: { role?: Role; status?: string; q?: string }) =>
     api<{ users: AdminUserRecord[] }>(`/admin/users${query ? `?${new URLSearchParams({ ...(query.role ? { role: query.role } : {}), ...(query.status ? { status: query.status } : {}), ...(query.q ? { q: query.q } : {}) }).toString()}` : ''}`),

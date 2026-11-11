@@ -11,9 +11,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 export const requireRole = (...roles: Role[]) => (req: Request, res: Response, next: NextFunction) =>
   req.user && roles.includes(req.user.role) ? next() : res.status(403).json({ error: 'Insufficient permissions' });
-export const requireAdmin = requireRole(Role.ADMIN);
-export const requireDoctor = requireRole(Role.DOCTOR);
-export const requirePatient = requireRole(Role.PATIENT);
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof ZodError) {
     return res.status(400).json({

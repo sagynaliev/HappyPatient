@@ -6,6 +6,8 @@ import { config } from './config';
 import { errorHandler } from './middleware';
 
 export const app = express();
+// Behind the host's proxy (Render): take the caller's address from X-Forwarded-For so request limits apply per visitor.
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: config.FRONTEND_URL ?? false }));
 app.use(express.json());

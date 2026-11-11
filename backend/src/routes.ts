@@ -1,8 +1,7 @@
-import { getWalkInSlotStatus } from './visitTime';
+import { getWalkInSlotStatus, NO_CHECKIN_GRACE_MS } from './visitTime';
 import { medicalHistoryRouter } from './medicalHistory';
 import { resolvePricingRule, calculateParkingCost, calculateVisitCost, PricingRule } from './pricing';
 import { getAdminStatistics, runAndStoreIntegrity } from './adminOperations';
-import { NO_CHECKIN_GRACE_MS } from './visitTime';
 import { clockOffsetMs, realNow, setClockOffset, timeControlEnabled } from './clock';
 import { releaseUnattendedSlots, sendUpcomingReminders } from './appointmentLifecycle';
 import { brandedEmail } from './email/layout';
@@ -11,7 +10,8 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { Prisma, Role, SlotStatus } from '@prisma/client';
 import { prisma } from './prisma';
-import { comparePassword, hashPassword, hashToken, randomToken, randomVerificationCode, signToken } from './auth';
+import { comparePassword, hashPassword, hashToken, isLegacyHash, randomToken, randomVerificationCode, signToken } from './auth';
+import { rateLimit } from './rateLimit';
 import { config } from './config';
 import { requireAuth, requireRole } from './middleware';
 import { bookingSchema, cancelSchema, doctorLocationSchema, officeSchema, registrationSchema, loginSchema, profileUpdateSchema, recoverySchema, resetSchema, scheduleBatchSchema, scheduleDateSchema, slotUpdateSchema, verificationCodeSchema, walkInLookupSchema, walkInRegistrationSchema, isValidIin } from './validation';
@@ -27,8 +27,13 @@ const parsed = <T>(schema: { parse: (v: unknown) => T }, body: unknown) => schem
 const publicUser = (u: { id: string; email: string; firstName: string; lastName: string; role: Role; phone: string | null }) =>
   ({ id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, role: u.role, phone: u.phone });
 const appointmentReference = (slotId: string) => `HP-${slotId.slice(-8).toUpperCase()}`;
+const emailKey = (req: Request) => (typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '');
+// Per address + account for guessing; a wider per-address cap for scripted floods of the hashing endpoints.
+const signInLimit = rateLimit({ windowMs: 15 * 60_000, max: 10, key: emailKey, message: 'Too many sign-in attempts. Please wait 15 minutes and try again.' });
+const authFloodLimit = rateLimit({ windowMs: 15 * 60_000, max: 100 });
+const recoveryLimit = rateLimit({ windowMs: 15 * 60_000, max: 10, key: emailKey });
 
-router.post('/auth/register', async (req, res) => {
+router.post('/auth/register', authFloodLimit, async (req, res) => {
   const input = parsed(registrationSchema, req.body);
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) return res.status(409).json({ error: 'Email is already registered' });
@@ -39,14 +44,16 @@ router.post('/auth/register', async (req, res) => {
   res.status(201).json({ user: publicUser(user), token: signToken({ id: user.id, email: user.email, role: user.role }), notification });
 });
 
-router.post('/auth/login', async (req, res) => {
+router.post('/auth/login', authFloodLimit, signInLimit, async (req, res) => {
   const input = parsed(loginSchema, req.body);
   const user = await prisma.user.findUnique({ where: { email: input.email } });
   if (!user || !(await comparePassword(input.password, user.passwordHash))) return res.status(401).json({ error: 'Invalid email or password' });
+  // Old bcrypt hash and the password is known to be right: store it in the current format. A failure here must not block sign-in.
+  if (isLegacyHash(user.passwordHash)) void hashPassword(input.password).then((passwordHash) => prisma.user.update({ where: { id: user.id }, data: { passwordHash } })).catch(() => undefined);
   res.json({ user: publicUser(user), token: signToken({ id: user.id, email: user.email, role: user.role }) });
 });
 
-router.post('/auth/forgot-password', async (req, res) => {
+router.post('/auth/forgot-password', authFloodLimit, recoveryLimit, async (req, res) => {
   const { email } = parsed(recoverySchema, req.body);
   const user = await prisma.user.findUnique({ where: { email } });
   const response = { message: 'If that email exists, a verification code has been sent' };
@@ -54,7 +61,6 @@ router.post('/auth/forgot-password', async (req, res) => {
     const cooldownSince = new Date(Date.now() - 60_000);
     const recentCode = await prisma.resetToken.findFirst({ where: { userId: user.id, createdAt: { gt: cooldownSince }, usedAt: null }, select: { id: true } });
     if (!recentCode) {
-      console.info(`RESEND_API_KEY configured: ${Boolean(process.env.RESEND_API_KEY)}`);
       if (!config.RESEND_API_KEY) return res.status(503).json({ error: 'Password recovery email is not configured.' });
       const code = randomVerificationCode();
       const resend = new Resend(config.RESEND_API_KEY);
@@ -74,7 +80,6 @@ router.post('/auth/forgot-password', async (req, res) => {
           });
           return res.status(502).json({ error: 'We could not send the verification code. Please try again.' });
         }
-        console.info('Resend accepted password recovery email');
       } catch (error: unknown) {
         console.error('Resend request failed while sending password recovery email', {
           name: error instanceof Error ? error.name : undefined,
@@ -91,7 +96,7 @@ router.post('/auth/forgot-password', async (req, res) => {
   res.json(response);
 });
 
-router.post('/auth/verify-reset-code', async (req, res) => {
+router.post('/auth/verify-reset-code', authFloodLimit, recoveryLimit, async (req, res) => {
   const { email, code } = parsed(verificationCodeSchema, req.body);
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return res.status(400).json({ error: 'Invalid or expired verification code.' });
@@ -105,7 +110,7 @@ router.post('/auth/verify-reset-code', async (req, res) => {
   res.json({ resetToken });
 });
 
-router.post('/auth/reset-password', async (req, res) => {
+router.post('/auth/reset-password', authFloodLimit, async (req, res) => {
   const { token, password } = parsed(resetSchema, req.body);
   const record = await prisma.resetToken.findFirst({ where: { tokenHash: hashToken(token), usedAt: null, expiresAt: { gt: new Date() } }, include: { user: true } });
   if (!record) return res.status(400).json({ error: 'Invalid or expired reset token' });
@@ -138,50 +143,38 @@ router.patch('/me', requireAuth, async (req, res) => {
   res.json({ user: maskedProfile(user) });
 });
 router.get('/me/appointments', requireAuth, requireRole(Role.PATIENT), async (req, res) => {
-  const appointments = await prisma.scheduleSlot.findMany({
-    where: { patientId: req.user!.id },
-    orderBy: { startAt: 'asc' },
-    select: {
-      id: true,
-      startAt: true,
-      endAt: true,
-        status: true,
-        visitPurpose: true,
-        checkedInAt: true,
-      doctor: {
-        select: {
-          id: true,
-          office: true,
-          consultationFee: true,
-          category: { select: { name: true } },
-          user: { select: { firstName: true, lastName: true } },
-        },
+  const [appointments, cancelledRows] = await Promise.all([
+    prisma.scheduleSlot.findMany({
+      where: { patientId: req.user!.id },
+      orderBy: { startAt: 'asc' },
+      select: {
+        id: true, startAt: true, endAt: true, status: true, visitPurpose: true, checkedInAt: true, updatedAt: true, doctorId: true,
+        doctor: { select: { id: true, office: true, consultationFee: true, categoryId: true, locationId: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
       },
-    },
-  });
-  const cancelledRows = (await prisma.cancelledAppointment.findMany({
-    where: { patientId: req.user!.id },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-    select: {
-      id: true, slotId: true, startAt: true, endAt: true, visitPurpose: true, reason: true, cancelledByRole: true, createdAt: true,
-      doctor: { select: { office: true, consultationFee: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
-    },
-  })) ?? [];
+    }),
+    prisma.cancelledAppointment.findMany({
+      where: { patientId: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true, slotId: true, startAt: true, endAt: true, visitPurpose: true, reason: true, cancelledByRole: true, createdAt: true,
+        doctor: { select: { office: true, consultationFee: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
+      },
+    }),
+  ]);
   // Same price as the breakdown (rules at booking time); falls back to the doctor's fee if pricing is unavailable.
-  const prices = await Promise.all(appointments.map((appointment) => prisma.scheduleSlot.findFirst({ where: { id: appointment.id }, select: { id: true, doctorId: true, startAt: true, endAt: true, updatedAt: true, doctor: { select: { consultationFee: true, categoryId: true, locationId: true } } } })
-    .then((slot) => slot ? visitCostFor(slot, req.user!.id).then((cost) => cost.consultationKzt) : appointment.doctor.consultationFee)
-    .catch(() => appointment.doctor.consultationFee)));
+  // Booking times and rules are loaded once for the whole list instead of once per appointment.
+  const prices = await listPrices(appointments, req.user!.id).catch(() => new Map<string, number>());
   res.json({
-    cancelled: cancelledRows.map(({ doctor, ...row }) => ({
+    cancelled: (cancelledRows ?? []).map(({ doctor, ...row }) => ({
       ...row,
       reference: row.slotId ? appointmentReference(row.slotId) : undefined,
       cancelledBy: row.cancelledByRole === Role.PATIENT ? 'PATIENT' : 'CLINIC',
       doctor: { name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`, specialty: doctor.category.name, office: doctor.office, consultationFee: doctor.consultationFee },
     })),
-    appointments: appointments.map(({ doctor, ...appointment }, index) => ({
+    appointments: appointments.map(({ doctor, updatedAt: _updatedAt, doctorId: _doctorId, ...appointment }) => ({
       ...appointment,
-      priceKzt: prices[index],
+      priceKzt: prices.get(appointment.id) ?? doctor.consultationFee,
       reference: appointmentReference(appointment.id),
       doctor: {
         id: doctor.id,
@@ -349,17 +342,25 @@ router.get('/doctors', async (req, res) => {
     },
     include: {
       category: true,
-      user: { select: { firstName: true, lastName: true, email: true } },
-      scheduleSlots: {
-        where: slotFilter,
-        orderBy: { startAt: 'asc' },
-        take: 1,
-        select: { id: true, startAt: true, endAt: true },
-      },
+      // Names only: this list is public, so doctors' email addresses stay out of it.
+      user: { select: { firstName: true, lastName: true } },
     },
     orderBy: { user: { lastName: 'asc' } },
   });
-  res.json({ doctors });
+  // Next free time per doctor in one indexed query. Asking for it as a nested "first slot" made the
+  // database client load every free slot of every doctor on each search.
+  const doctorIds = doctors.map((doctor) => doctor.id);
+  const nextSlots = doctorIds.length ? (await prisma.$queryRaw<Array<{ id: string; doctorId: string; startAt: Date; endAt: Date }>>(Prisma.sql`
+    SELECT DISTINCT ON (s."doctorId") s."id", s."doctorId", s."startAt", s."endAt"
+    FROM "ScheduleSlot" s
+    WHERE s."status" = 'FREE'::"SlotStatus" AND s."startAt" > ${now}
+      ${availabilityStart ? Prisma.sql`AND s."startAt" >= ${availabilityStart}` : Prisma.empty}
+      ${availabilityEnd ? Prisma.sql`AND s."startAt" < ${availabilityEnd}` : Prisma.empty}
+      ${timeWindows?.length ? Prisma.sql`AND (${Prisma.join(timeWindows.map((window) => Prisma.sql`(s."startAt" >= ${window.startAt.gte} AND s."startAt" < ${window.startAt.lt})`), ' OR ')})` : Prisma.empty}
+      AND s."doctorId" IN (${Prisma.join(doctorIds)})
+    ORDER BY s."doctorId", s."startAt"`)) ?? [] : [];
+  const nextByDoctor = new Map(nextSlots.map((slot) => [slot.doctorId, { id: slot.id, startAt: slot.startAt, endAt: slot.endAt }]));
+  res.json({ doctors: doctors.map((doctor) => ({ ...doctor, scheduleSlots: nextByDoctor.has(doctor.id) ? [nextByDoctor.get(doctor.id)!] : [] })) });
 });
 
 router.patch('/doctors/me/office', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
@@ -376,18 +377,6 @@ router.put('/doctors/me/location', requireAuth, requireRole(Role.DOCTOR), async 
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
   const updated = await prisma.doctor.update({ where: { id: doctor.id }, data: location, include: { category: true } });
   res.json({ doctor: updated });
-});
-
-router.get('/doctors/me/cancellations', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
-  const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
-  if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
-  const rows = await prisma.cancelledAppointment.findMany({
-    where: { doctorId: doctor.id },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-    select: { id: true, slotId: true, startAt: true, endAt: true, visitPurpose: true, reason: true, cancelledByRole: true, createdAt: true, patient: { select: { firstName: true, lastName: true } } },
-  });
-  res.json({ cancellations: rows.map(({ patient, ...row }) => ({ ...row, cancelledBy: row.cancelledByRole === Role.PATIENT ? 'PATIENT' : 'CLINIC', patientName: `${patient.firstName} ${patient.lastName}` })) });
 });
 
 router.get('/doctors/me', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
@@ -840,16 +829,19 @@ router.get('/admin/users', requireAuth, requireRole(Role.ADMIN), async (req, res
   res.json({ users: normalized });
 });
 
+const adminUserUpdateSchema = z.object({
+  role: z.enum(Role).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+  firstName: z.string().trim().min(1).max(80).optional(),
+  lastName: z.string().trim().min(1).max(80).optional(),
+  email: z.string().trim().toLowerCase().email().max(254).optional(),
+  phone: z.string().trim().max(30).transform((value) => value || null).nullable().optional(),
+});
 router.patch('/admin/users/:id', requireAuth, requireRole(Role.ADMIN), async (req, res) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { role, status, firstName, lastName, email, phone } = req.body as {
-    role?: Role;
-    status?: 'active' | 'inactive';
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    phone?: string | null;
-  };
+  const input = adminUserUpdateSchema.safeParse(req.body ?? {});
+  if (!input.success) return res.status(400).json({ error: 'Check the role, name, email and phone values.' });
+  const { role, status, firstName, lastName, email, phone } = input.data;
 
   const result = await prisma.user.update({
     where: { id },
@@ -1036,6 +1028,24 @@ router.patch('/admin/pricing/:id',requireAuth,requireRole(Role.ADMIN),async(req,
   const version=await prisma.$transaction(async tx=>{const rule=await tx.pricingRule.create({data:{kind:input.kind,doctorId:input.doctorId??null,categoryId:input.categoryId??null,consultationType:input.consultationType??null,serviceCode:input.serviceCode??null,officeId:input.officeId??null,serviceName:input.serviceName??null,scopeKey:old.scopeKey,amountKzt:input.amountKzt,ratePerHourKzt:input.ratePerHourKzt??null,freeMinutes:input.freeMinutes,rounding:input.rounding,dailyCapKzt:input.dailyCapKzt??null,effectiveFrom:input.effectiveFrom,effectiveTo:input.effectiveTo??null,createdById:req.user!.id,versionOfId:id}});await tx.pricingRule.update({where:{id},data:{effectiveTo:input.effectiveFrom}});await tx.pricingRuleAudit.create({data:{ruleId:rule.id,actorId:req.user!.id,action:'versioned',oldValue:old as unknown as Prisma.InputJsonValue,newValue:rule as unknown as Prisma.InputJsonValue}});return rule;});
   res.status(201).json({rule:version});
 });
+/** Consultation price for every visit in a patient's list, using three queries in total. */
+async function listPrices(slots:Array<{id:string;doctorId:string;updatedAt:Date;doctor:{consultationFee:number;categoryId:string}}>,userId:string){
+  const prices=new Map<string,number>();
+  if(!slots.length)return prices;
+  const [bookings,rules]=await Promise.all([
+    prisma.notification.findMany({where:{slotId:{in:slots.map(slot=>slot.id)},userId,type:'BOOKED'},orderBy:{createdAt:'desc'},select:{slotId:true,createdAt:true}}),
+    prisma.pricingRule.findMany({where:{kind:'visit'}}),
+  ]);
+  const bookedAtBySlot=new Map<string,Date>();
+  // Newest first, so the first row seen for a slot is its latest booking.
+  for(const row of bookings??[])if(row.slotId&&!bookedAtBySlot.has(row.slotId))bookedAtBySlot.set(row.slotId,row.createdAt);
+  for(const slot of slots){
+    const bookedAt=bookedAtBySlot.get(slot.id)??slot.updatedAt;
+    const visit=bookedAt?resolvePricingRule((rules??[]) as PricingRule[],'visit',bookedAt,slot.doctorId,slot.doctor.categoryId):undefined;
+    prices.set(slot.id,calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined).consultationKzt);
+  }
+  return prices;
+}
 /** Price of a booked visit with the rules in force when it was booked; shared by the list and the breakdown. */
 async function visitCostFor(slot:{id:string;doctorId:string;startAt:Date;endAt:Date;updatedAt:Date;doctor:{consultationFee:number;categoryId:string;locationId:string|null}},userId:string){
   const bookingEvent=await prisma.notification.findFirst({where:{slotId:slot.id,userId,type:'BOOKED'},orderBy:{createdAt:'desc'},select:{createdAt:true}});
