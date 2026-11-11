@@ -458,27 +458,12 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .fdk-walkin-layout .wi-doctors { flex: 1; min-height: 0; max-height: none; align-content: start; overflow-y: auto; overscroll-behavior: contain; }
 .fdk-walkin-layout .wi-empty { flex: 1; align-content: center; }
 .fdk-walkin-layout .wi-doctors:empty { display: none; }
-/* Specialty first: one tap narrows a long doctor list to a handful. */
-.wi-specialties { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; align-content: start; min-height: 0; overflow-y: auto; padding: 2px; }
-.fdk-walkin-layout .wi-specialties { flex: 1; }
-.wi-specialties button { display: grid; gap: 2px; min-height: 60px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 14px; background: #fff; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
-.wi-specialties button:hover:not(:disabled) { border-color: var(--primary); background: #f7f9ff; }
-.wi-specialties strong { font-size: 14.5px; font-weight: 600; }
-.wi-specialties span { color: var(--text-secondary); font-size: 12.5px; }
 .fdk-walkin-layout .front-desk-form input { height: 44px; min-height: 44px; }
 .fdk-walkin-layout .front-desk-form .button { height: 44px; min-height: 44px; }
 .fdk-walkin-layout .front-desk-form label { gap: 4px; }
 .fdk-walkin-layout .fdk-step-title { margin-bottom: 0; }
 .fdk-walkin-layout .fdk-picked { padding: 8px 12px; }
 .fdk-walkin-layout .fdk-picked-time { height: 38px; font-size: 16px; }
-/* Wide screens: the three steps read left to right in order — Patient, Doctor and time, Confirm. */
-@media (min-width: 1281px) {
-  .fdk-walkin-layout .fdk-walkin .front-desk-form { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 0.8fr); grid-template-areas: "patient doctor confirm"; column-gap: 0; }
-  .fdk-walkin-layout .fdk-walkin-side { display: contents; }
-  .fdk-walkin-layout .fdk-step.is-patient { grid-area: patient; align-content: start; padding: 6px 28px 0 0; }
-  .fdk-walkin-layout .fdk-step.is-doctor { padding: 6px 28px 0 28px; }
-  .fdk-walkin-layout .fdk-step.is-confirm { grid-area: confirm; padding: 6px 0 0 28px; border-top: 0; border-left: 1px solid var(--border); min-height: 0; }
-}
 @media (max-width: 1100px) {
   .fdk-walkin-layout .fdk-walkin .front-desk-form { grid-template-columns: 1fr; grid-template-areas: "patient" "doctor" "confirm"; }
   .fdk-walkin-layout .fdk-walkin-side { display: contents; }

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WalkInSlotPicker from "./WalkInSlotPicker";
 import { api, authApi } from "../lib/api";
@@ -41,17 +41,5 @@ describe("walk-in doctor and time picker", () => {
     fireEvent.click(screen.getByLabelText("Cardiology"));
     await waitFor(() => expect(authApi.frontDeskAvailability).toHaveBeenLastCalledWith(expect.objectContaining({ categories: ["Dentistry", "Cardiology"] })));
     expect(screen.getByRole("button", { name: "Remove Dentistry" })).toBeInTheDocument();
-  });
-
-  it("asks for a specialty first when many doctors are free, then lists that specialty's doctors", async () => {
-    const many = Array.from({ length: 12 }, (_, index) => ({ ...doctor, id: `doc-${index}`, name: `Dr. Number ${index}`, specialty: index < 9 ? "Cardiology" : "Dentistry" }));
-    vi.mocked(authApi.frontDeskAvailability).mockResolvedValue({ date: "2099-05-10", doctors: many, specialtyCounts: { Cardiology: 9, Dentistry: 3 } });
-    render(<WalkInSlotPicker value={null} onChange={vi.fn()} />);
-    const tiles = await screen.findByRole("group", { name: "Choose a specialty" });
-    expect(screen.getByText("Choose a specialty · 12 doctors have free time")).toBeInTheDocument();
-    // No doctor is listed until a specialty is chosen.
-    expect(screen.queryByRole("button", { name: /Dr\. Number 0,/ })).toBeNull();
-    fireEvent.click(within(tiles).getByRole("button", { name: /Dentistry.*3 doctors free/ }));
-    await waitFor(() => expect(authApi.frontDeskAvailability).toHaveBeenLastCalledWith(expect.objectContaining({ categories: ["Dentistry"] })));
   });
 });
