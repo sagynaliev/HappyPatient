@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminDoctorRecord, authApi } from "../lib/api";
+import { Pager, usePaged } from "../components/Pager";
+import { Icon } from "../components/Icons";
 
 export default function AdminDoctorsPage() {
   const [doctors, setDoctors] = useState<AdminDoctorRecord[]>([]);
@@ -21,6 +23,12 @@ export default function AdminDoctorsPage() {
     })();
   }, []);
 
+  const [search, setSearch] = useState("");
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return needle ? doctors.filter((doctor) => `${doctor.name} ${doctor.specialty} ${doctor.office ?? ""}`.toLowerCase().includes(needle)) : doctors;
+  }, [doctors, search]);
+  const paged = usePaged(filtered, 8);
   const selectedDoctor = doctors.find((doctor) => doctor.id === selectedId) ?? doctors[0] ?? null;
 
   async function decision(action: "approve" | "reject") {
@@ -48,6 +56,9 @@ export default function AdminDoctorsPage() {
 
       <section className="admin-two-column admin-approval-layout">
         <div className="admin-panel admin-table-panel">
+          <div className="ad-appts-toolbar" role="search" aria-label="Find doctors">
+            <label className="ad-appts-search"><Icon name="search" size={16} /><span className="sr-only">Search doctors</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, specialty or office" /></label>
+          </div>
           <table className="admin-table">
             <thead>
               <tr>
@@ -64,8 +75,10 @@ export default function AdminDoctorsPage() {
                 <tr><td colSpan={4}>{error}</td></tr>
               ) : doctors.length === 0 ? (
                 <tr><td colSpan={4}>No doctor applications found.</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={4}>No doctors match this search.</td></tr>
               ) : (
-                doctors.map((doctor) => (
+                paged.visible.map((doctor) => (
                   <tr key={doctor.id} onClick={() => setSelectedId(doctor.id)} className={selectedDoctor?.id === doctor.id ? "is-selected" : ""}>
                     <td>{doctor.name}</td>
                     <td>{doctor.specialty}</td>
@@ -76,6 +89,7 @@ export default function AdminDoctorsPage() {
               )}
             </tbody>
           </table>
+          <Pager page={paged.page} pages={paged.pages} from={paged.from} to={paged.to} total={paged.total} onPage={paged.setPage} label="Doctors" />
         </div>
 
         <aside className="admin-panel admin-inspector">

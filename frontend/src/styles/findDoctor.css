@@ -1016,31 +1016,8 @@
   font-size: 13px;
 }
 
-.dp-no-data {
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.55;
-}
-
 .dp-specialty {
   overflow-wrap: anywhere;
-}
-
-.dp-service-summary {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.dp-info-note {
-  margin: 16px 0 0;
-  padding: 12px 14px;
-  border-radius: 8px;
-  color: var(--primary-hover);
-  background: var(--selected-surface);
-  font-size: 13px;
-  line-height: 1.5;
 }
 
 .dp-retry,

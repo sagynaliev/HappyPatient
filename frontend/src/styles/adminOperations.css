@@ -1,10 +1,6 @@
 /* Admin tools tabs (all admin pages) and the operations pages: pricing, statistics, data quality, reference data.
    Built from the admin dashboard pieces (ad-head, ad-stat, ad-panel) so every admin page looks the same. */
 .admin-main { display: grid; justify-items: stretch; }
-.admin-tools { display: inline-flex; justify-self: start; width: max-content; max-width: 100%; flex-wrap: wrap; gap: 4px; margin: 0 0 22px; padding: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-card); }
-.admin-tool { padding: 8px 16px; border-radius: 999px; color: var(--text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; }
-.admin-tool:hover { background: var(--accent); color: var(--primary-deep); }
-.admin-tool.is-active { background: var(--primary); color: #fff; }
 
 .admin-main .ad-ops { display: grid; gap: 20px; max-width: none; margin: 0; padding: 0; }
 .ad-ops > * { margin: 0; }
@@ -110,7 +106,6 @@
   .ad-ops .ad-grid, .ad-ops .ad-grid-even { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 600px) {
-  .admin-tools { display: flex; width: 100%; overflow-x: auto; flex-wrap: nowrap; border-radius: 16px; }
   .ad-ops .ad-stats { grid-template-columns: minmax(0, 1fr); }
   .ad-inline-form input { width: 100%; }
   .ad-audit-list li { grid-template-columns: minmax(0, 1fr); }
@@ -128,3 +123,12 @@
 .ad-sort { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; white-space: nowrap; }
 .ad-sort span { color: #a3acc2; }
 .ad-sort.is-active, .ad-sort.is-active span { color: var(--primary); }
+
+/* Pager under long tables */
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.pager-count { color: var(--text-secondary); font-size: 13.5px; }
+.pager-buttons { display: flex; align-items: center; gap: 10px; }
+.pager-page { color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+.pager button { min-height: 38px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--primary-deep); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.pager button:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent); }
+.pager button:disabled { color: var(--text-secondary); opacity: .55; cursor: default; }

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Layout } from "./Layout";
@@ -60,6 +60,9 @@ describe("shared header", () => {
     expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("href", "/appointments");
     expect(screen.queryByRole("link", { name: "My Schedule" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Profile: Alikhan S." })).toBeInTheDocument();
+    // One entry point per place: no separate "Home" beside "Dashboard", and the menu name matches the page title.
+    expect(within(document.getElementById("primary-navigation")!).queryByRole("link", { name: "Home" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Health records" })).toHaveAttribute("href", "/medical-history");
   });
 
   it("provides one admin navigation set and shared profile/sign-out controls", () => {
@@ -69,6 +72,12 @@ describe("shared header", () => {
     expect(screen.getAllByRole("link", { name: "Dashboard" })).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Users" })).toHaveAttribute("href", "/admin/users");
     expect(screen.getByRole("link", { name: "Statistics" })).toHaveAttribute("href", "/admin/statistics");
+    // Every admin tool is in this one menu, grouped under headings.
+    for (const [name, href] of [["Pricing", "/admin/pricing"], ["Reference data", "/admin/reference-data"], ["Data quality", "/admin/integrity"], ["Demo time", "/admin/time"], ["Walk-in", "/front-desk/walk-in"]]) {
+      expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
+    }
+    expect(screen.getByText("Clinic setup")).toBeInTheDocument();
+    expect(screen.getByText("Reception")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Profile: Alikhan S." })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     expect(auth.logout).toHaveBeenCalledOnce();

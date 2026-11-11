@@ -11,6 +11,8 @@ const dayKey = (offset = 0) => {
 const time = (value: string) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ }).format(new Date(value));
 const initials = (name: string) => name.replace(/^Dr\.\s*/, "").split(" ").map((part) => part[0] ?? "").join("").slice(0, 2).toUpperCase();
 const VISIBLE_TIMES = 8;
+// With more doctors than this and no filter, the picker asks for a specialty first instead of listing everyone.
+const MAX_UNFILTERED_DOCTORS = 8;
 
 export type PickedSlot = { doctorId: string; slotId: string; doctorName: string; specialty: string; office: string | null; startAt: string; endAt: string };
 
@@ -68,6 +70,8 @@ export default function WalkInSlotPicker({ value, onChange, refreshKey = 0, disa
   const totalSlots = useMemo(() => doctors.reduce((sum, doctor) => sum + doctor.slots.length, 0), [doctors]);
   const isToday = day === dayKey();
   const isTomorrow = day === dayKey(1);
+  const chooseSpecialty = !loading && !error && specialties.length === 0 && !debouncedQuery && doctors.length > MAX_UNFILTERED_DOCTORS;
+  const specialtyTiles = Object.entries(counts).filter(([, count]) => count > 0).sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <div className="wi-picker">
@@ -93,10 +97,20 @@ export default function WalkInSlotPicker({ value, onChange, refreshKey = 0, disa
 
       <div className="wi-results" aria-live="polite" aria-busy={loading}>
         <p className="wi-count">
-          {loading ? "Finding free times…" : error ? error : doctors.length ? `${doctors.length} ${doctors.length === 1 ? "doctor" : "doctors"} · ${totalSlots} free ${totalSlots === 1 ? "time" : "times"}` : "No free times for this day. Try another day or specialty."}
+          {loading ? "Finding free times…" : error ? error : chooseSpecialty ? `Choose a specialty · ${doctors.length} doctors have free time` : doctors.length ? `${doctors.length} ${doctors.length === 1 ? "doctor" : "doctors"} · ${totalSlots} free ${totalSlots === 1 ? "time" : "times"}` : "No free times for this day. Try another day or specialty."}
         </p>
+        {chooseSpecialty && (
+          <div className="wi-specialties" role="group" aria-label="Choose a specialty">
+            {specialtyTiles.map(([name, count]) => (
+              <button key={name} type="button" disabled={disabled} onClick={() => setSpecialties([name])}>
+                <strong>{name}</strong>
+                <span>{count} {count === 1 ? "doctor" : "doctors"} free</span>
+              </button>
+            ))}
+          </div>
+        )}
         <ul className="wi-doctors">
-          {doctors.map((doctor) => {
+          {(chooseSpecialty ? [] : doctors).map((doctor) => {
             const open = expanded.has(doctor.id);
             const shown = open ? doctor.slots : doctor.slots.slice(0, VISIBLE_TIMES);
             const hidden = doctor.slots.length - shown.length;

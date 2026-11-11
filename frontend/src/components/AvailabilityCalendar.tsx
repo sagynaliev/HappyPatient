@@ -157,9 +157,12 @@ type TimeSlotGridProps = {
 
 export function TimeSlotGrid({ slots, selectedSlotId, onSelect, compact = false, disabled = false }: TimeSlotGridProps) {
   if (!slots.length) return <p className="bk-no-slots">No appointment times are listed for this date.</p>;
+  // Only times that can still be chosen are shown; taken and past times would just be noise to read around.
+  const choosable = slots.filter((slot) => selectedSlotId === slot.id || (slot.status === "FREE" && Date.parse(slot.startAt) > Date.now()));
+  if (!choosable.length) return <p className="bk-no-slots">No free times left on this day. Choose another day in the calendar.</p>;
   return (
     <div className={`bk-slot-grid${compact ? " bk-slot-grid--compact" : ""}`} role="group" aria-label="Appointment times">
-      {slots.map((slot) => {
+      {choosable.map((slot) => {
         const available = slot.status === "FREE" && Date.parse(slot.startAt) > Date.now();
         const selected = selectedSlotId === slot.id;
         const start = formatTimeInAlmaty(slot.startAt);
@@ -174,14 +177,7 @@ export function TimeSlotGrid({ slots, selectedSlotId, onSelect, compact = false,
             aria-label={`${start}–${end}, ${selected ? "selected" : available ? "available" : "unavailable"}`}
             onClick={() => onSelect(slot)}
           >
-            {compact ? (
-              <>
-                <span>{start}–{end}</span>
-                <span className="bk-slot-status">{selected ? "selected" : available ? "available" : "unavailable"}</span>
-              </>
-            ) : (
-              `${start}–${end} · ${selected ? "selected" : available ? "available" : "unavailable"}`
-            )}
+            {start}–{end}
           </button>
         );
       })}

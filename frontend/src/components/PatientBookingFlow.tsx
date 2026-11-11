@@ -104,9 +104,10 @@ export default function PatientBookingFlow({
 }: PatientBookingFlowProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryStep = Number(searchParams.get("step"));
-  const initialStep = queryStep >= 1 && queryStep <= 4 ? queryStep as BookingStep : 1;
+  // Visits are in person only, so there is nothing to choose in step 1: booking opens on the date and time.
+  // Steps keep their internal numbers 2–4 (also in the address); the patient sees them as 1–3.
+  const initialStep = queryStep >= 2 && queryStep <= 4 ? queryStep as BookingStep : 2;
   const [step, setStepState] = useState<BookingStep>(initialStep);
-  const [consultationType, setConsultationType] = useState<"in-person" | "">("in-person");
   const [detailsConfirmed, setDetailsConfirmed] = useState(false);
   const groupedSlots = useMemo(
     () => slots.filter((slot) => slotDateInAlmaty(slot.startAt) === date),
@@ -126,13 +127,11 @@ export default function PatientBookingFlow({
 
   useEffect(() => {
     if (bookingSuccess) return;
-    const requestedStep = queryStep >= 1 && queryStep <= 4 ? queryStep as BookingStep : 1;
+    const requestedStep = queryStep >= 2 && queryStep <= 4 ? queryStep as BookingStep : 2;
     const slotIsBookable = Boolean(
       selectedSlot && selectedSlot.status === "FREE" && Date.parse(selectedSlot.startAt) > Date.now(),
     );
-    const furthestAllowedStep: BookingStep = !consultationType
-      ? 1
-      : !slotIsBookable
+    const furthestAllowedStep: BookingStep = !slotIsBookable
         ? 2
         : !patientDetailsValid
           ? 3
@@ -146,7 +145,7 @@ export default function PatientBookingFlow({
       });
     }
     setStepState(allowedStep);
-  }, [bookingSuccess, consultationType, patientDetailsValid, queryStep, selectedSlot, setSearchParams]);
+  }, [bookingSuccess, patientDetailsValid, queryStep, selectedSlot, setSearchParams]);
 
   const confirmationHeadingRef = useRef<HTMLHeadingElement>(null);
   const successHandled = useRef(false);
@@ -184,7 +183,6 @@ export default function PatientBookingFlow({
 
   // Small progress dots inside the current step of the vertical stepper.
   const subSteps: Record<number, { label: string; done: boolean }[]> = {
-    1: [{ label: "Consultation type", done: Boolean(consultationType) }],
     2: [{ label: "Date", done: Boolean(date) }, { label: "Time", done: Boolean(selectedSlot) }],
     3: [
       { label: "Contact details", done: emailValid },
@@ -203,7 +201,7 @@ export default function PatientBookingFlow({
   const confirmationCard = bookingSuccess ? (
     <section className="bk-card" role="status" aria-live="polite" aria-labelledby="bk-step-title">
       <header className="bk-card-heading">
-        <h2 id="bk-step-title" ref={confirmationHeadingRef} tabIndex={-1}>4. {steps[3]}</h2>
+        <h2 id="bk-step-title" ref={confirmationHeadingRef} tabIndex={-1}>3. {steps[3]}</h2>
         <p>Your appointment is booked. These are the details that were saved.</p>
       </header>
       <div className="bk-confirmed-banner">
@@ -265,18 +263,11 @@ export default function PatientBookingFlow({
   const recapCard = bookingSuccess && step < 4 ? (
     <section className="bk-card" aria-labelledby="bk-recap-title">
       <header className="bk-card-heading">
-        <h2 id="bk-recap-title">{step}. {steps[step - 1]}</h2>
+        <h2 id="bk-recap-title">{step - 1}. {steps[step - 1]}</h2>
         <p>This is what you chose. Your booking is already confirmed.</p>
       </header>
       <div className="bk-review">
         <dl>
-          {step === 1 && (
-            <>
-              <div><dt>Consultation</dt><dd>In-person · 30 minutes</dd></div>
-              {office && doctor && <div><dt>Clinic</dt><dd><DoctorLocation {...doctor} /></dd></div>}
-              {fee && <div><dt>Price</dt><dd>{fee}</dd></div>}
-            </>
-          )}
           {step === 2 && (
             <>
               <div><dt>Date</dt><dd>{formatFullDate(slotDateInAlmaty(bookingSuccess.slot.startAt))}</dd></div>
@@ -303,7 +294,7 @@ export default function PatientBookingFlow({
       <div className="bk-container">
         <BreadcrumbLabel id="doctor" label={doctor ? doctorName : undefined} />
         <BreadcrumbLabel id="bookingStage" label={bookingSuccess ? "Confirmation" : undefined} />
-        {!bookingSuccess && step === 1 ? (
+        {!bookingSuccess && step === 2 ? (
           <Link className="bk-back" to={`/doctors/${doctor?.id ?? ""}`}>← Back to doctor profile</Link>
         ) : null}
         <header className="bk-page-heading">
@@ -318,43 +309,13 @@ export default function PatientBookingFlow({
             <div className="bk-main">
               {bookingSuccess ? (step === 4 ? <>{confirmationCard}{nextCards}</> : recapCard) : (<section className="bk-card" aria-labelledby="bk-step-title">
                 <header className="bk-card-heading">
-                  <h2 id="bk-step-title">{step}. {steps[step - 1]}</h2>
-                  <p>{step === 1
-                    ? "Choose how you would like to meet your doctor."
-                    : step === 2
-                      ? "Choose an available appointment. Unavailable times cannot be selected."
+                  <h2 id="bk-step-title">{step - 1}. {steps[step - 1]}</h2>
+                  <p>{step === 2
+                      ? "Pick a day, then a free time."
                       : step === 3
                         ? "Check your contact details so your clinic can reach you."
                         : "Please check every detail before the final confirmation."}</p>
                 </header>
-
-                {step === 1 && (
-                  <div className="bk-consultation-options" role="radiogroup" aria-label="Consultation type">
-                    <label className={`bk-consult-option${consultationType === "in-person" ? " is-selected" : ""}`}>
-                      <input
-                        type="radio"
-                        name="consultation-type"
-                        value="in-person"
-                        checked={consultationType === "in-person"}
-                        onChange={() => setConsultationType("in-person")}
-                      />
-                      <span className="bk-consult-icon" aria-hidden="true">⌂</span>
-                      <span className="bk-consult-copy">
-                        <strong>In-person consultation</strong>
-                        <span>{office && doctor ? <>Visit <DoctorLocation {...doctor} /></> : "Clinic location not listed"}</span>
-                        <small>30 minutes{fee ? ` · ${fee}` : ""}</small>
-                      </span>
-                      {consultationType === "in-person" && <span className="bk-selected-label">Selected</span>}
-                    </label>
-                    <div className="bk-consult-option is-disabled" aria-disabled="true" aria-describedby="bk-online-not-offered">
-                      <span className="bk-consult-icon" aria-hidden="true">⊘</span>
-                      <span className="bk-consult-copy">
-                        <strong>Online consultation · Not offered</strong>
-                        <span id="bk-online-not-offered">{doctorName} does not have an online consultation option in the booking system.</span>
-                      </span>
-                    </div>
-                  </div>
-                )}
 
                 {step === 2 && (
                   <div className="bk-date-time">
@@ -462,7 +423,7 @@ export default function PatientBookingFlow({
                 </div>
               )}
               {!bookingSuccess && <div className="bk-action-bar">
-                <span>{fee ? `${fee} · ` : ""}{step === 4 ? "Final confirmation" : `${consultationType === "in-person" ? "In-person" : ""} · 30 minutes`}</span>
+                <span>{fee ? `${fee} · ` : ""}{step === 4 ? "Final confirmation" : "In-person visit · 30 minutes"}</span>
                 {step === 4 ? (
                   <form className="bk-action-form" onSubmit={onConfirm}>
                     <button className="button" type="submit" disabled={busy || !selectedSlot || !visitPurpose.trim()}>
@@ -473,7 +434,7 @@ export default function PatientBookingFlow({
                   <button
                     className="button"
                     type="button"
-                    disabled={step === 1 ? !consultationType : step === 2 ? !selectedSlot : !patientDetailsValid}
+                    disabled={step === 2 ? !selectedSlot : !patientDetailsValid}
                     onClick={() => goToStep(Math.min(4, step + 1) as BookingStep)}
                   >
                     Continue
@@ -484,12 +445,13 @@ export default function PatientBookingFlow({
 
             <aside className="bk-side">
               <nav className="bk-vsteps" aria-label="Booking steps">
-                <div className="bk-vsteps-head" role="progressbar" aria-label="Booking progress" aria-valuemin={1} aria-valuemax={4} aria-valuenow={bookingSuccess ? 4 : step}>
+                <div className="bk-vsteps-head" role="progressbar" aria-label="Booking progress" aria-valuemin={1} aria-valuemax={3} aria-valuenow={(bookingSuccess ? 4 : step) - 1}>
                   <span>Your progress</span>
-                  <strong>Step {bookingSuccess ? 4 : step} of 4</strong>
+                  <strong>Step {(bookingSuccess ? 4 : step) - 1} of 3</strong>
                 </div>
                 <ol>
-                  {steps.slice(0, 4).map((label, index) => {
+                  {steps.slice(1, 4).map((label, shownIndex) => {
+                    const index = shownIndex + 1;
                     const number = (index + 1) as BookingStep;
                     const status = number === step ? "current" : bookingSuccess || number < step ? "completed" : "upcoming";
                     const content = (
@@ -499,7 +461,7 @@ export default function PatientBookingFlow({
                         </span>
                         <span className="bk-vstep-copy">
                           <span className="bk-vstep-label">{label}</span>
-                          <span className="bk-vstep-hint">{status === "upcoming" ? `Step ${number}` : stepHints[index]}</span>
+                          <span className="bk-vstep-hint">{status === "upcoming" ? `Step ${number - 1}` : stepHints[index]}</span>
                           {status === "current" && (
                             <span className="bk-vstep-dots" aria-label={`${subSteps[number].filter((item) => item.done).length} of ${subSteps[number].length} done`}>
                               {subSteps[number].map((item) => (
@@ -537,7 +499,7 @@ export default function PatientBookingFlow({
                 )}
                 {office && doctor && <p className="bk-summary-clinic"><DoctorLocation {...doctor} /></p>}
                 {fee && <p className="bk-summary-price">{fee}</p>}
-                <p className="bk-summary-footnote">{bookingSuccess ? `Confirmed · Booking ID ${bookingSuccess.reference}` : "Not confirmed yet. Review and confirm in step 4."}</p>
+                <p className="bk-summary-footnote">{bookingSuccess ? `Confirmed · Booking ID ${bookingSuccess.reference}` : "Not confirmed yet. Review and confirm in the last step."}</p>
               </section>
             </aside>
           </div>

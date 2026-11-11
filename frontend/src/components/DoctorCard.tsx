@@ -125,7 +125,7 @@ export default function DoctorCard({ doctor, canBook, checkingAccess, role, quer
       )}
 
       <p className="fd-next-slot">
-        {nextLabel ? `Next: ${nextLabel.day} · ${nextLabel.time} · UTC+5` : "No free time slots yet"}
+        {nextLabel ? `Next: ${nextLabel.day} · ${nextLabel.time}` : "No free time slots yet"}
       </p>
 
       {appointmentSlots.length > 0 && (

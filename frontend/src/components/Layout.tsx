@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from "react";
+import { Fragment, ReactNode, useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Role } from "../lib/api";
@@ -24,14 +24,15 @@ function useCompactHeader() {
   return compact;
 }
 
-type NavItem = { to: string; label: string; icon: IconName; end?: boolean };
+/** section: a small heading shown above the first item of each group. */
+type NavItem = { to: string; label: string; icon: IconName; end?: boolean; section?: string };
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   PATIENT: [
     { to: "/dashboard", label: "Dashboard", icon: "grid" },
     { to: "/search", label: "Find a Doctor", icon: "search" },
     { to: "/appointments", label: "Appointments", icon: "calendar" },
-    { to: "/medical-history", label: "Medical History", icon: "heart" },
+    { to: "/medical-history", label: "Health records", icon: "heart" },
   ],
   DOCTOR: [
     { to: "/doctor/dashboard", label: "Dashboard", icon: "grid" },
@@ -41,7 +42,6 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   FRONT_DESK: [
     { to: "/front-desk", label: "Front desk", icon: "desk", end: true },
     { to: "/front-desk/walk-in", label: "Walk-in", icon: "user" },
-    { to: "/search", label: "Find a Doctor", icon: "search" },
   ],
   ADMIN: [
     { to: "/admin/dashboard", label: "Dashboard", icon: "grid" },
@@ -49,8 +49,12 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: "/admin/doctors", label: "Doctors", icon: "stethoscope" },
     { to: "/admin/appointments", label: "Appointments", icon: "calendar" },
     { to: "/admin/statistics", label: "Statistics", icon: "chart" },
-    { to: "/front-desk", label: "Front desk", icon: "desk", end: true },
-    { to: "/front-desk/walk-in", label: "Walk-in", icon: "user" },
+    { to: "/admin/pricing", label: "Pricing", icon: "file", section: "Clinic setup" },
+    { to: "/admin/reference-data", label: "Reference data", icon: "pin", section: "Clinic setup" },
+    { to: "/admin/integrity", label: "Data quality", icon: "shield", section: "Clinic setup" },
+    { to: "/admin/time", label: "Demo time", icon: "clock", section: "Clinic setup" },
+    { to: "/front-desk", label: "Front desk", icon: "desk", end: true, section: "Reception" },
+    { to: "/front-desk/walk-in", label: "Walk-in", icon: "user", section: "Reception" },
   ],
 };
 
@@ -95,7 +99,7 @@ function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className={`hp-shell${open ? " is-nav-open" : ""}${collapsed ? " is-collapsed" : ""}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
-      <aside className="hp-sidebar" id="primary-navigation" aria-label="Main navigation">
+      <aside className={`hp-sidebar${items.length > 8 ? " has-long-menu" : ""}`} id="primary-navigation" aria-label="Main navigation">
         <button className="hp-collapse" type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"} /></svg>
         </button>
@@ -109,12 +113,14 @@ function AppShell({ children }: { children: ReactNode }) {
         <div className="hp-nav-group">
           <p className="hp-nav-label hp-hide-collapsed">Menu</p>
           <nav className="hp-nav">
-            <NavLink to="/" end onClick={close} className="hp-nav-link" data-tooltip="Home"><Icon name="home" /><span className="hp-hide-collapsed">Home</span></NavLink>
-            {items.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.end} onClick={close} className="hp-nav-link" data-tooltip={item.label}>
-                <Icon name={item.icon} />
-                <span className="hp-hide-collapsed">{item.label}</span>
-              </NavLink>
+            {items.map((item, index) => (
+              <Fragment key={item.to}>
+                {item.section && item.section !== items[index - 1]?.section && <p className="hp-nav-label hp-nav-section hp-hide-collapsed">{item.section}</p>}
+                <NavLink to={item.to} end={item.end} onClick={close} className="hp-nav-link" data-tooltip={item.label}>
+                  <Icon name={item.icon} />
+                  <span className="hp-hide-collapsed">{item.label}</span>
+                </NavLink>
+              </Fragment>
             ))}
           </nav>
         </div>
@@ -132,9 +138,12 @@ function AppShell({ children }: { children: ReactNode }) {
             <span className="hp-hide-collapsed">Sign out</span>
           </button>
         </div>
-        <div className="hp-sidebar-foot">
-          <SidebarCard role={user.role} collapsed={collapsed} />
-        </div>
+        {/* The admin menu is long; the shortcut card would push it into scrolling. */}
+        {items.length <= 8 && (
+          <div className="hp-sidebar-foot">
+            <SidebarCard role={user.role} collapsed={collapsed} />
+          </div>
+        )}
       </aside>
       <button className="hp-scrim" type="button" tabIndex={-1} aria-hidden="true" onClick={close} />
 

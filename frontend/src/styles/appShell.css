@@ -72,7 +72,15 @@
 .hp-collapse svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .hp-nav-group { display: grid; gap: 4px; }
 .hp-nav-group + .hp-nav-group { padding-top: 14px; border-top: 1px solid var(--border); }
-.hp-nav-label { margin: 0 0 4px; padding: 0 14px; color: #9aa4bd; font-size: 12.5px; font-weight: 500; }
+.hp-nav-label { margin: 0 0 4px; padding: 0 14px; color: #68738f; font-size: 12.5px; font-weight: 500; }
+/* A heading inside the menu (admin has three groups of tools). */
+.hp-nav-section { margin-top: 10px; }
+/* A long menu scrolls inside the sidebar instead of pushing the account links off screen. */
+.hp-sidebar-top + .hp-nav-group { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.hp-sidebar.has-long-menu { gap: 16px; }
+.hp-sidebar.has-long-menu .hp-nav { gap: 2px; }
+.hp-sidebar.has-long-menu .hp-nav-link { min-height: 40px; }
+.hp-sidebar.has-long-menu .hp-nav-section { margin-top: 8px; }
 .hp-signout { gap: 12px; min-height: 46px; font-size: 15px; font-weight: 500; }
 .hp-sidebar-foot { margin-top: auto; }
 

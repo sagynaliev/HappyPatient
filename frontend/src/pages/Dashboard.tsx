@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth, roleLabel } from "../context/AuthContext";
 import { authApi, PatientAppointment } from "../lib/api";
 import { Icon } from "../components/Icons";
@@ -57,19 +57,8 @@ export default function Dashboard() {
   if (!user) return null;
   if (user.role === "DOCTOR") return <DoctorDashboard />;
 
-  if (user.role !== "PATIENT") {
-    return (
-      <div className="pt-page" aria-label={`${roleLabel(user.role)} dashboard`}>
-        <section className="pt-banner">
-          <div className="pt-banner-copy">
-            <span className="pt-date-chip"><Icon name="calendar" size={16} /> {longDate.format(new Date())}</span>
-            <h1>{greeting()}, {user.firstName}!</h1>
-            <p>Use the menu to manage the clinic.</p>
-          </div>
-        </section>
-      </div>
-    );
-  }
+  // Reception and admin have no personal dashboard: open the screen they work in.
+  if (user.role !== "PATIENT") return <Navigate to={user.role === "ADMIN" ? "/admin/dashboard" : "/front-desk"} replace />;
 
   const next = upcoming[0];
   const later = upcoming.slice(1, 4);

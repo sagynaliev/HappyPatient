@@ -70,8 +70,9 @@ describe("doctor profile and inline booking", () => {
     expect(screen.getByText("18,000 KZT / consultation")).not.toBeNull();
     expect(screen.getByText("Almaty · Central Clinic")).not.toBeNull();
     expect(screen.getByText("18 Abay Avenue, Office 101")).not.toBeNull();
-    expect(screen.getByText(/biography, qualifications, and languages are not included/i)).not.toBeNull();
-    expect(screen.getByText("Reviews are not available from the current doctor service.")).not.toBeNull();
+    // Sections the clinic has no data for are not shown at all.
+    expect(screen.queryByText(/not included|not available/i)).toBeNull();
+    expect(screen.getByRole("heading", { name: "What to expect" })).not.toBeNull();
 
     fireEvent.click(await screen.findByRole("button", { name: "10:00–10:30, available" }));
     fireEvent.click(screen.getByRole("button", { name: "Book Appointment" }));

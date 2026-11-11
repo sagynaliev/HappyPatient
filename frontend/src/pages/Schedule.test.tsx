@@ -370,16 +370,17 @@ describe("doctor weekly schedule setup", () => {
     );
 
     await screen.findByRole("heading", { name: "Book your appointment" });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByRole("heading", { name: "2. Date and time" })).not.toBeNull();
-    expect(new URLSearchParams(screen.getByTestId("booking-query").textContent ?? "").get("step")).toBe("2");
+    // Booking opens straight on the date and time: there is no consultation-type step to click through.
+    expect(await screen.findByRole("heading", { name: "1. Date and time" })).not.toBeNull();
+    expect(screen.queryByText(/Online consultation/)).toBeNull();
+    expect(screen.getByText("Step 1 of 3")).not.toBeNull();
     expect(screen.getByRole("button", { name: /15:00–15:30, selected/i }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByRole("heading", { name: "3. Patient details" })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "2. Patient details" })).not.toBeNull();
     fireEvent.change(screen.getByLabelText("Reason for visit *"), { target: { value: "Follow-up" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "These details are correct for my appointment." }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByRole("heading", { name: "4. Review and confirm" })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "3. Review and confirm" })).not.toBeNull();
     expect(screen.getByText("Follow-up")).not.toBeNull();
     expect(screen.getAllByText("Almaty · Central Clinic").length).toBeGreaterThan(0);
     expect(screen.getAllByText("18 Abay Avenue, Office 101").length).toBeGreaterThan(0);
@@ -429,10 +430,10 @@ describe("doctor weekly schedule setup", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("heading", { name: "3. Patient details" })).not.toBeNull();
+    expect(await screen.findByRole("heading", { name: "2. Patient details" })).not.toBeNull();
     await waitFor(() => {
       expect(new URLSearchParams(screen.getByTestId("booking-query").textContent ?? "").get("step")).toBe("3");
     });
-    expect(screen.queryByRole("heading", { name: "4. Review and confirm" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "3. Review and confirm" })).toBeNull();
   });
 });

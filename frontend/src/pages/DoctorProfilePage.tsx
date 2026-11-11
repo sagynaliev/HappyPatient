@@ -1,4 +1,5 @@
 import { BreadcrumbLabel } from "../lib/breadcrumbStore";
+import { Icon } from "../components/Icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import AvailabilityCalendar, { slotDateInAlmaty } from "../components/AvailabilityCalendar";
@@ -168,20 +169,14 @@ export default function DoctorProfilePage() {
               <p className="dp-clinic"><DoctorLocation {...doctor} emptyText="Clinic location not listed" /></p>
             </article>
 
-            <section className="dp-card" aria-labelledby="dp-about-title">
-              <h2 id="dp-about-title">About this doctor</h2>
-              <p className="dp-no-data">A biography, qualifications, and languages are not included in the doctor information currently provided by the service.</p>
-            </section>
-
-            <section className="dp-card" aria-labelledby="dp-services-title">
-              <h2 id="dp-services-title">Services &amp; consultation types</h2>
-              <p className="dp-service-summary">The booking service offers 30-minute appointments at the doctor’s listed office.</p>
-              <p className="dp-info-note">Online consultation details and a separate service list are not available in the current doctor record.</p>
-            </section>
-
-            <section className="dp-card" aria-labelledby="dp-reviews-title">
-              <h2 id="dp-reviews-title">Patient reviews</h2>
-              <p className="dp-no-data">Reviews are not available from the current doctor service.</p>
+            {/* Only what the clinic can actually tell the patient; sections with nothing to show are left out. */}
+            <section className="dp-card" aria-labelledby="dp-expect-title">
+              <h2 id="dp-expect-title">What to expect</h2>
+              <ul className="dp-expect">
+                <li><Icon name="clock" size={18} /><span><strong>30-minute visit in person</strong>At the doctor’s office in the clinic.</span></li>
+                <li><Icon name="check" size={18} /><span><strong>Check in when you arrive</strong>From 30 minutes before your time, at the front desk or on this site.</span></li>
+                <li><Icon name="calendar" size={18} /><span><strong>Change or cancel for free</strong>Any time before the visit starts, from My appointments.</span></li>
+              </ul>
             </section>
           </div>
 

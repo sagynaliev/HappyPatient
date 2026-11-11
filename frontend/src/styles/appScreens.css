@@ -111,78 +111,6 @@
   font-size: 14px;
 }
 
-.bk-consultation-options {
-  display: grid;
-  gap: 12px;
-}
-
-.bk-consult-option {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text-primary);
-  background: var(--surface);
-  cursor: pointer;
-}
-
-.bk-consult-option.is-selected {
-  border-color: var(--selected-border);
-  background: var(--selected-surface);
-  box-shadow: 0 0 0 1px var(--selected-border);
-}
-
-.bk-consult-option.is-disabled {
-  color: var(--text-secondary);
-  background: var(--page-background);
-  cursor: not-allowed;
-}
-
-.bk-consult-option input {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  accent-color: var(--primary);
-}
-
-.bk-consult-icon {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  place-items: center;
-  border-radius: 10px;
-  color: var(--primary);
-  background: var(--accent);
-  font-size: 22px;
-}
-
-.bk-consult-copy {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-  flex: 1;
-}
-
-.bk-consult-copy strong {
-  font-size: 15px;
-}
-
-.bk-consult-copy span,
-.bk-consult-copy small {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.bk-selected-label {
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 800;
-}
-
 .bk-date-time {
   display: grid;
   gap: 16px;
@@ -642,26 +570,13 @@
     padding: 17px;
   }
 
-  .bk-consult-option {
-    align-items: flex-start;
-    gap: 10px;
-    padding: 13px;
-  }
+  
 
-  .bk-consult-icon {
-    width: 34px;
-    height: 34px;
-    flex-basis: 34px;
-  }
+  
 
-  .bk-consult-copy strong {
-    font-size: 13px;
-  }
+  
 
-  .bk-consult-copy span,
-  .bk-consult-copy small {
-    font-size: 12px;
-  }
+  
 
   .bk-slot-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

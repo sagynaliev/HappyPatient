@@ -211,7 +211,8 @@ export default function Search() {
     return filtered;
   }, [doctors, maximumPrice, sort]);
 
-  const pageSize = 12;
+  // Eight compact rows (four per column) fit one laptop screen without scrolling.
+  const pageSize = 8;
   const pageCount = Math.max(1, Math.ceil(filteredDoctors.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pageStart = (currentPage - 1) * pageSize;

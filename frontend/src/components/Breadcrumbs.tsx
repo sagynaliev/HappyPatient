@@ -5,7 +5,7 @@ import "../styles/breadcrumbs.css";
 
 type Crumb = { label: string; to?: string };
 
-const ADMIN_SECTIONS: Record<string, string> = { dashboard: "Dashboard", users: "Users", doctors: "Doctors", appointments: "Appointments", reports: "Reports" };
+const ADMIN_SECTIONS: Record<string, string> = { dashboard: "Dashboard", users: "Users", doctors: "Doctors", appointments: "Appointments", reports: "Reports", statistics: "Statistics", pricing: "Pricing", "reference-data": "Reference data", integrity: "Data quality", time: "Demo time" };
 
 export function buildCrumbs(pathname: string, labels: Record<string, string>, role?: string): Crumb[] {
   const home: Crumb = { label: "Home", to: "/" };

@@ -65,7 +65,7 @@ void syncAppClock().finally(() => createRoot(document.getElementById("root")!).r
               </Route>
               <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
               <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<AdminDashboard />} />
+                <Route index element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="dashboard" element={<AdminDashboard />} />
                 <Route path="users" element={<AdminUsersPage />} />
                 <Route path="doctors" element={<AdminDoctorsPage />} />

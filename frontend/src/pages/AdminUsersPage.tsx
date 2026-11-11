@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AdminUserRecord, authApi, Role } from "../lib/api";
+import { Pager, usePaged } from "../components/Pager";
 
 const defaultForm = { firstName: "", lastName: "", email: "", phone: "", role: "PATIENT" as Role, status: "active" as "active" | "inactive" };
 
@@ -32,6 +33,7 @@ export default function AdminUsersPage() {
     }
   };
 
+  const paged = usePaged(users, 8);
   const selectedUser = useMemo(() => users.find((user) => user.id === selectedId) ?? users[0] ?? null, [selectedId, users]);
 
   useEffect(() => {
@@ -127,18 +129,19 @@ export default function AdminUsersPage() {
               ) : users.length === 0 ? (
                 <tr><td colSpan={5}>No users found.</td></tr>
               ) : (
-                users.map((user) => (
+                paged.visible.map((user) => (
                   <tr key={user.id} onClick={() => setSelectedId(user.id)} className={selectedUser?.id === user.id ? "is-selected" : ""}>
                     <td>{user.firstName} {user.lastName}</td>
                     <td>{user.email}</td>
                     <td>{user.role}</td>
                     <td><span className={`admin-status ${user.status === "inactive" ? "admin-status-muted" : "admin-status-active"}`}>{user.status ?? "active"}</span></td>
-                    <td><button className="admin-link-button" type="button">View · Edit</button></td>
+                    <td><button className="admin-link-button" type="button" aria-label={`Edit ${user.firstName} ${user.lastName}`}>Edit</button></td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+          <Pager page={paged.page} pages={paged.pages} from={paged.from} to={paged.to} total={paged.total} onPage={paged.setPage} label="Users" />
         </div>
 
         <aside className="admin-panel admin-inspector">

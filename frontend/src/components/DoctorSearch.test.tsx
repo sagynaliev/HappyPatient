@@ -105,7 +105,7 @@ describe("doctor discovery and cards", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/Next: 10 May · 14:00 · UTC\+5/)).not.toBeNull();
+    expect(screen.getByText(/^Next: 10 May · 14:00$/)).not.toBeNull();
     expect(screen.getByText("Almaty · Cardio Clinic")).not.toBeNull();
     expect(screen.getByText("18 Abay Avenue, Office 101")).not.toBeNull();
     expect(screen.getByRole("link", { name: "Book Appointment" }).getAttribute("href")).toBe(
