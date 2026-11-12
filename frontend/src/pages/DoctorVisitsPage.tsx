@@ -7,6 +7,14 @@ import { patientName, slotKind } from "./DoctorSchedulePage";
 import "../styles/doctorWorkspace.css";
 
 type Tab = "today" | "upcoming" | "past";
+const MISSED_PREFIX = "missed:";
+const isMissed = (slot: ScheduleSlot) => slot.id.startsWith(MISSED_PREFIX);
+
+function visitTab(slot: ScheduleSlot, today: string): Tab {
+  const day = dayKey(slot.startAt);
+  if (isMissed(slot) || day < today) return "past";
+  return day === today ? "today" : "upcoming";
+}
 const kindLabel = { free: "Free", booked: "Booked", arrived: "Checked in", blocked: "Blocked" } as const;
 
 /** Every visit with a patient, grouped by day; each row opens the visit page. */
@@ -26,9 +34,11 @@ export default function DoctorVisitsPage() {
     setError("");
     try {
       const { doctor } = await authApi.doctorProfile();
-      const result = await authApi.getSchedule(doctor.id);
+      const [result, missedResult] = await Promise.all([authApi.getSchedule(doctor.id), authApi.doctorMissedVisits().catch(() => ({ missed: [] }))]);
       if (id !== request.current) return;
-      setSlots(result.slots.filter((slot) => slot.patient).sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt)));
+      // A missed visit's time was released (and may be rebooked), so it is listed as its own read-only row.
+      const missedRows: ScheduleSlot[] = (missedResult.missed ?? []).map((item) => ({ id: `${MISSED_PREFIX}${item.id}`, startAt: item.startAt, endAt: item.endAt, status: "FREE", visitPurpose: "Not checked in — time released", patient: { id: "", firstName: item.patientName, lastName: "" } }));
+      setSlots([...result.slots.filter((slot) => slot.patient), ...missedRows].sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt)));
     } catch (caught) {
       if (id === request.current) setError(caught instanceof Error ? caught.message : "Unable to load visits.");
     } finally {
@@ -42,7 +52,7 @@ export default function DoctorVisitsPage() {
     const needle = query.trim().toLowerCase();
     const inTab = slots.filter((slot) => {
       const key = dayKey(slot.startAt);
-      const matchesTab = day ? key === day : tab === "today" ? key === today : tab === "upcoming" ? key > today : key < today;
+      const matchesTab = day ? key === day : visitTab(slot, today) === tab;
       return matchesTab && (!needle || `${patientName(slot)} ${slot.visitPurpose ?? ""}`.toLowerCase().includes(needle));
     });
     // Natural order: past visits latest first, everything else earliest first.
@@ -53,9 +63,9 @@ export default function DoctorVisitsPage() {
     return [...byDay.entries()];
   }, [slots, tab, query, today, order, day]);
   const counts = {
-    today: slots.filter((slot) => dayKey(slot.startAt) === today).length,
-    upcoming: slots.filter((slot) => dayKey(slot.startAt) > today).length,
-    past: slots.filter((slot) => dayKey(slot.startAt) < today).length,
+    today: slots.filter((slot) => visitTab(slot, today) === "today").length,
+    upcoming: slots.filter((slot) => visitTab(slot, today) === "upcoming").length,
+    past: slots.filter((slot) => visitTab(slot, today) === "past").length,
   };
   const now = Date.now();
 
@@ -99,6 +109,16 @@ export default function DoctorVisitsPage() {
               {items.map((slot) => {
                 const kind = slotKind(slot);
                 return (
+                  isMissed(slot) ? (
+                  <li key={slot.id} className="is-past is-missed">
+                    <div className="dw-agenda-row">
+                      <time dateTime={slot.startAt}>{clock(slot.startAt)}</time>
+                      <span className="dw-avatar" aria-hidden="true">{patientName(slot).split(" ").map((part) => part[0] ?? "").join("").slice(0, 2)}</span>
+                      <span className="dw-patient-copy"><strong>{patientName(slot)}</strong><small>{slot.visitPurpose} · {clock(slot.startAt)}–{clock(slot.endAt)}</small></span>
+                      <span className="dw-pill is-missed">Missed</span>
+                    </div>
+                  </li>
+                  ) : (
                   <li key={slot.id} className={Date.parse(slot.endAt) <= now && kind !== "booked" ? "is-past" : ""}>
                     <Link to={`/doctor/visits/${encodeURIComponent(slot.id)}`} className="dw-agenda-row">
                       <time dateTime={slot.startAt}>{clock(slot.startAt)}</time>
@@ -108,6 +128,7 @@ export default function DoctorVisitsPage() {
                       <Icon name="arrow-right" size={16} className="dw-row-arrow" />
                     </Link>
                   </li>
+                  )
                 );
               })}
             </ol>

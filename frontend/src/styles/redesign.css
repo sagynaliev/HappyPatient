@@ -350,6 +350,10 @@ th.is-today .schedule-matrix-daynum { background: var(--primary); color: #fff; }
 .patient-appointment-card.is-cancelled { background: #fbfbfd; }
 .is-cancelled .pa-date { background: #c8cfdf; }
 .patient-appointment-status.is-cancelled { background: #fdecee; color: #b3343c; }
+/* Missed (released for no check-in): amber, so it is not mistaken for a cancellation. */
+.patient-appointment-status.is-missed { background: #fff4de; color: #8a5300; }
+.dw-pill.is-missed { background: #fff4de; color: #8a5300; }
+.dw-agenda li.is-missed .dw-agenda-row { cursor: default; }
 .pa-cancel-reason { margin: 0; padding: 10px 14px; border-radius: 12px; background: #fff5f6; color: var(--text-primary); font-size: 14px; }
 .pa-cancel-when { color: var(--text-secondary); font-size: 12.5px; }
 .slot-modal-confirm-release { display: grid; gap: 10px; }

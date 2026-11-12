@@ -12,7 +12,8 @@ const prismaMock = vi.hoisted(() => ({
   pricingRule: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   receipt: { upsert: vi.fn(), findUnique: vi.fn() },
   cancelledAppointment: { create: vi.fn(), findMany: vi.fn() },
-  user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn(), update: vi.fn() },
+  expiredAppointment: { findMany: vi.fn() },
+  user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   $transaction: vi.fn(),
   $queryRaw: vi.fn(),
 }));
@@ -1013,3 +1014,26 @@ describe('sign-in under load and admin user edits', () => {
   });
 });
 
+describe('missed visits (released for no check-in)', () => {
+  const expired = { id: 'exp-1', slotId: 'slot-abc12345', doctorId: 'doctor-1', patientId: 'patient-user', startAt: new Date('2026-11-02T05:00:00.000Z'), endAt: new Date('2026-11-02T05:30:00.000Z'), createdAt: new Date('2026-11-02T05:10:00.000Z') };
+  it('lists a patient\'s missed visits with the doctor, apart from cancellations', async () => {
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([]);
+    prismaMock.cancelledAppointment.findMany.mockResolvedValue([]);
+    prismaMock.expiredAppointment.findMany.mockResolvedValue([expired]);
+    prismaMock.doctor.findMany.mockResolvedValue([{ id: 'doctor-1', office: 'Office 102', category: { name: 'Pediatrics' }, user: { firstName: 'Arman', lastName: 'Akhmetov' } }]);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'patient-user', firstName: 'Casey', lastName: 'Patient' }]);
+    const response = await request(app).get('/api/me/appointments').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(200);
+    expect(response.body.cancelled).toEqual([]);
+    expect(response.body.missed).toEqual([{ id: 'exp-1', slotId: 'slot-abc12345', startAt: '2026-11-02T05:00:00.000Z', endAt: '2026-11-02T05:30:00.000Z', releasedAt: '2026-11-02T05:10:00.000Z', reference: 'HP-ABC12345', doctor: { name: 'Dr. Arman Akhmetov', specialty: 'Pediatrics', office: 'Office 102' } }]);
+    expect(prismaMock.expiredAppointment.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { patientId: 'patient-user' } }));
+  });
+  it('lists a doctor\'s missed visits with patient names, and only for doctors', async () => {
+    prismaMock.expiredAppointment.findMany.mockResolvedValue([expired]);
+    prismaMock.doctor.findMany.mockResolvedValue([{ id: 'doctor-1', office: null, category: { name: 'Pediatrics' }, user: { firstName: 'Arman', lastName: 'Akhmetov' } }]);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'patient-user', firstName: 'Casey', lastName: 'Patient' }]);
+    const response = await request(app).get('/api/doctors/me/missed-visits').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).expect(200);
+    expect(response.body.missed).toEqual([{ id: 'exp-1', slotId: 'slot-abc12345', startAt: '2026-11-02T05:00:00.000Z', endAt: '2026-11-02T05:30:00.000Z', releasedAt: '2026-11-02T05:10:00.000Z', patientName: 'Casey Patient' }]);
+    expect(prismaMock.expiredAppointment.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { doctorId: 'doctor-1' } }));
+    await request(app).get('/api/doctors/me/missed-visits').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(403);
+  });
+});
