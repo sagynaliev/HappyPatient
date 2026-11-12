@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Resend } from 'resend';
 import { prisma } from './prisma';
 import { config } from './config';
-import { brandedEmail, EmailTone } from './email/layout';
+import { brandedEmail, EmailTone, platformUrl } from './email/layout';
 import { appointmentEmail, reminderEmail } from './email/appointment';
 import { registrationReceiptPdf, RegistrationReceiptData } from './registrationReceipt';
 
@@ -83,6 +83,32 @@ export async function sendReminderEmail(input: { eventKey: string; email?: strin
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function sendMissedVisitEmail(input: { eventKey: string; email: string; subject: string; message: string }) {
+  if (!config.RESEND_API_KEY) return;
+  try {
+    const content = brandedEmail({
+      title: input.subject,
+      message: input.message,
+      tone: 'warning',
+      status: 'Missed',
+      action: { label: 'View past appointments', url: `${platformUrl(config.FRONTEND_URL)}/appointments?tab=past` },
+    });
+    const result = await new Resend(config.RESEND_API_KEY).emails.send({
+      from: config.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev',
+      to: input.email,
+      subject: input.subject,
+      ...content,
+    }, { idempotencyKey: input.eventKey });
+    if (result.error) return;
+    await prisma.notification.updateMany({
+      where: { eventKey: input.eventKey },
+      data: { channel: 'email', status: 'DELIVERED', deliveredAt: new Date() },
+    });
+  } catch {
+    // The in-app notification was saved with the release and remains visible.
   }
 }
 

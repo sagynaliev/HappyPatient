@@ -13,6 +13,7 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('1d'),
   RESET_TOKEN_EXPIRES_MINUTES: z.coerce.number().int().positive().default(30),
   RESEND_API_KEY: z.preprocess((value) => value || undefined, z.string().min(1).optional()),
+  RESEND_FROM_EMAIL: z.preprocess((value) => value || undefined, z.email().optional()),
   SLOT_RELEASE_INTERVAL_MS: z.coerce.number().int().min(1000).default(60_000),
   REMINDER_INTERVAL_MS: z.coerce.number().int().min(1000).default(60_000),
   REMINDER_LEAD_HOURS: z.string().default('24,2'),

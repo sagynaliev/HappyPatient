@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const db = vi.hoisted(() => ({ scheduleSlot: { findMany: vi.fn(), updateMany: vi.fn() }, expiredAppointment: { create: vi.fn() }, notification: { create: vi.fn() }, $transaction: vi.fn() }));
+const db = vi.hoisted(() => ({ scheduleSlot: { findMany: vi.fn(), updateMany: vi.fn() }, expiredAppointment: { create: vi.fn() }, notification: { create: vi.fn(), updateMany: vi.fn() }, $transaction: vi.fn() }));
 vi.mock('./prisma', () => ({ prisma: db }));
+const sendEmail = vi.hoisted(() => vi.fn());
+vi.mock('resend', () => ({ Resend: class { emails = { send: sendEmail }; } }));
+vi.mock('./config', () => ({ config: { RESEND_API_KEY: 'test-key', RESEND_FROM_EMAIL: 'clinic@example.test', FRONTEND_URL: 'https://clinic.example.test' } }));
 import { releaseUnattendedSlots } from './appointmentLifecycle';
 const now = new Date('2026-11-02T05:10:00Z');
-const initial = () => ({ id: 'slot', patientId: 'patient', doctorId: 'doctor', status: 'BOOKED', checkedInAt: null as Date | null, startAt: new Date('2026-11-02T05:00:00Z'), endAt: new Date('2026-11-02T05:30:00Z'), updatedAt: new Date('2026-11-01T00:00:00Z') });
+const initial = () => ({ id: 'slot', patientId: 'patient', doctorId: 'doctor', patient: { email: 'patient@example.test' }, status: 'BOOKED', checkedInAt: null as Date | null, startAt: new Date('2026-11-02T05:00:00Z'), endAt: new Date('2026-11-02T05:30:00Z'), updatedAt: new Date('2026-11-01T00:00:00Z') });
 let slot = initial();
 beforeEach(() => {
   vi.resetAllMocks(); slot = initial();
@@ -12,6 +15,7 @@ beforeEach(() => {
   db.scheduleSlot.updateMany.mockImplementation(({ where }) => { const matches = slot.status === where.status && slot.checkedInAt === null && slot.updatedAt === where.updatedAt; if (matches) slot.status = 'FREE'; return Promise.resolve({ count: matches ? 1 : 0 }); });
   db.expiredAppointment.create.mockResolvedValue({ id: 'expired' });
   db.notification.create.mockResolvedValue({ id: 'notification' });
+  sendEmail.mockResolvedValue({ error: null });
 });
 describe('unattended appointment release', () => {
   it('releases at exactly 10:00 and audits the expired visit', async () => {
@@ -33,6 +37,26 @@ describe('unattended appointment release', () => {
     expect(data.message).toMatch(/not checked in within 10 minutes/);
     await releaseUnattendedSlots(now);
     expect(db.notification.create).toHaveBeenCalledTimes(1);
+  });
+  it('sends one email after saving the in-app notice and links to Past', async () => {
+    await Promise.all([releaseUnattendedSlots(now), releaseUnattendedSlots(now)]);
+    expect(db.notification.create).toHaveBeenCalledWith({ data: expect.objectContaining({ channel: 'in-app' }) });
+    expect(sendEmail).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      from: 'clinic@example.test',
+      to: 'patient@example.test',
+      subject: expect.stringContaining('Missed visit'),
+      text: expect.stringContaining('https://clinic.example.test/appointments?tab=past'),
+    }), { idempotencyKey: 'MISSED:slot:2026-11-01T00:00:00.000Z' });
+    expect(sendEmail.mock.invocationCallOrder[0]).toBeGreaterThan(db.notification.create.mock.invocationCallOrder[0]);
+    expect(db.notification.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'DELIVERED' }),
+    }));
+  });
+  it('keeps the release and the in-app notice when Resend rejects the email', async () => {
+    sendEmail.mockResolvedValue({ error: { message: 'rejected' } });
+    expect(await releaseUnattendedSlots(now)).toEqual({ count: 1 });
+    expect(db.notification.create).toHaveBeenCalledTimes(1);
+    expect(db.notification.updateMany).not.toHaveBeenCalled();
   });
   it('sends no message when nothing was released', async () => { await releaseUnattendedSlots(new Date(now.getTime() - 1000)); expect(db.notification.create).not.toHaveBeenCalled(); });
 });

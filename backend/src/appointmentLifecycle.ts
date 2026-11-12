@@ -1,12 +1,16 @@
 import { prisma } from './prisma';
 import { NO_CHECKIN_GRACE_MS } from './visitTime';
 import { config } from './config';
-import { formatAlmaty, sendReminderEmail } from './appointmentNotifications';
+import { formatAlmaty, sendMissedVisitEmail, sendReminderEmail } from './appointmentNotifications';
 
 export async function releaseUnattendedSlots(now = new Date()) {
   const where = { status: 'BOOKED' as const, checkedInAt: null, startAt: { lte: new Date(now.getTime() - NO_CHECKIN_GRACE_MS) } };
-  return prisma.$transaction(async (tx) => {
-    const candidates = await tx.scheduleSlot.findMany({ where });
+  const { count, emails } = await prisma.$transaction(async (tx) => {
+    const candidates = await tx.scheduleSlot.findMany({
+      where,
+      include: { patient: { select: { email: true } } },
+    });
+    const emails: Parameters<typeof sendMissedVisitEmail>[0][] = [];
     let count = 0;
     for (const slot of candidates) {
       // The conditional write acquires the row lock. Recheck the booking version so
@@ -22,17 +26,22 @@ export async function releaseUnattendedSlots(now = new Date()) {
         bookingVersion: slot.updatedAt, reason: 'auto_release_no_checkin', status: 'expired', createdAt: now,
       } });
       if (slot.patientId) {
-        await tx.notification.create({ data: {
-          userId: slot.patientId, slotId: slot.id, type: 'VISIT_MISSED',
-          eventKey: `MISSED:${slot.id}:${slot.updatedAt.toISOString()}`, channel: 'in-app', status: 'RECORDED',
+        const notice = {
+          eventKey: `MISSED:${slot.id}:${slot.updatedAt.toISOString()}`,
           subject: 'Missed visit — your time was released',
           message: `You were not checked in within 10 minutes of your ${formatAlmaty(slot.startAt)} visit, so the time was released. You can book a new time whenever you like.`,
+        };
+        await tx.notification.create({ data: {
+          ...notice, userId: slot.patientId, slotId: slot.id, type: 'VISIT_MISSED', channel: 'in-app', status: 'RECORDED',
         } });
+        if (slot.patient?.email) emails.push({ ...notice, email: slot.patient.email });
       }
       count += 1;
     }
-    return { count };
+    return { count, emails };
   });
+  await Promise.all(emails.map(sendMissedVisitEmail));
+  return { count };
 }
 
 export async function sendUpcomingReminders(now = new Date()) {
