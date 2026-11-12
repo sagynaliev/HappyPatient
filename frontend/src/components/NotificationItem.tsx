@@ -12,6 +12,7 @@ export function kindOf(type: string): NotificationKind {
 
 const KIND_ICON: Record<NotificationKind, string> = { booked: "✓", cancelled: "✕", "checked-in": "➜", system: "i", security: "!" };
 const destinationFor = (item: AppNotification, role: Role) => {
+  if (role === "PATIENT" && item.type === "VISIT_MISSED") return "/appointments?tab=past";
   if (!item.slotId) return "/profile";
   if (role === "DOCTOR") return `/doctor/visits/${encodeURIComponent(item.slotId)}`;
   if (role === "FRONT_DESK") return "/front-desk";
@@ -29,7 +30,8 @@ const relativeTime = (value: string) => {
 export function NotificationItem({ item, role, onMarkRead }: { item: AppNotification; role: Role; onMarkRead?: (id: string) => void }) {
   const kind = kindOf(item.type);
   const destination = destinationFor(item, role);
-  const accessibleName = `${item.subject}. ${item.message}. Open ${item.slotId ? "appointment" : "profile"}.`;
+  const target = role === "PATIENT" && item.type === "VISIT_MISSED" ? "past appointments" : item.slotId ? "appointment" : "profile";
+  const accessibleName = `${item.subject}. ${item.message}. Open ${target}.`;
   return (
     <li className={`notification-item notification-item--${kind}${item.readAt ? "" : " is-unread"}`}>
       <Link className="notification-item-link" to={destination} aria-label={accessibleName} onClick={() => onMarkRead?.(item.id)}>

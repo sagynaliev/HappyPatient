@@ -1,7 +1,7 @@
 import { prisma } from './prisma';
 import { NO_CHECKIN_GRACE_MS } from './visitTime';
 import { config } from './config';
-import { sendReminderEmail } from './appointmentNotifications';
+import { formatAlmaty, sendReminderEmail } from './appointmentNotifications';
 
 export async function releaseUnattendedSlots(now = new Date()) {
   const where = { status: 'BOOKED' as const, checkedInAt: null, startAt: { lte: new Date(now.getTime() - NO_CHECKIN_GRACE_MS) } };
@@ -21,6 +21,14 @@ export async function releaseUnattendedSlots(now = new Date()) {
         patientId: slot.patientId, startAt: slot.startAt, endAt: slot.endAt,
         bookingVersion: slot.updatedAt, reason: 'auto_release_no_checkin', status: 'expired', createdAt: now,
       } });
+      if (slot.patientId) {
+        await tx.notification.create({ data: {
+          userId: slot.patientId, slotId: slot.id, type: 'VISIT_MISSED',
+          eventKey: `MISSED:${slot.id}:${slot.updatedAt.toISOString()}`, channel: 'in-app', status: 'RECORDED',
+          subject: 'Missed visit — your time was released',
+          message: `You were not checked in within 10 minutes of your ${formatAlmaty(slot.startAt)} visit, so the time was released. You can book a new time whenever you like.`,
+        } });
+      }
       count += 1;
     }
     return { count };

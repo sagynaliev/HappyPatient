@@ -85,6 +85,9 @@ export type PatientAppointment = {
   reference?: string;
   checkedInAt?: string | null;
 };
+/** A booked visit released because the patient was not checked in within 10 minutes of its start. */
+export type MissedAppointment = { id: string; slotId: string; startAt: string; endAt: string; releasedAt: string; reference?: string; doctor: { name: string; specialty: string; office: string | null } };
+export type DoctorMissedVisit = { id: string; slotId: string; startAt: string; endAt: string; releasedAt: string; patientName: string };
 export type CancelledAppointment = {
   id: string;
   slotId: string;
@@ -162,7 +165,8 @@ export const authApi = {
   slotDetails: (slotId: string) => api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`),
   me: () => api<{ user: ProfileUser }>('/me'),
   updateProfile: (body: ProfileUpdate) => api<{ user: ProfileUser }>('/me', { method: 'PATCH', body: JSON.stringify(body) }),
-  myAppointments: () => api<{ appointments: PatientAppointment[]; cancelled?: CancelledAppointment[] }>('/me/appointments'),
+  myAppointments: () => api<{ appointments: PatientAppointment[]; cancelled?: CancelledAppointment[]; missed?: MissedAppointment[] }>('/me/appointments'),
+  doctorMissedVisits: () => api<{ missed: DoctorMissedVisit[] }>('/doctors/me/missed-visits'),
   rescheduleMyAppointment: (slotId: string, newSlotId: string) => api<{ slot: ScheduleSlot; reference?: string; previousReference?: string }>(`/appointments/${encodeURIComponent(slotId)}/reschedule`, { method: 'POST', body: JSON.stringify({ newSlotId }) }),
   cancelAppointment: (slotId: string, reason: string) => api<{ cancelled: boolean; reference: string }>(`/appointments/${slotId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   checkInAppointment: (slotId: string) => api<{ checkedIn: boolean; reference: string; receipt: { id: string } }>(`/appointments/${slotId}/check-in`, { method: 'POST' }),

@@ -94,6 +94,27 @@ describe("patient appointments dashboard", () => {
     expect(screen.queryByRole("button", { name: /^cancel$|reschedule/i })).toBeNull();
   });
 
+  it("keeps the missed visit in Past when its original slot is reused", async () => {
+    const slotId = appointments[0].id;
+    vi.mocked(authApi.myAppointments).mockResolvedValue({
+      appointments,
+      missed: [{
+        id: "expired-1", slotId, startAt: "2001-05-10T09:00:00.000Z", endAt: "2001-05-10T09:30:00.000Z",
+        releasedAt: "2001-05-10T09:10:00.000Z",
+        doctor: { name: "Dr. Missed Visit", specialty: "Cardiology", office: null },
+      }],
+    });
+    renderPage("/appointments?tab=past");
+
+    expect(await screen.findByRole("heading", { name: "Dr. Missed Visit" })).toBeTruthy();
+    expect(screen.getByText("Missed")).toBeTruthy();
+    expect(screen.getByText(/not checked in within 10 minutes/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Book a new visit/ }).getAttribute("href")).toBe("/search");
+    expect(screen.getByRole("tab", { name: "Past 2" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "Cancelled 0" }));
+    expect(screen.queryByText("Missed")).toBeNull();
+  });
+
   it("shows an empty cancelled tab when nothing was cancelled", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("tab", { name: "Cancelled 0" }));

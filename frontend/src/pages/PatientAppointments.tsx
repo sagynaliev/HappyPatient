@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, authApi, CancelledAppointment, PatientAppointment, Receipt } from "../lib/api";
+import { api, authApi, CancelledAppointment, MissedAppointment, PatientAppointment, Receipt } from "../lib/api";
 import { notifyNotificationsChanged } from "../lib/notificationEvents";
 import { ReceiptDialog } from "../components/ReceiptView";
 import { MiniCalendar } from "../components/MiniCalendar";
@@ -178,6 +178,32 @@ function AppointmentCard({
 
 const CANCEL_REASONS = ["I feel better", "Schedule conflict", "Booked by mistake", "I found another doctor"];
 
+/** A visit nobody checked in for: the clinic released the time. Shown with past visits, never as a cancellation. */
+function MissedCard({ item }: { item: MissedAppointment }) {
+  const start = new Date(item.startAt);
+  const part = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { ...options, timeZone: "Asia/Almaty" }).format(start);
+  return (
+    <article className="patient-appointment-card is-cancelled is-missed">
+      <div className="pa-date" aria-hidden="true"><span>{part({ month: "short" })}</span><strong>{part({ day: "numeric" })}</strong><small>{part({ weekday: "short" })}</small></div>
+      <div className="pa-body">
+        <header className="patient-appointment-card-heading">
+          <div>
+            <h2>{item.doctor.name}</h2>
+            <p className="patient-appointment-specialty">{item.doctor.specialty}</p>
+          </div>
+          <span className="patient-appointment-status is-missed">Missed</span>
+        </header>
+        <dl className="patient-appointment-facts">
+          <div><dt><AppointmentIcon kind="calendar" /> <span className="sr-only">Date</span></dt><dd>{formatDate(item.startAt)}</dd></div>
+          <div><dt><AppointmentIcon kind="clock" /> <span className="sr-only">Time</span></dt><dd>{formatTime(item.startAt)}–{formatTime(item.endAt)}</dd></div>
+        </dl>
+        <p className="pa-cancel-reason">You were not checked in within 10 minutes of the start, so the time was released.</p>
+        <Link className="button button-outline" to="/search" aria-label={`Book a new visit instead of the missed one with ${item.doctor.name}`}>Book a new visit</Link>
+      </div>
+    </article>
+  );
+}
+
 function CancelledCard({ item, expanded, onToggle }: { item: CancelledAppointment; expanded: boolean; onToggle: () => void }) {
   const start = new Date(item.startAt);
   const month = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "Asia/Almaty" }).format(start);
@@ -229,6 +255,7 @@ export default function PatientAppointments() {
   const [actionMessage, setActionMessage] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [cancelled, setCancelled] = useState<CancelledAppointment[]>([]);
+  const [missed, setMissed] = useState<MissedAppointment[]>([]);
   const [specialties, setSpecialties] = useState<string[]>([]);
   const [cancelTarget, setCancelTarget] = useState<PatientAppointment | null>(null);
   const [cancelPhase, setCancelPhase] = useState<"reason" | "confirm">("reason");
@@ -246,7 +273,8 @@ export default function PatientAppointments() {
     setLoading(true);
     setError("");
     try {
-      const { appointments: result, cancelled: cancelledResult } = await authApi.myAppointments();
+      const { appointments: result, cancelled: cancelledResult, missed: missedResult } = await authApi.myAppointments();
+      setMissed(missedResult ?? []);
       setAppointments(result);
       setCancelled(cancelledResult ?? []);
     } catch (cause: unknown) {
@@ -399,9 +427,13 @@ export default function PatientAppointments() {
     const mode = sortMode === "auto" ? (activeTab === "upcoming" ? "soonest" : "latest") : sortMode;
     return items.slice().sort((a, b) => mode === "doctor" ? a.doctor.name.localeCompare(b.doctor.name) || Date.parse(a.startAt) - Date.parse(b.startAt) : mode === "soonest" ? Date.parse(a.startAt) - Date.parse(b.startAt) : Date.parse(b.startAt) - Date.parse(a.startAt));
   };
-  const visibleAppointments = order((activeTab === "upcoming" ? upcoming : activeTab === "past" ? past : []).filter((item) => matches(needle, item.doctor.name, item.doctor.specialty, item.doctor.office, item.visitPurpose, item.reference)));
+  const tabAppointments = activeTab === "upcoming" ? upcoming : activeTab === "past" ? [...past, ...missed] : [];
+  const visibleAppointments = order(tabAppointments.filter((item) => matches(
+    needle, item.doctor.name, item.doctor.specialty, item.doctor.office, item.reference,
+    "releasedAt" in item ? "missed" : item.visitPurpose,
+  )));
   const visibleCancelled = order(cancelled.filter((item) => matches(needle, item.doctor.name, item.doctor.specialty, item.reason, item.visitPurpose, item.reference)));
-  const tabTotal = activeTab === "upcoming" ? upcoming.length : activeTab === "past" ? past.length : cancelled.length;
+  const tabTotal = activeTab === "upcoming" ? upcoming.length : activeTab === "past" ? past.length + missed.length : cancelled.length;
   const tabShown = activeTab === "cancelled" ? visibleCancelled.length : visibleAppointments.length;
 
   function selectTab(tab: AppointmentTab) {
@@ -441,7 +473,7 @@ export default function PatientAppointments() {
             aria-controls="appointments-panel"
             onClick={() => selectTab("past")}
           >
-            Past <span>{past.length}</span>
+            Past <span>{past.length + missed.length}</span>
           </button>
           <button
             id="appointments-tab-cancelled"
@@ -491,7 +523,9 @@ export default function PatientAppointments() {
           ) : visibleAppointments.length > 0 ? (
             <>
             <div className="patient-appointments-grid">
-              {visibleAppointments.map((appointment) => (
+              {visibleAppointments.map((appointment) => "releasedAt" in appointment ? (
+                <MissedCard key={`missed:${appointment.id}`} item={appointment} />
+              ) : (
                 <AppointmentCard key={appointment.id} appointment={appointment} expanded={selectedAppointment?.id === appointment.id} onToggleDetails={toggleAppointmentDetails} onCancel={beginCancellation} onCheckIn={checkInAppointment} onViewReceipt={viewReceipt} busy={actionBusy} pendingCancel={pendingCancellation?.appointment.id === appointment.id} />
               ))}
             </div>

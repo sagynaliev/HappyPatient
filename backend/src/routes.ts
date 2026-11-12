@@ -143,7 +143,7 @@ router.patch('/me', requireAuth, async (req, res) => {
   res.json({ user: maskedProfile(user) });
 });
 router.get('/me/appointments', requireAuth, requireRole(Role.PATIENT), async (req, res) => {
-  const [appointments, cancelledRows] = await Promise.all([
+  const [appointments, cancelledRows, missed] = await Promise.all([
     prisma.scheduleSlot.findMany({
       where: { patientId: req.user!.id },
       orderBy: { startAt: 'asc' },
@@ -161,11 +161,14 @@ router.get('/me/appointments', requireAuth, requireRole(Role.PATIENT), async (re
         doctor: { select: { office: true, consultationFee: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
       },
     }),
+    missedVisits({ patientId: req.user!.id }),
   ]);
   // Same price as the breakdown (rules at booking time); falls back to the doctor's fee if pricing is unavailable.
   // Booking times and rules are loaded once for the whole list instead of once per appointment.
   const prices = await listPrices(appointments, req.user!.id).catch(() => new Map<string, number>());
   res.json({
+    // Visits released because nobody checked in. Not cancellations: shown as "Missed" among past visits.
+    missed: missed.map((row) => ({ id: row.id, slotId: row.slotId, startAt: row.startAt, endAt: row.endAt, releasedAt: row.createdAt, reference: appointmentReference(row.slotId), doctor: row.doctor })),
     cancelled: (cancelledRows ?? []).map(({ doctor, ...row }) => ({
       ...row,
       reference: row.slotId ? appointmentReference(row.slotId) : undefined,
@@ -377,6 +380,27 @@ router.put('/doctors/me/location', requireAuth, requireRole(Role.DOCTOR), async 
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
   const updated = await prisma.doctor.update({ where: { id: doctor.id }, data: location, include: { category: true } });
   res.json({ doctor: updated });
+});
+
+/** Visits released for no check-in, newest first, with the doctor's and patient's display names. */
+async function missedVisits(where: { patientId?: string; doctorId?: string }) {
+  const rows = (await prisma.expiredAppointment.findMany({ where, orderBy: { startAt: 'desc' }, select: { id: true, slotId: true, doctorId: true, patientId: true, startAt: true, endAt: true, createdAt: true } })) ?? [];
+  if (!rows.length) return [];
+  const patientIds = Array.from(new Set(rows.flatMap((row) => row.patientId ? [row.patientId] : [])));
+  const [doctors, patients] = await Promise.all([
+    prisma.doctor.findMany({ where: { id: { in: Array.from(new Set(rows.map((row) => row.doctorId))) } }, select: { id: true, office: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } }),
+    patientIds.length ? prisma.user.findMany({ where: { id: { in: patientIds } }, select: { id: true, firstName: true, lastName: true } }) : [],
+  ]);
+  const doctorById = new Map((doctors ?? []).map((doctor) => [doctor.id, { name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`, specialty: doctor.category.name, office: doctor.office }]));
+  const patientById = new Map((patients ?? []).map((patient) => [patient.id, `${patient.firstName} ${patient.lastName}`]));
+  return rows.map((row) => ({ ...row, doctor: doctorById.get(row.doctorId) ?? { name: 'Doctor', specialty: '', office: null }, patientName: row.patientId ? patientById.get(row.patientId) ?? 'Patient' : 'Patient' }));
+}
+
+router.get('/doctors/me/missed-visits', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
+  const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
+  const rows = await missedVisits({ doctorId: doctor.id });
+  res.json({ missed: rows.map((row) => ({ id: row.id, slotId: row.slotId, startAt: row.startAt, endAt: row.endAt, releasedAt: row.createdAt, patientName: row.patientName })) });
 });
 
 router.get('/doctors/me', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
