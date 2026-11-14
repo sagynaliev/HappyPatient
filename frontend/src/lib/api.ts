@@ -54,6 +54,8 @@ export type Doctor = {
 };
 export type ScheduleSlot = {
   id: string;
+  /** "in-person:first", "online:follow-up", … set when the visit was booked. */
+  consultationType?: string | null;
   startAt: string;
   endAt: string;
   status: 'FREE' | 'BOOKED' | 'OCCUPIED';
@@ -62,6 +64,14 @@ export type ScheduleSlot = {
   visitPurpose?: string | null;
   patient?: { id: string; firstName: string; lastName: string; email?: string } | null;
 };
+export type ConsultationChannel = 'in-person' | 'online';
+export type VisitKind = 'first' | 'follow-up';
+/** "In-person · First visit" from a stored type such as "in-person:first". */
+export function consultationLabel(type?: string | null) {
+  if (!type) return '';
+  const [channel, kind] = type.split(':');
+  return [channel === 'online' ? 'Online' : channel === 'in-person' ? 'In-person' : '', kind === 'follow-up' ? 'Follow-up visit' : kind === 'first' ? 'First visit' : ''].filter(Boolean).join(' · ');
+}
 /** A priced treatment the doctor can record on a visit (price from the rule in force when it was booked). */
 export type TreatmentChoice = { key: string; code: string | null; name: string; amountKzt: number; ruleId: string };
 export type VisitTreatment = { id: string; code: string | null; name: string; amountKzt: number; createdAt: string };
@@ -87,6 +97,7 @@ export type PatientAppointment = {
   endAt: string;
   status: 'FREE' | 'BOOKED' | 'OCCUPIED';
   visitPurpose?: string | null;
+  consultationType?: string | null;
   doctor: { id?: string; name: string; specialty: string; office: string | null; consultationFee: number };
   reference?: string;
   checkedInAt?: string | null;
@@ -168,8 +179,10 @@ export const authApi = {
   createWorkingDays: (body: { dates: string[]; startTime: string; endTime: string }) =>
     api<{ created: number; dates: string[]; skippedSummary?: string }>('/doctors/me/schedule/working-days', { method: 'POST', body: JSON.stringify(body) }),
   getSchedule: (doctorId: string, date?: string) => api<{ doctor: DoctorProfile; slots: ScheduleSlot[] }>(`/doctors/${encodeURIComponent(doctorId)}/schedule${date ? `?date=${encodeURIComponent(date)}` : ""}`),
-  bookSlot: (doctorId: string, slotId: string, visitPurpose: string) =>
-    api<{ slot: ScheduleSlot; reference?: string }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose }) }),
+  bookSlot: (doctorId: string, slotId: string, visitPurpose: string, channel: ConsultationChannel = 'in-person') =>
+    api<{ slot: ScheduleSlot; reference?: string }>(`/doctors/${encodeURIComponent(doctorId)}/schedule/${encodeURIComponent(slotId)}/book`, { method: 'POST', body: JSON.stringify({ visitPurpose, channel }) }),
+  /** The patient's price with this doctor now, in person and online; visitKind follows their history with the doctor. */
+  consultationPrices: (doctorId: string) => api<{ visitKind: VisitKind; prices: Record<ConsultationChannel, number> }>(`/doctors/${encodeURIComponent(doctorId)}/consultation-prices`),
   updateSlot: (slotId: string, body: { status: ScheduleSlot['status']; patientId?: string; visitPurpose?: string; releaseBooking?: boolean; cancellationReason?: string }) =>
     api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   slotDetails: (slotId: string) => api<{ slot: ScheduleSlot }>(`/doctors/me/schedule/${encodeURIComponent(slotId)}`),

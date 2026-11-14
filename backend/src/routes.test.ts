@@ -7,7 +7,7 @@ const prismaMock = vi.hoisted(() => ({
   category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
   referenceDataAudit: { findMany: vi.fn(), create: vi.fn() },
   location: { findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
-  scheduleSlot: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  scheduleSlot: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
   notification: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
   pricingRule: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   receipt: { upsert: vi.fn(), findUnique: vi.fn() },
@@ -64,6 +64,7 @@ beforeEach(() => {
   });
   prismaMock.scheduleSlot.findFirst.mockResolvedValue(null);
   prismaMock.scheduleSlot.findMany.mockResolvedValue([]);
+  prismaMock.scheduleSlot.count.mockResolvedValue(0);
   prismaMock.scheduleSlot.createMany.mockResolvedValue({ count: 4 });
   prismaMock.scheduleSlot.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.user.findUnique.mockResolvedValue(null);
@@ -139,7 +140,7 @@ describe('Sprint 3 front-desk workflows', () => {
     const response = await request(app).post('/api/appointments/slot-1/cancel').set('Authorization', bearer(Role.PATIENT, 'patient-user')).send({ reason: 'Feeling better' }).expect(200);
     expect(response.body.cancelled).toBe(true);
     expect(prismaMock.cancelledAppointment.create).toHaveBeenCalledWith({ data: expect.objectContaining({ slotId: 'slot-1', patientId: 'patient-user', reason: 'Feeling better', cancelledByRole: Role.PATIENT }) });
-    expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null } }));
+    expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null, consultationType: null } }));
     expect(prismaMock.notification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'CANCELLED', message: expect.stringContaining('Reason: Feeling better') }) }));
   });
 
@@ -326,6 +327,7 @@ describe('authenticated self profile endpoints', () => {
         endAt: true,
         status: true,
         visitPurpose: true,
+        consultationType: true,
         checkedInAt: true,
         updatedAt: true,
         doctorId: true,
@@ -635,7 +637,7 @@ describe('Sprint 2 doctor endpoints', () => {
     expect(response.body.slot.patient.id).toBe('patient-1');
     expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'slot-1', doctorId: 'doctor-1', status: SlotStatus.FREE },
-      data: { status: 'BOOKED', patientId: 'patient-1', visitPurpose: 'Consultation' },
+      data: { status: 'BOOKED', patientId: 'patient-1', visitPurpose: 'Consultation', consultationType: 'in-person:first' },
     }));
   });
 
@@ -672,7 +674,7 @@ describe('Sprint 2 doctor endpoints', () => {
       .expect(200);
     expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'slot-1', doctorId: 'doctor-1', status: SlotStatus.BOOKED },
-      data: { status: 'FREE', patientId: null, visitPurpose: null },
+      data: { status: 'FREE', patientId: null, visitPurpose: null, consultationType: null },
     }));
   });
 
@@ -917,7 +919,7 @@ describe('manual availability protects active appointments', () => {
     await request(app).patch('/api/doctors/me/schedule/slot-1').set('Authorization', bearer(Role.DOCTOR)).send({ status: 'FREE' }).expect(200);
     expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith({
       where: { id: 'slot-1', doctorId: 'doctor-1', status: SlotStatus.OCCUPIED, patientId: null, checkedInAt: null },
-      data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null },
+      data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null, consultationType: null },
     });
     expect(prismaMock.cancelledAppointment.create).not.toHaveBeenCalled();
     expect(prismaMock.notification.create).not.toHaveBeenCalled();
@@ -1149,6 +1151,44 @@ describe('treatments on a visit (story 28)', () => {
       { kind: 'consultation', label: 'Consultation fee', amountKzt: 10000 },
       { kind: 'treatment', label: 'Knee ultrasound', amountKzt: 8500, ruleId: 'us' },
     ]);
+  });
+});
+
+describe('consultation types (story 30)', () => {
+  const visitRule = (over: Record<string, unknown>) => ({ kind: 'visit', doctorId: null, categoryId: null, consultationType: null, serviceCode: null, officeId: null, ratePerHourKzt: null, freeMinutes: 0, rounding: 'per_started_hour', dailyCapKzt: null, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, active: true, ...over });
+
+  it('stores the chosen channel and a follow-up when the patient saw the doctor before', async () => {
+    prismaMock.scheduleSlot.count.mockResolvedValueOnce(2);
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-1', startAt: new Date(Date.now() + 86400000), endAt: new Date(Date.now() + 88200000), status: SlotStatus.BOOKED, updatedAt: new Date() });
+    await request(app).post('/api/doctors/doctor-1/schedule/slot-1/book').set('Authorization', bearer(Role.PATIENT, 'patient-user')).send({ visitPurpose: 'Check-up', channel: 'online' }).expect(201);
+    expect(prismaMock.scheduleSlot.count).toHaveBeenCalledWith({ where: expect.objectContaining({ patientId: 'patient-user', doctorId: 'doctor-1', status: SlotStatus.OCCUPIED }) });
+    expect(prismaMock.scheduleSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ consultationType: 'online:follow-up' }) }));
+  });
+
+  it('defaults to an in-person first visit and refuses unknown channels', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'slot-1', startAt: new Date(Date.now() + 86400000), endAt: new Date(Date.now() + 88200000), status: SlotStatus.BOOKED, updatedAt: new Date() });
+    await request(app).post('/api/doctors/doctor-1/schedule/slot-1/book').set('Authorization', bearer(Role.PATIENT, 'patient-user')).send({ visitPurpose: 'Check-up' }).expect(201);
+    expect(prismaMock.scheduleSlot.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ consultationType: 'in-person:first' }) }));
+    await request(app).post('/api/doctors/doctor-1/schedule/slot-1/book').set('Authorization', bearer(Role.PATIENT, 'patient-user')).send({ visitPurpose: 'Check-up', channel: 'phone' }).expect(400);
+  });
+
+  it("tells the patient their in-person and online price for this doctor", async () => {
+    prismaMock.doctor.findUnique.mockResolvedValueOnce({ id: 'doctor-1', categoryId: 'cat-1', consultationFee: 12000 });
+    prismaMock.scheduleSlot.count.mockResolvedValueOnce(1);
+    prismaMock.pricingRule.findMany.mockResolvedValueOnce([visitRule({ id: 'fu', consultationType: 'follow-up', amountKzt: 9000 }), visitRule({ id: 'on-fu', consultationType: 'online:follow-up', amountKzt: 7000 })]);
+    const response = await request(app).get('/api/doctors/doctor-1/consultation-prices').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(200);
+    expect(response.body).toEqual({ visitKind: 'follow-up', prices: { 'in-person': 9000, online: 7000 } });
+  });
+
+  it('prices a booked online visit by its type and shows no parking', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'visit-1', patientId: 'patient-user', doctorId: 'doctor-1', consultationType: 'online:first', updatedAt: new Date('2026-11-02T00:00:00Z'), startAt: new Date('2026-11-03T00:00:00Z'), endAt: new Date('2026-11-03T00:30:00Z'), doctor: { consultationFee: 12000, categoryId: 'cat-1', locationId: 'office-1' } });
+    prismaMock.pricingRule.findMany.mockResolvedValueOnce([visitRule({ id: 'online', consultationType: 'online', amountKzt: 8000 }), { ...visitRule({ id: 'parking', kind: 'parking', ratePerHourKzt: 500 }) }]);
+    const response = await request(app).get('/api/me/appointments/visit-1/cost').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(200);
+    expect(response.body).toMatchObject({ consultationKzt: 8000, consultationType: 'online:first', parking: null });
+  });
+
+  it('accepts only listed consultation types on a price rule', async () => {
+    await request(app).post('/api/admin/pricing').set('Authorization', bearer(Role.ADMIN, 'admin-user')).send({ kind: 'visit', amountKzt: 9000, consultationType: 'weekend', effectiveFrom: '2026-12-01T00:00:00Z' }).expect(400);
   });
 });
 

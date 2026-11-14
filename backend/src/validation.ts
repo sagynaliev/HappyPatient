@@ -70,7 +70,7 @@ export const scheduleBatchSchema = z.object({
     context.addIssue({ code: 'custom', path: ['endTime'], message: 'End time must be later than start time.' });
   }
 });
-export const bookingSchema = z.object({ visitPurpose: z.string().trim().min(1).max(300) });
+export const bookingSchema = z.object({ visitPurpose: z.string().trim().min(1).max(300), channel: z.enum(['in-person', 'online']).default('in-person') });
 export const cancellationReasonSchema = z.string().trim().min(3, 'Please tell us why the appointment is being cancelled.').max(300);
 export const cancelSchema = z.object({ reason: cancellationReasonSchema });
 export const walkInLookupSchema = z.object({ iin: z.string().regex(/^\d{12}$/, 'IIN must contain exactly 12 digits.') });

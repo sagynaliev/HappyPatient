@@ -5,7 +5,7 @@ import PatientBookingFlow from "../components/PatientBookingFlow";
 import DoctorLocation from "../components/DoctorLocation";
 import ScheduleMatrix from "../components/ScheduleMatrix";
 import { SlotManagementModal } from "../components/SlotManagementModal";
-import { DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
+import { ConsultationChannel, DoctorProfile, ScheduleSlot, authApi } from "../lib/api";
 import { notifyNotificationsChanged } from "../lib/notificationEvents";
 import { AddAvailabilityModal } from "../components/AddAvailabilityModal";
 import "../styles/providerAvailabilityDialog.css";
@@ -111,6 +111,7 @@ export default function Schedule() {
   const [selected, setSelected] = useState<ScheduleSlot | null>(null);
   const [patientId, setPatientId] = useState("");
   const [visitPurpose, setVisitPurpose] = useState("");
+  const [channel, setChannel] = useState<ConsultationChannel>("in-person");
   const [slotDetailsLoading, setSlotDetailsLoading] = useState(false);
   const [slotError, setSlotError] = useState("");
   const [slotMessage, setSlotMessage] = useState("");
@@ -323,7 +324,7 @@ export default function Schedule() {
     try {
       const result = rescheduleId && rescheduleFrom
         ? await authApi.rescheduleMyAppointment(rescheduleId, selected.id)
-        : await authApi.bookSlot(doctorId, selected.id, visitPurpose);
+        : await authApi.bookSlot(doctorId, selected.id, visitPurpose, channel);
       notifyNotificationsChanged();
       setSlots((current) => current.map((slot) => slot.id === selected.id ? { ...slot, ...result.slot } : slot));
       const chosenTime = `${displayTime(selected.startAt)} – ${displayTime(selected.endAt)}`;
@@ -399,6 +400,7 @@ export default function Schedule() {
         doctor={doctor}
         doctorName={doctorName}
         consultationFee={routeState?.consultationFee}
+        onChannelChange={setChannel}
         patient={user}
         date={date}
         onDateChange={(nextDate) => {

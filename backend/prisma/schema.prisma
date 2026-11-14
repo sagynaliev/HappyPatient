@@ -101,6 +101,8 @@ model ScheduleSlot {
   endAt        DateTime
   status       SlotStatus @default(FREE)
   visitPurpose String?    @db.VarChar(300)
+  /** "in-person:first", "online:follow-up", …: set when the visit is booked and used for its price. */
+  consultationType String? @db.VarChar(40)
   checkedInAt  DateTime?
   checkedInById String?
   createdAt    DateTime   @default(now())

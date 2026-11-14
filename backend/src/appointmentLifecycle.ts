@@ -17,7 +17,7 @@ export async function releaseUnattendedSlots(now = new Date()) {
       // concurrent jobs, check-in, or rebooking cannot expire a different visit.
       const released = await tx.scheduleSlot.updateMany({
         where: { ...where, id: slot.id, patientId: slot.patientId, updatedAt: slot.updatedAt },
-        data: { status: 'FREE', patientId: null, visitPurpose: null, checkedInAt: null, checkedInById: null },
+        data: { status: 'FREE', patientId: null, visitPurpose: null, consultationType: null, checkedInAt: null, checkedInById: null },
       });
       if (!released.count) continue;
       await tx.expiredAppointment.create({ data: {

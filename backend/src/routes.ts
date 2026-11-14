@@ -1,6 +1,6 @@
 import { getWalkInSlotStatus, NO_CHECKIN_GRACE_MS } from './visitTime';
 import { medicalHistoryRouter, NOTE_WINDOW_MS } from './medicalHistory';
-import { resolvePricingRule, calculateParkingCost, calculateVisitCost, PricingRule } from './pricing';
+import { resolvePricingRule, calculateParkingCost, calculateVisitCost, PricingRule, consultationKey, ConsultationChannel, VisitKind, RULE_CONSULTATION_TYPES } from './pricing';
 import { getAdminStatistics, runAndStoreIntegrity } from './adminOperations';
 import { clockOffsetMs, realNow, setClockOffset, timeControlEnabled } from './clock';
 import { releaseUnattendedSlots, sendUpcomingReminders } from './appointmentLifecycle';
@@ -148,7 +148,7 @@ router.get('/me/appointments', requireAuth, requireRole(Role.PATIENT), async (re
       where: { patientId: req.user!.id },
       orderBy: { startAt: 'asc' },
       select: {
-        id: true, startAt: true, endAt: true, status: true, visitPurpose: true, checkedInAt: true, updatedAt: true, doctorId: true,
+        id: true, startAt: true, endAt: true, status: true, visitPurpose: true, consultationType: true, checkedInAt: true, updatedAt: true, doctorId: true,
         doctor: { select: { id: true, office: true, consultationFee: true, categoryId: true, locationId: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
       },
     }),
@@ -547,17 +547,18 @@ router.get('/doctors/:doctorId/schedule', requireAuth, requireRole(Role.PATIENT,
 router.post('/doctors/:doctorId/schedule/:slotId/book', requireAuth, requireRole(Role.PATIENT), async (req, res) => {
   const doctorId = Array.isArray(req.params.doctorId) ? req.params.doctorId[0] : req.params.doctorId;
   const slotId = Array.isArray(req.params.slotId) ? req.params.slotId[0] : req.params.slotId;
-  const { visitPurpose } = parsed(bookingSchema, req.body);
+  const { visitPurpose, channel } = parsed(bookingSchema, req.body);
   const doctor = await prisma.doctor.findUnique({ where: { id: doctorId }, select: { id: true, userId: true, office: true, user: { select: { firstName: true, lastName: true } } } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found.' });
+  const consultationType = consultationKey(channel, await visitKindFor(req.user!.id, doctor.id));
   const booked = await prisma.scheduleSlot.updateMany({
     where: { id: slotId, doctorId: doctor.id, status: SlotStatus.FREE, startAt: { gt: new Date() } },
-    data: { status: SlotStatus.BOOKED, patientId: req.user!.id, visitPurpose },
+    data: { status: SlotStatus.BOOKED, patientId: req.user!.id, visitPurpose, consultationType },
   });
   if (booked.count === 0) return res.status(409).json({ error: 'This slot is no longer available.' });
   const slot = await prisma.scheduleSlot.findFirst({
     where: { id: slotId, doctorId: doctor.id },
-    select: { id: true, startAt: true, endAt: true, status: true, visitPurpose: true, updatedAt: true },
+    select: { id: true, startAt: true, endAt: true, status: true, visitPurpose: true, consultationType: true, updatedAt: true },
   });
   if (slot) {
     void recordAppointmentNotification({
@@ -585,7 +586,7 @@ router.post('/appointments/:slotId/cancel', requireAuth, requireRole(Role.PATIEN
   if (slot.status !== SlotStatus.BOOKED) return res.status(409).json({ error: 'Only booked appointments can be cancelled.' });
   if (slot.startAt <= new Date()) return res.status(409).json({ error: 'Past or started appointments cannot be cancelled.' });
   const cancelled = await prisma.$transaction(async (tx) => {
-    const updated = await tx.scheduleSlot.updateMany({ where: { id: slot.id, patientId: req.user!.id, status: SlotStatus.BOOKED }, data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null } });
+    const updated = await tx.scheduleSlot.updateMany({ where: { id: slot.id, patientId: req.user!.id, status: SlotStatus.BOOKED }, data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null, consultationType: null } });
     if (!updated.count) return false;
     await tx.cancelledAppointment.create({ data: { slotId: slot.id, patientId: req.user!.id, doctorId: slot.doctorId, startAt: slot.startAt, endAt: slot.endAt, visitPurpose: slot.visitPurpose, reason, cancelledById: req.user!.id, cancelledByRole: Role.PATIENT } });
     return true;
@@ -604,7 +605,7 @@ router.post('/appointments/:slotId/reschedule', requireAuth, requireRole(Role.PA
   const slotId = Array.isArray(req.params.slotId) ? req.params.slotId[0] : req.params.slotId;
   const { newSlotId } = parsed(rescheduleSchema, req.body ?? {});
   if (newSlotId === slotId) return res.status(400).json({ error: 'Choose a different time.' });
-  const old = await prisma.scheduleSlot.findFirst({ where: { id: slotId, patientId: req.user!.id }, select: { id: true, status: true, startAt: true, endAt: true, doctorId: true, visitPurpose: true, updatedAt: true, doctor: { select: { userId: true, office: true, user: { select: { firstName: true, lastName: true } } } } } });
+  const old = await prisma.scheduleSlot.findFirst({ where: { id: slotId, patientId: req.user!.id }, select: { id: true, status: true, startAt: true, endAt: true, doctorId: true, visitPurpose: true, consultationType: true, updatedAt: true, doctor: { select: { userId: true, office: true, user: { select: { firstName: true, lastName: true } } } } } });
   if (!old) return res.status(404).json({ error: 'Appointment not found.' });
   if (old.status !== SlotStatus.BOOKED) return res.status(409).json({ error: 'Only booked appointments can be changed.' });
   if (old.startAt <= new Date()) return res.status(409).json({ error: 'Past or started appointments cannot be changed.' });
@@ -613,9 +614,9 @@ router.post('/appointments/:slotId/reschedule', requireAuth, requireRole(Role.PA
   const reason = 'Rescheduled to another time';
   try {
     await prisma.$transaction(async (tx) => {
-      const booked = await tx.scheduleSlot.updateMany({ where: { id: newSlotId, doctorId: old.doctorId, status: SlotStatus.FREE, startAt: { gt: new Date() } }, data: { status: SlotStatus.BOOKED, patientId: req.user!.id, visitPurpose: old.visitPurpose } });
+      const booked = await tx.scheduleSlot.updateMany({ where: { id: newSlotId, doctorId: old.doctorId, status: SlotStatus.FREE, startAt: { gt: new Date() } }, data: { status: SlotStatus.BOOKED, patientId: req.user!.id, visitPurpose: old.visitPurpose, consultationType: old.consultationType } });
       if (!booked.count) throw new SlotUnavailableError();
-      const freed = await tx.scheduleSlot.updateMany({ where: { id: old.id, patientId: req.user!.id, status: SlotStatus.BOOKED }, data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null } });
+      const freed = await tx.scheduleSlot.updateMany({ where: { id: old.id, patientId: req.user!.id, status: SlotStatus.BOOKED }, data: { status: SlotStatus.FREE, patientId: null, visitPurpose: null, consultationType: null } });
       if (!freed.count) throw new AppointmentChangedError();
       await tx.cancelledAppointment.create({ data: { slotId: old.id, patientId: req.user!.id, doctorId: old.doctorId, startAt: old.startAt, endAt: old.endAt, visitPurpose: old.visitPurpose, reason, cancelledById: req.user!.id, cancelledByRole: Role.PATIENT } });
     });
@@ -789,7 +790,7 @@ router.post('/front-desk/walk-ins', requireAuth, requireRole(Role.FRONT_DESK, Ro
     const patient = existing ?? await tx.user.create({ data: { firstName: input.firstName, lastName: input.lastName, iin: input.iin, email: input.email || `walkin-${randomToken()}@local.happypatient`, phone: input.phone || null, passwordHash: await hashPassword(randomToken()), role: Role.PATIENT }, select: { id: true, email: true, firstName: true, lastName: true } });
     const checkedInAt = new Date();
     const status = getWalkInSlotStatus(slot.startAt, checkedInAt) === 'occupied' ? SlotStatus.OCCUPIED : SlotStatus.BOOKED;
-    const updated = await tx.scheduleSlot.updateMany({ where: { id: slot.id, doctorId: input.doctorId, status: SlotStatus.FREE, endAt: { gt: checkedInAt } }, data: { status, patientId: patient.id, visitPurpose: input.visitPurpose, ...(status === SlotStatus.OCCUPIED ? { checkedInAt, checkedInById: req.user!.id } : {}) } });
+    const updated = await tx.scheduleSlot.updateMany({ where: { id: slot.id, doctorId: input.doctorId, status: SlotStatus.FREE, endAt: { gt: checkedInAt } }, data: { status, patientId: patient.id, visitPurpose: input.visitPurpose, consultationType: consultationKey('in-person', await visitKindFor(patient.id, input.doctorId, tx)), ...(status === SlotStatus.OCCUPIED ? { checkedInAt, checkedInById: req.user!.id } : {}) } });
     if (!updated.count) throw new WalkInConflict();
     const receipt = status === SlotStatus.OCCUPIED ? await tx.receipt.upsert({ where: { slotId: slot.id }, create: { slotId: slot.id, patientId: patient.id, reference: appointmentReference(slot.id) }, update: {} }) : undefined;
     return { patient, receipt, status, checkedInAt };
@@ -829,6 +830,7 @@ router.patch('/doctors/me/schedule/:slotId', requireAuth, requireRole(Role.DOCTO
       status: input.status as SlotStatus,
       patientId: input.status === SlotStatus.BOOKED ? input.patientId : null,
       visitPurpose: input.status === SlotStatus.BOOKED ? input.visitPurpose : null,
+      consultationType: input.status === SlotStatus.BOOKED && input.patientId ? consultationKey('in-person', await visitKindFor(input.patientId, doctor.id)) : null,
     },
   });
   if (updatedCount.count === 0) {
@@ -1065,7 +1067,7 @@ const pricingInput = z.object({
   ratePerHourKzt:z.number().int().min(0).nullable().optional(), freeMinutes:z.number().int().min(0).default(0),
   rounding:z.enum(['per_started_hour','per_minute']).default('per_started_hour'), dailyCapKzt:z.number().int().min(0).nullable().optional(),
   doctorId:z.string().nullable().optional(), categoryId:z.string().nullable().optional(),
-  consultationType:z.string().trim().max(80).nullable().optional(), serviceCode:z.string().trim().max(80).nullable().optional(),
+  consultationType:z.string().trim().refine(value=>value===''||RULE_CONSULTATION_TYPES.includes(value),'Choose a consultation type from the list.').transform(value=>value||null).nullable().optional(), serviceCode:z.string().trim().max(80).nullable().optional(),
   serviceName:z.string().trim().max(120).nullable().optional(), officeId:z.string().nullable().optional(),
   effectiveFrom:z.coerce.date(), effectiveTo:z.coerce.date().nullable().optional(),
 });
@@ -1099,18 +1101,35 @@ router.patch('/admin/pricing/:id',requireAuth,requireRole(Role.ADMIN),async(req,
   res.status(201).json({rule:version});
 });
 /** Consultation price for every visit in a patient's list, using three queries in total. */
+/** Follow-up when the patient already had a checked-in visit with this doctor; otherwise a first visit. */
+async function visitKindFor(patientId: string, doctorId: string, db: Pick<typeof prisma, 'scheduleSlot'> = prisma): Promise<VisitKind> {
+  const earlier = await db.scheduleSlot.count({ where: { patientId, doctorId, status: SlotStatus.OCCUPIED, startAt: { lt: new Date() } } });
+  return earlier ? 'follow-up' : 'first';
+}
+/** What this patient would pay with this doctor now, in person and online; the visit kind follows their history. */
+router.get('/doctors/:doctorId/consultation-prices', requireAuth, requireRole(Role.PATIENT), async (req, res) => {
+  const doctor = await prisma.doctor.findUnique({ where: { id: String(req.params.doctorId) }, select: { id: true, categoryId: true, consultationFee: true } });
+  if (!doctor) return res.status(404).json({ error: 'Doctor not found.' });
+  const now = new Date();
+  const visitKind = await visitKindFor(req.user!.id, doctor.id);
+  const rules = ((await prisma.pricingRule.findMany({ where: { kind: 'visit', active: true, effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] } })) ?? []) as PricingRule[];
+  const priceFor = (channel: ConsultationChannel) => { const rule = resolvePricingRule(rules, 'visit', now, doctor.id, doctor.categoryId, consultationKey(channel, visitKind)); return calculateVisitCost(doctor.consultationFee, rule ? { id: rule.id, amountKzt: rule.amountKzt } : undefined).consultationKzt; };
+  res.json({ visitKind, prices: { 'in-person': priceFor('in-person'), online: priceFor('online') } });
+});
+
 /** Visit price for a booking made at `at`, per doctor: the most specific active visit rule, else the doctor's fee. One query. */
 async function currentVisitFees(doctors:Array<{id:string;categoryId:string;consultationFee:number}>,at:Date){
   const fees=new Map<string,number>();
   if(!doctors.length)return fees;
   const rules=(await prisma.pricingRule.findMany({where:{kind:'visit',effectiveFrom:{lte:at},OR:[{effectiveTo:null},{effectiveTo:{gt:at}}]}}))??[];
   for(const doctor of doctors){
-    const rule=resolvePricingRule(rules as PricingRule[],'visit',at,doctor.id,doctor.categoryId);
+    // Search shows the price of a first in-person visit; the booking screen shows the patient's exact price.
+    const rule=resolvePricingRule(rules as PricingRule[],'visit',at,doctor.id,doctor.categoryId,consultationKey('in-person','first'));
     fees.set(doctor.id,calculateVisitCost(doctor.consultationFee,rule?{id:rule.id,amountKzt:rule.amountKzt}:undefined).consultationKzt);
   }
   return fees;
 }
-async function listPrices(slots:Array<{id:string;doctorId:string;updatedAt:Date;doctor:{consultationFee:number;categoryId:string}}>,userId:string){
+async function listPrices(slots:Array<{id:string;doctorId:string;updatedAt:Date;consultationType?:string|null;doctor:{consultationFee:number;categoryId:string}}>,userId:string){
   const prices=new Map<string,number>();
   if(!slots.length)return prices;
   const [bookings,rules,treatmentTotals]=await Promise.all([
@@ -1124,24 +1143,26 @@ async function listPrices(slots:Array<{id:string;doctorId:string;updatedAt:Date;
   for(const row of bookings??[])if(row.slotId&&!bookedAtBySlot.has(row.slotId))bookedAtBySlot.set(row.slotId,row.createdAt);
   for(const slot of slots){
     const bookedAt=bookedAtBySlot.get(slot.id)??slot.updatedAt;
-    const visit=bookedAt?resolvePricingRule((rules??[]) as PricingRule[],'visit',bookedAt,slot.doctorId,slot.doctor.categoryId):undefined;
+    const visit=bookedAt?resolvePricingRule((rules??[]) as PricingRule[],'visit',bookedAt,slot.doctorId,slot.doctor.categoryId,slot.consultationType??consultationKey('in-person','first')):undefined;
     // The card shows what the visit costs in total: consultation plus any treatments recorded on it.
     prices.set(slot.id,calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined).consultationKzt+(treatmentsBySlot.get(slot.id)??0));
   }
   return prices;
 }
 /** Price of a booked visit with the rules in force when it was booked; shared by the list and the breakdown. */
-async function visitCostFor(slot:{id:string;doctorId:string;startAt:Date;endAt:Date;updatedAt:Date;doctor:{consultationFee:number;categoryId:string;locationId:string|null}},userId:string){
+async function visitCostFor(slot:{id:string;doctorId:string;startAt:Date;endAt:Date;updatedAt:Date;consultationType?:string|null;doctor:{consultationFee:number;categoryId:string;locationId:string|null}},userId:string){
   const bookingEvent=await prisma.notification.findFirst({where:{slotId:slot.id,userId,type:'BOOKED'},orderBy:{createdAt:'desc'},select:{createdAt:true}});
   const bookedAt=bookingEvent?.createdAt??slot.updatedAt;
   // The existing BOOKED notification timestamps the booking event; updatedAt is the fallback if that delivery row is absent.
   const rules=await prisma.pricingRule.findMany({where:{kind:{in:['visit','parking']},effectiveFrom:{lte:bookedAt},OR:[{effectiveTo:null},{effectiveTo:{gt:bookedAt}}]}});
-  const visit=resolvePricingRule(rules as PricingRule[],'visit',bookedAt,slot.doctorId,slot.doctor.categoryId);
-  const parking=resolvePricingRule(rules as PricingRule[],'parking',bookedAt,slot.doctorId,slot.doctor.categoryId,undefined,slot.doctor.locationId);
+  const consultationType=slot.consultationType??consultationKey('in-person','first');
+  const visit=resolvePricingRule(rules as PricingRule[],'visit',bookedAt,slot.doctorId,slot.doctor.categoryId,consultationType);
+  // An online visit needs no parking.
+  const parking=consultationType.startsWith('online')?undefined:resolvePricingRule(rules as PricingRule[],'parking',bookedAt,slot.doctorId,slot.doctor.categoryId,undefined,slot.doctor.locationId);
   const treatments=(await prisma.visitTreatment.findMany({where:{slotId:slot.id},orderBy:{createdAt:'asc'},select:{serviceName:true,amountKzt:true,ruleId:true}}))??[];
   const cost=calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined,treatments.map(item=>({label:item.serviceName,amountKzt:item.amountKzt,...(item.ruleId?{ruleId:item.ruleId}:{})})));
   const duration=(slot.endAt.getTime()-slot.startAt.getTime())/60000;
-  return {...cost,bookedAt,parking:parking?{durationMinutes:duration,amountKzt:calculateParkingCost(duration,parking),ratePerHourKzt:parking.ratePerHourKzt,freeMinutes:parking.freeMinutes,rounding:parking.rounding,dailyCapKzt:parking.dailyCapKzt}:null};
+  return {...cost,bookedAt,consultationType,parking:parking?{durationMinutes:duration,amountKzt:calculateParkingCost(duration,parking),ratePerHourKzt:parking.ratePerHourKzt,freeMinutes:parking.freeMinutes,rounding:parking.rounding,dailyCapKzt:parking.dailyCapKzt}:null};
 }
 router.get('/me/appointments/:slotId/cost',requireAuth,requireRole(Role.PATIENT),async(req,res)=>{
   const slot=await prisma.scheduleSlot.findFirst({where:{id:String(req.params.slotId),patientId:req.user!.id},include:{doctor:{select:{consultationFee:true,categoryId:true,locationId:true}}}});

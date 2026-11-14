@@ -1,7 +1,7 @@
 import { FormEvent, ReactNode, Suspense, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
-import { authApi, DoctorProfile, ScheduleSlot } from "../lib/api";
+import { authApi, consultationLabel, DoctorProfile, ScheduleSlot } from "../lib/api";
 import { clock, formatInClinic } from "../lib/almaty";
 import { toast } from "../lib/toast";
 import { Icon } from "../components/Icons";
@@ -121,8 +121,8 @@ export default function DoctorVisitPage() {
             <dl>
               <div><Icon name="calendar" size={18} /><dt>Date and time</dt><dd>{shortWeekday(slot.startAt)} · {clock(slot.startAt)}–{clock(slot.endAt)}{slot.checkedInAt && <small>Arrived {clock(slot.checkedInAt)}</small>}</dd></div>
               <div><Icon name="file" size={18} /><dt>Reason</dt><dd>{slot.visitPurpose || "Not provided"}</dd></div>
-              <div><Icon name="stethoscope" size={18} /><dt>Consultation</dt><dd>{doctor?.category.name ?? "Visit"} · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min</dd></div>
-              <div><Icon name="pin" size={18} /><dt>Office</dt><dd>{doctor?.office || "Not listed"}</dd></div>
+              <div><Icon name="stethoscope" size={18} /><dt>Consultation</dt><dd>{doctor?.category.name ?? "Visit"} · {Math.round((Date.parse(slot.endAt) - Date.parse(slot.startAt)) / 60000)} min{slot.consultationType && <small className="dw-consult-type">{consultationLabel(slot.consultationType)}</small>}</dd></div>
+              <div><Icon name="pin" size={18} /><dt>Office</dt><dd>{slot.consultationType?.startsWith("online") ? "Online · video call" : doctor?.office || "Not listed"}</dd></div>
             </dl>
           </section>
           <section className="dw-info-group is-history" aria-label="With you">
