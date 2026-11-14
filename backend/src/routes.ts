@@ -363,7 +363,9 @@ router.get('/doctors', async (req, res) => {
       AND s."doctorId" IN (${Prisma.join(doctorIds)})
     ORDER BY s."doctorId", s."startAt"`)) ?? [] : [];
   const nextByDoctor = new Map(nextSlots.map((slot) => [slot.doctorId, { id: slot.id, startAt: slot.startAt, endAt: slot.endAt }]));
-  res.json({ doctors: doctors.map((doctor) => ({ ...doctor, scheduleSlots: nextByDoctor.has(doctor.id) ? [nextByDoctor.get(doctor.id)!] : [] })) });
+  // Show the price a booking made now would be charged: the active visit rule, else the doctor's own fee.
+  const fees = await currentVisitFees(doctors, now);
+  res.json({ doctors: doctors.map((doctor) => ({ ...doctor, consultationFee: fees.get(doctor.id) ?? doctor.consultationFee, scheduleSlots: nextByDoctor.has(doctor.id) ? [nextByDoctor.get(doctor.id)!] : [] })) });
 });
 
 router.patch('/doctors/me/office', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
@@ -375,11 +377,44 @@ router.patch('/doctors/me/office', requireAuth, requireRole(Role.DOCTOR), async 
 });
 
 router.put('/doctors/me/location', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
-  const location = parsed(doctorLocationSchema, req.body);
-  const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
+  const { locationId, ...location } = parsed(doctorLocationSchema, req.body);
+  const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, select: { id: true, locationId: true } });
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
-  const updated = await prisma.doctor.update({ where: { id: doctor.id }, data: location, include: { category: true } });
+  if (locationId === undefined) {
+    const updated = await prisma.doctor.update({ where: { id: doctor.id }, data: location, include: { category: true } });
+    return res.json({ doctor: updated });
+  }
+  const office = locationId ? await activeOffice(locationId) : null;
+  if (locationId && !office) return res.status(400).json({ error: 'Choose an active office from the clinic list.' });
+  const updated = await prisma.$transaction(async (tx) => {
+    const saved = await tx.doctor.update({
+      where: { id: doctor.id },
+      data: { ...location, locationId: office?.id ?? null, ...(office ? { office: office.name, officeNumber: office.name, city: office.city } : {}) },
+      include: { category: true },
+    });
+    if ((office?.id ?? null) !== doctor.locationId) await tx.referenceDataAudit.create({ data: { actorId: req.user!.id, entity: 'doctor-office', entityId: doctor.id, action: 'chosen-by-doctor', oldValue: { locationId: doctor.locationId }, newValue: { locationId: office?.id ?? null } } });
+    return saved;
+  });
   res.json({ doctor: updated });
+});
+
+/** An office that patients can be sent to: it, its floor and its city are all active. */
+async function activeOffice(locationId: string) {
+  const location = await prisma.location.findUnique({ where: { id: locationId }, include: { parent: { include: { parent: true } } } });
+  if (!location || location.kind !== 'office' || !location.active || !location.parent?.active || !location.parent.parent?.active) return null;
+  return { id: location.id, name: location.name, floor: location.parent.name, city: location.parent.parent.name };
+}
+
+/** The clinic's active offices, for the doctor's own office picker. */
+router.get('/doctors/me/offices', requireAuth, requireRole(Role.DOCTOR), async (_req, res) => {
+  const offices = (await prisma.location.findMany({
+    where: { kind: 'office', active: true, parent: { active: true, parent: { active: true } } },
+    select: { id: true, name: true, parent: { select: { name: true, parent: { select: { name: true } } } } },
+    orderBy: { name: 'asc' },
+  })) ?? [];
+  const list = offices.map((office) => ({ id: office.id, name: office.name, floor: office.parent?.name ?? '', city: office.parent?.parent?.name ?? '' }));
+  list.sort((a, b) => a.city.localeCompare(b.city) || a.floor.localeCompare(b.floor, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  res.json({ offices: list });
 });
 
 /** Visits released for no check-in, newest first, with the doctor's and patient's display names. */
@@ -406,7 +441,9 @@ router.get('/doctors/me/missed-visits', requireAuth, requireRole(Role.DOCTOR), a
 router.get('/doctors/me', requireAuth, requireRole(Role.DOCTOR), async (req, res) => {
   const doctor = await prisma.doctor.findUnique({ where: { userId: req.user!.id }, include: { category: true } });
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found.' });
-  res.json({ doctor });
+  // The fee patients are charged now, so the doctor sees the same price as the booking screens.
+  const fee = doctor.categoryId ? (await currentVisitFees([doctor], new Date())).get(doctor.id) : undefined;
+  res.json({ doctor: { ...doctor, consultationFee: fee ?? doctor.consultationFee } });
 });
 
 /**
@@ -710,7 +747,7 @@ router.get('/front-desk/availability', requireAuth, requireRole(Role.FRONT_DESK,
     take: 2000,
     select: {
       id: true, startAt: true, endAt: true,
-      doctor: { select: { id: true, office: true, officeNumber: true, clinicName: true, consultationFee: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
+      doctor: { select: { id: true, office: true, officeNumber: true, clinicName: true, consultationFee: true, categoryId: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } },
     },
   });
   const byDoctor = new Map<string, { id: string; name: string; specialty: string; office: string | null; consultationFee: number; slots: Array<{ id: string; startAt: Date; endAt: Date }> }>();
@@ -721,6 +758,8 @@ router.get('/front-desk/availability', requireAuth, requireRole(Role.FRONT_DESK,
     }
     byDoctor.get(doctor.id)!.slots.push({ id: slot.id, startAt: slot.startAt, endAt: slot.endAt });
   }
+  const walkInFees = await currentVisitFees(Array.from(new Map(slots.map((slot) => [slot.doctor.id, slot.doctor])).values()), new Date());
+  for (const entry of byDoctor.values()) entry.consultationFee = walkInFees.get(entry.id) ?? entry.consultationFee;
   // Insertion order already follows the earliest free slot, so the soonest doctors come first.
   res.json({ date, specialtyCounts, doctors: Array.from(byDoctor.values()) });
 });
@@ -952,9 +991,9 @@ router.get('/admin/doctors', requireAuth, requireRole(Role.ADMIN), async (_req, 
 router.patch('/admin/doctors/:id/location',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
   const parsedLocation=z.object({locationId:z.string().nullable()}).safeParse(req.body);if(!parsedLocation.success)return res.status(400).json({error:'Choose a valid office location.'});
   const doctorId=String(req.params.id);const doctor=await prisma.doctor.findUnique({where:{id:doctorId},select:{id:true,locationId:true}});if(!doctor)return res.status(404).json({error:'Doctor not found.'});
-  const location=parsedLocation.data.locationId?await prisma.location.findUnique({where:{id:parsedLocation.data.locationId},include:{parent:{include:{parent:true}}}}):null;
-  if(parsedLocation.data.locationId&&(!location||location.kind!=='office'||!location.active||!location.parent?.active||!location.parent.parent?.active))return res.status(400).json({error:'Choose an active office under an active floor and city.'});
-  const updated=await prisma.$transaction(async tx=>{const saved=await tx.doctor.update({where:{id:doctorId},data:{locationId:location?.id??null,office:location?.name??null,city:location?.parent?.parent?.name??null},include:{location:true}});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'doctor-office',entityId:doctorId,action:'assigned',oldValue:{locationId:doctor.locationId},newValue:{locationId:location?.id??null}}});return saved;});
+  const location=parsedLocation.data.locationId?await activeOffice(parsedLocation.data.locationId):null;
+  if(parsedLocation.data.locationId&&!location)return res.status(400).json({error:'Choose an active office under an active floor and city.'});
+  const updated=await prisma.$transaction(async tx=>{const saved=await tx.doctor.update({where:{id:doctorId},data:{locationId:location?.id??null,office:location?.name??null,officeNumber:location?.name??null,city:location?.city??null},include:{location:true}});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'doctor-office',entityId:doctorId,action:'assigned',oldValue:{locationId:doctor.locationId},newValue:{locationId:location?.id??null}}});return saved;});
   res.json({doctor:updated});
 });
 
@@ -1053,6 +1092,17 @@ router.patch('/admin/pricing/:id',requireAuth,requireRole(Role.ADMIN),async(req,
   res.status(201).json({rule:version});
 });
 /** Consultation price for every visit in a patient's list, using three queries in total. */
+/** Visit price for a booking made at `at`, per doctor: the most specific active visit rule, else the doctor's fee. One query. */
+async function currentVisitFees(doctors:Array<{id:string;categoryId:string;consultationFee:number}>,at:Date){
+  const fees=new Map<string,number>();
+  if(!doctors.length)return fees;
+  const rules=(await prisma.pricingRule.findMany({where:{kind:'visit',effectiveFrom:{lte:at},OR:[{effectiveTo:null},{effectiveTo:{gt:at}}]}}))??[];
+  for(const doctor of doctors){
+    const rule=resolvePricingRule(rules as PricingRule[],'visit',at,doctor.id,doctor.categoryId);
+    fees.set(doctor.id,calculateVisitCost(doctor.consultationFee,rule?{id:rule.id,amountKzt:rule.amountKzt}:undefined).consultationKzt);
+  }
+  return fees;
+}
 async function listPrices(slots:Array<{id:string;doctorId:string;updatedAt:Date;doctor:{consultationFee:number;categoryId:string}}>,userId:string){
   const prices=new Map<string,number>();
   if(!slots.length)return prices;
@@ -1116,6 +1166,18 @@ router.get('/admin/statistics',requireAuth,requireRole(Role.ADMIN),async(req,res
 });
 router.post('/admin/integrity/run',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>{
   try{res.json(await runAndStoreIntegrity());}catch{res.status(500).json({error:'Integrity checks could not be completed.'});}
+});
+/** Refused medical-record reads and writes, newest first. Who tried, which action and whose record; never the record content. */
+router.get('/admin/security/access-attempts',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>{
+  const since=new Date(Date.now()-7*24*60*60*1000);
+  const [rows,lastWeek]=await Promise.all([
+    prisma.historyAccessAudit.findMany({orderBy:{createdAt:'desc'},take:50,select:{id:true,createdAt:true,actorRole:true,endpoint:true,targetPatientId:true,actor:{select:{firstName:true,lastName:true}}}}),
+    prisma.historyAccessAudit.count({where:{createdAt:{gte:since}}}),
+  ]);
+  const patientIds=Array.from(new Set((rows??[]).map(row=>row.targetPatientId).filter(id=>id&&id!=='unknown')));
+  const patients=patientIds.length?(await prisma.user.findMany({where:{id:{in:patientIds},role:Role.PATIENT},select:{id:true,firstName:true,lastName:true}}))??[]:[];
+  const patientName=new Map(patients.map(patient=>[patient.id,`${patient.firstName} ${patient.lastName}`]));
+  res.json({lastWeek:lastWeek??0,attempts:(rows??[]).map(row=>({id:row.id,createdAt:row.createdAt,actor:row.actor?`${row.actor.firstName} ${row.actor.lastName}`:null,actorRole:row.actorRole,action:row.endpoint,patient:patientName.get(row.targetPatientId)??null}))});
 });
 router.get('/admin/integrity/runs',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>res.json({runs:await prisma.integrityRun.findMany({orderBy:{startedAt:'desc'},take:30})}));
 router.get('/admin/reference/categories',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>res.json({categories:await prisma.category.findMany({include:{_count:{select:{doctors:true}}},orderBy:{name:'asc'}})}));

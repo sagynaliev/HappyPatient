@@ -47,6 +47,8 @@ export const doctorLocationSchema = z.object({
   clinicName: optionalLocationText(150),
   streetAddress: optionalLocationText(200),
   officeNumber: optionalLocationText(50),
+  /** An office from the clinic's reference list; when given it sets the office and city. */
+  locationId: z.string().min(1).max(64).nullable().optional(),
 });
 export const scheduleSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidDate, 'Enter a valid calendar date.'),

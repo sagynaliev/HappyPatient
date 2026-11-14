@@ -13,6 +13,7 @@ type Audit = {id:string;action:string;createdAt:string;actor:{firstName:string;l
 type ReferenceAudit = {id:string;entity:string;entityId:string;action:string;createdAt:string;actor:{firstName:string;lastName:string}|null;oldValue:unknown;newValue:unknown};
 type Rule = {id:string;kind:Kind;amountKzt:number;ratePerHourKzt:number|null;freeMinutes:number;rounding:string;dailyCapKzt:number|null;effectiveFrom:string;effectiveTo:string|null;active:boolean;doctorId:string|null;categoryId:string|null;consultationType:string|null;serviceCode:string|null;serviceName:string|null;category:{name:string}|null;office:{name:string}|null;createdBy:{firstName:string;lastName:string}|null;audits:Audit[]};
 type Check = {id:string;name:string;description:string;count:number;severity:'info'|'warning'|'critical';sampleIds:string[]};
+type AccessAttempt = {id:string;createdAt:string;actor:string|null;actorRole:string|null;action:string;patient:string|null};
 type Run = {id:string;startedAt:string;finishedAt:string|null;status:string;results:Check[]|null};
 type Stats = {period?:string;totalVisits:number;utilization:number;noShowRate:number;newPatients:number;returningPatients:number;timeSeries:{period:string;visits:number}[];bySpecialty:{name:string;visits:number}[];byOffice:{name:string;visits:number}[];doctorWorkload:{doctorId:string;doctorName:string;specialty:string;bookedCount:number;completedCount:number;bookedMinutes:number;availableMinutes:number;utilization:number;averageAppointmentsPerWorkingDay:number;cancelled?:number;expired?:number}[]};
 const money=(n:number)=>new Intl.NumberFormat('en-US').format(n)+' KZT';
@@ -24,6 +25,8 @@ const priorDay=(value:string,days:number)=>{const date=new Date(value+'T12:00:00
 const isoStart=(date:string)=>new Date(date+'T00:00:00+05:00').toISOString();
 const isoEnd=(date:string)=>new Date(date+'T00:00:00+05:00').toISOString();
 const kindNames:Record<Kind,string>={visit:'Visit',treatment:'Treatment',parking:'Parking'};
+const roleNames:Record<string,string>={PATIENT:'Patient',DOCTOR:'Doctor',ADMIN:'Administrator',FRONT_DESK:'Front desk'};
+const accessActions:Record<string,string>={list:'View history',get:'Open a record',export:'Export history',create:'Add a note',update:'Edit a note'};
 const checkName=(id:string)=>id.replace(/-/g,' ');
 const ruleIsActive=(rule:Rule)=>rule.active&&(!rule.effectiveTo||Date.parse(rule.effectiveTo)>Date.now());
 
@@ -35,6 +38,7 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   const [locations,setLocations]=useState<Location[]>([]);
   const [referenceAudits,setReferenceAudits]=useState<ReferenceAudit[]>([]);
   const [runs,setRuns]=useState<Run[]>([]);
+  const [attempts,setAttempts]=useState<{lastWeek:number;attempts:AccessAttempt[]}|null>(null);
   const [stats,setStats]=useState<Stats|null>(null);
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
@@ -76,7 +80,10 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
         const end=new Date(to+'T12:00:00+05:00');end.setUTCDate(end.getUTCDate()+1);
         setStats(await api<Stats>('/admin/statistics?from='+encodeURIComponent(isoStart(from))+'&to='+encodeURIComponent(end.toISOString())+'&period='+period));
       }
-      if(view==='integrity') setRuns((await api<{runs:Run[]}>('/admin/integrity/runs')).runs);
+      if(view==='integrity') {
+        const [r,a]=await Promise.all([api<{runs:Run[]}>('/admin/integrity/runs'),api<{lastWeek:number;attempts:AccessAttempt[]}>('/admin/security/access-attempts').catch(()=>null)]);
+        setRuns(r.runs);setAttempts(a&&Array.isArray(a.attempts)?a:null);
+      }
       if(view==='reference') {
         const [c,l,d,a]=await Promise.all([api<{categories:Category[]}>('/admin/reference/categories'),api<{locations:Location[]}>('/admin/reference/locations'),api<{doctors:DoctorChoice[]}>('/admin/doctors'),api<{audits:ReferenceAudit[]}>('/admin/reference/audit')]);
         setCategories(c.categories);setLocations(l.locations);setReferenceDoctors(d.doctors);setReferenceAudits(a.audits);
@@ -222,6 +229,10 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
         <div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>Check</th><th>Records</th><th>Trend</th><th>Result</th><th>Sample IDs</th></tr></thead><tbody>{latestChecks.map(check=>{const prior=previousRun?.results?.find(item=>item.id===check.id);const delta=prior?check.count-prior.count:null;return <tr key={check.id}><td><strong>{check.name??checkName(check.id)}</strong><small>{check.description??''}</small></td><td>{check.count}</td><td>{delta===null?'—':delta===0?'No change':delta>0?'+'+delta:String(delta)}</td><td>{severityPill(check)}</td><td>{check.sampleIds?.length?<details><summary>{check.sampleIds.length} IDs</summary><ul className="ad-id-list">{check.sampleIds.map(id=><li key={id}><code>{id}</code></li>)}</ul></details>:'—'}</td></tr>})}</tbody></table></div>
       </section>}
       {runs.length>0&&<section className="admin-panel ad-panel"><div className="admin-panel-header"><div><h2>Run history</h2><p className="ad-muted">Newest first · last {runs.length}</p></div></div><ul className="ad-run-list">{runs.map(run=>{const results=Array.isArray(run.results)?run.results:[];const failing=results.filter(check=>check.count>0);const critical=failing.filter(check=>check.severity==='critical').length;return <li key={run.id}><span className="ad-audit-date">{dateTimeLabel(run.startedAt)}</span>{run===latestRun&&<span className="admin-status admin-status-muted">Latest</span>}{run.status!=='complete'||!results.length?<span className={`admin-status ${run.status==='failed'?'admin-status-danger':'admin-status-amber'}`}>{run.status==='failed'?'Failed · no results':run.status==='running'?'Running or interrupted':'No results'}</span>:<><span>{results.length-failing.length} of {results.length} passed</span>{critical?<span className="admin-status admin-status-danger">{critical} critical</span>:failing.length?<span className="admin-status admin-status-amber">{failing.length} to review</span>:<span className="admin-status admin-status-active">All clear</span>}</>}</li>})}</ul></section>}
+      {attempts&&<section className="admin-panel ad-panel" aria-labelledby="access-attempts-heading">
+        <div className="admin-panel-header"><div><h2 id="access-attempts-heading">Refused medical-record access</h2><p className="ad-muted">Attempts to open or change a record without permission · {attempts.lastWeek} in the last 7 days · record content is never stored</p></div></div>
+        {attempts.attempts.length===0?<p className="ad-empty-state">No refused attempts recorded.</p>:<div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>When</th><th>Who</th><th>Role</th><th>Action</th><th>Patient record</th></tr></thead><tbody>{attempts.attempts.map(item=><tr key={item.id}><td>{dateTimeLabel(item.createdAt)}</td><td>{item.actor??'Not signed in'}</td><td>{item.actorRole?roleNames[item.actorRole]??item.actorRole:'—'}</td><td>{accessActions[item.action]??item.action}</td><td>{item.patient??'Unknown'}</td></tr>)}</tbody></table></div>}
+      </section>}
     </>}
 
     {view==='reference'&&<>

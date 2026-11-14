@@ -62,9 +62,12 @@ export type ScheduleSlot = {
   visitPurpose?: string | null;
   patient?: { id: string; firstName: string; lastName: string; email?: string } | null;
 };
+/** An active office from the clinic's reference list. */
+export type ClinicOffice = { id: string; name: string; floor: string; city: string };
 export type DoctorProfile = {
   id: string;
   office: string | null;
+  locationId?: string | null;
   city?: string | null;
   clinicName?: string | null;
   streetAddress?: string | null;
@@ -151,7 +154,8 @@ export const authApi = {
     api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   doctorProfile: () => api<{ doctor: DoctorProfile }>('/doctors/me'),
   updateOffice: (office: string) => api<{ doctor: DoctorProfile }>('/doctors/me/office', { method: 'PATCH', body: JSON.stringify({ office }) }),
-  updateLocation: (body: { city: string | null; clinicName: string | null; streetAddress: string | null; officeNumber: string | null }) =>
+  doctorOffices: () => api<{ offices: ClinicOffice[] }>('/doctors/me/offices'),
+  updateLocation: (body: { city: string | null; clinicName: string | null; streetAddress: string | null; officeNumber: string | null; locationId?: string | null }) =>
     api<{ doctor: DoctorProfile }>('/doctors/me/location', { method: 'PUT', body: JSON.stringify(body) }),
   createSchedule: (body: { date: string; startTime: string; endTime: string }) =>
     api<{ created: number }>('/doctors/me/schedule', { method: 'POST', body: JSON.stringify(body) }),

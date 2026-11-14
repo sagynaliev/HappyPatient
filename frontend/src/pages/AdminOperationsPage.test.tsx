@@ -83,4 +83,19 @@ describe("admin data quality", () => {
     expect(items[1]).toHaveTextContent("Running or interrupted");
     expect(items[1]).not.toHaveTextContent("All clear");
   });
+
+  it("lists refused medical-record access attempts without record content", async () => {
+    vi.mocked(api).mockImplementation(async (path: string) => path === "/admin/security/access-attempts"
+      ? { lastWeek: 2, attempts: [{ id: "a1", createdAt: "2026-11-10T10:00:00Z", actor: "Sam Doctor", actorRole: "DOCTOR", action: "get", patient: "Casey Patient" }] }
+      : { runs: [] });
+    render(<AdminOperationsPage view="integrity" />);
+    const heading = await screen.findByRole("heading", { name: "Refused medical-record access" });
+    const panel = heading.closest("section")!;
+    expect(panel).toHaveTextContent("2 in the last 7 days");
+    const row = within(panel).getAllByRole("row")[1];
+    expect(row).toHaveTextContent("Sam Doctor");
+    expect(row).toHaveTextContent("Doctor");
+    expect(row).toHaveTextContent("Open a record");
+    expect(row).toHaveTextContent("Casey Patient");
+  });
 });

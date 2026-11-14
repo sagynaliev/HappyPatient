@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { authApi, DoctorProfile, ProfileUser } from "../lib/api";
+import { authApi, ClinicOffice, DoctorProfile, ProfileUser } from "../lib/api";
 import "../styles/appScreens.css";
 import "../styles/profilePage.css";
 import { toast } from "../lib/toast";
@@ -13,6 +13,16 @@ function memberDate(value: string) {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Almaty" }).format(new Date(value));
 }
 
+function draftFrom(doctor: DoctorProfile) {
+  return {
+    city: doctor.city || "",
+    clinicName: doctor.clinicName || "",
+    streetAddress: doctor.streetAddress || "",
+    officeNumber: doctor.officeNumber || "",
+    locationId: doctor.locationId || "",
+  };
+}
+
 export default function ProfilePage() {
   const { user, refreshProfile, updateProfile } = useAuth();
   const [profile, setProfile] = useState<ProfileUser | null>(null);
@@ -20,7 +30,8 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
-  const [locationDraft, setLocationDraft] = useState({ city: "", clinicName: "", streetAddress: "", officeNumber: "" });
+  const [locationDraft, setLocationDraft] = useState({ city: "", clinicName: "", streetAddress: "", officeNumber: "", locationId: "" });
+  const [offices, setOffices] = useState<ClinicOffice[]>([]);
   const [savingLocation, setSavingLocation] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -34,14 +45,14 @@ export default function ProfilePage() {
       setProfile(result);
       setDraft({ firstName: result.firstName, lastName: result.lastName, phone: result.phone || "" });
       if (result.role === "DOCTOR") {
-        const { doctor } = await authApi.doctorProfile();
+        const [{ doctor }, officeList] = await Promise.all([
+          authApi.doctorProfile(),
+          // The picker falls back to a typed office number if the list can't be loaded.
+          authApi.doctorOffices().then((result) => result.offices).catch(() => [] as ClinicOffice[]),
+        ]);
         setDoctorProfile(doctor);
-        setLocationDraft({
-          city: doctor.city || "",
-          clinicName: doctor.clinicName || "",
-          streetAddress: doctor.streetAddress || "",
-          officeNumber: doctor.officeNumber || "",
-        });
+        setOffices(officeList);
+        setLocationDraft(draftFrom(doctor));
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to load profile information. Please try again.");
@@ -101,14 +112,10 @@ export default function ProfilePage() {
         clinicName: locationDraft.clinicName.trim() || null,
         streetAddress: locationDraft.streetAddress.trim() || null,
         officeNumber: locationDraft.officeNumber.trim() || null,
+        ...(offices.length ? { locationId: locationDraft.locationId || null } : {}),
       });
       setDoctorProfile(doctor);
-      setLocationDraft({
-        city: doctor.city || "",
-        clinicName: doctor.clinicName || "",
-        streetAddress: doctor.streetAddress || "",
-        officeNumber: doctor.officeNumber || "",
-      });
+      setLocationDraft(draftFrom(doctor));
       setMessage("Clinic location updated.");
       toast.success("Clinic location updated");
     } catch (caught) {
@@ -117,6 +124,8 @@ export default function ProfilePage() {
       setSavingLocation(false);
     }
   }
+
+  const chosenOffice = offices.find((office) => office.id === locationDraft.locationId);
 
   const field = (id: string, label: string, value: string, type = "text", readOnly = true, onChange?: (next: string) => void) => (
     <label className="pp-field" htmlFor={id} key={id}>
@@ -159,10 +168,18 @@ export default function ProfilePage() {
                 <div className="pp-field-grid">
                   {field("pp-specialty", "Specialty", doctorProfile.category.name)}
                   {field("pp-consultation-fee", "Consultation fee", doctorProfile.consultationFee === undefined ? "Not provided" : `${doctorProfile.consultationFee.toLocaleString("en-US")} KZT`)}
-                  {field("pp-city", "City", locationDraft.city, "text", false, (value) => setLocationDraft((current) => ({ ...current, city: value })))}
+                  {field("pp-city", "City", chosenOffice ? chosenOffice.city : locationDraft.city, "text", Boolean(chosenOffice), (value) => setLocationDraft((current) => ({ ...current, city: value })))}
                   {field("pp-clinic-name", "Clinic name", locationDraft.clinicName, "text", false, (value) => setLocationDraft((current) => ({ ...current, clinicName: value })))}
                   {field("pp-street-address", "Street address", locationDraft.streetAddress, "text", false, (value) => setLocationDraft((current) => ({ ...current, streetAddress: value })))}
-                  {field("pp-office-number", "Cabinet / office number", locationDraft.officeNumber, "text", false, (value) => setLocationDraft((current) => ({ ...current, officeNumber: value })))}
+                  {offices.length ? (
+                    <label className="pp-field" htmlFor="pp-office">
+                      <span>Office</span>
+                      <select id="pp-office" value={locationDraft.locationId} onChange={(event) => setLocationDraft((current) => ({ ...current, locationId: event.target.value }))}>
+                        <option value="">Choose from the clinic list</option>
+                        {offices.map((office) => <option key={office.id} value={office.id}>{office.name} · {office.floor} · {office.city}</option>)}
+                      </select>
+                    </label>
+                  ) : field("pp-office-number", "Cabinet / office number", locationDraft.officeNumber, "text", false, (value) => setLocationDraft((current) => ({ ...current, officeNumber: value })))}
                 </div>
                 <div className="pp-form-actions">
                   <button
@@ -173,6 +190,7 @@ export default function ProfilePage() {
                       && locationDraft.clinicName === (doctorProfile.clinicName || "")
                       && locationDraft.streetAddress === (doctorProfile.streetAddress || "")
                       && locationDraft.officeNumber === (doctorProfile.officeNumber || "")
+                      && locationDraft.locationId === (doctorProfile.locationId || "")
                     )}
                   >
                     {savingLocation ? "Saving…" : "Save clinic location"}
