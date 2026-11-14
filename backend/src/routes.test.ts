@@ -14,6 +14,7 @@ const prismaMock = vi.hoisted(() => ({
   cancelledAppointment: { create: vi.fn(), findMany: vi.fn() },
   expiredAppointment: { findMany: vi.fn() },
   historyAccessAudit: { findMany: vi.fn(), count: vi.fn() },
+  visitTreatment: { findMany: vi.fn(), groupBy: vi.fn(), count: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
   user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   $transaction: vi.fn(),
   $queryRaw: vi.fn(),
@@ -44,6 +45,9 @@ beforeEach(() => {
   prismaMock.notification.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.notification.findFirst.mockResolvedValue(null);
   prismaMock.pricingRule.findMany.mockResolvedValue([]);
+  prismaMock.visitTreatment.findMany.mockResolvedValue([]);
+  prismaMock.visitTreatment.groupBy.mockResolvedValue([]);
+  prismaMock.visitTreatment.count.mockResolvedValue(0);
   prismaMock.doctor.findMany.mockResolvedValue([]);
   prismaMock.location.findMany.mockResolvedValue([]);
   prismaMock.category.findFirst.mockResolvedValue(null);
@@ -1095,6 +1099,56 @@ describe('front desk appointments by day', () => {
     const search = prismaMock.scheduleSlot.findMany.mock.lastCall![0];
     expect(search.where.startAt).toBeUndefined();
     expect(search.orderBy).toEqual({ startAt: 'desc' });
+  });
+});
+
+describe('treatments on a visit (story 28)', () => {
+  const now = Date.now();
+  const visit = (over: Record<string, unknown> = {}) => ({ id: 'visit-1', status: SlotStatus.OCCUPIED, patientId: 'patient-user', doctorId: 'doctor-1', startAt: new Date(now - 20 * 60_000), endAt: new Date(now + 10 * 60_000), updatedAt: new Date(now - 86_400_000), doctor: { categoryId: 'cat-1' }, ...over });
+  const treatmentRule = (over: Record<string, unknown>) => ({ kind: 'treatment', doctorId: null, categoryId: null, consultationType: null, officeId: null, ratePerHourKzt: null, freeMinutes: 0, rounding: 'per_started_hour', dailyCapKzt: null, effectiveFrom: new Date('2026-01-01'), effectiveTo: null, active: true, ...over });
+
+  it('lists one price per service, the most specific rule winning', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValue(visit());
+    prismaMock.pricingRule.findMany.mockResolvedValue([
+      treatmentRule({ id: 'ecg', serviceCode: 'ECG-1', serviceName: 'Electrocardiogram', amountKzt: 5000 }),
+      treatmentRule({ id: 'ecg-cat', serviceCode: 'ECG-1', serviceName: 'Electrocardiogram', categoryId: 'cat-1', amountKzt: 6000 }),
+      treatmentRule({ id: 'us', serviceCode: 'US-KNEE', serviceName: 'Knee ultrasound', amountKzt: 8500 }),
+    ]);
+    const response = await request(app).get('/api/doctors/me/visits/visit-1/treatments').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).expect(200);
+    expect(response.body.editable).toBe(true);
+    expect(response.body.available.map((item: { name: string; amountKzt: number }) => [item.name, item.amountKzt])).toEqual([['Electrocardiogram', 6000], ['Knee ultrasound', 8500]]);
+  });
+
+  it('adds a treatment with the price fixed from the rule', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValue(visit());
+    prismaMock.pricingRule.findMany.mockResolvedValue([treatmentRule({ id: 'us', serviceCode: 'US-KNEE', serviceName: 'Knee ultrasound', amountKzt: 8500 })]);
+    prismaMock.visitTreatment.create.mockImplementation(async ({ data }) => ({ id: 't1', createdAt: new Date(), ...data }));
+    const response = await request(app).post('/api/doctors/me/visits/visit-1/treatments').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).send({ key: 'us-knee' }).expect(201);
+    expect(prismaMock.visitTreatment.create).toHaveBeenCalledWith({ data: expect.objectContaining({ slotId: 'visit-1', serviceName: 'Knee ultrasound', amountKzt: 8500, ruleId: 'us', addedById: 'doctor-user' }) });
+    expect(response.body.treatment).toMatchObject({ name: 'Knee ultrasound', amountKzt: 8500 });
+  });
+
+  it('refuses treatments on a visit that is not checked in or whose window closed', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(visit({ status: SlotStatus.BOOKED }));
+    await request(app).post('/api/doctors/me/visits/visit-1/treatments').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).send({ key: 'us-knee' }).expect(409);
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(visit({ startAt: new Date(now - 3 * 86_400_000), endAt: new Date(now - 2 * 86_400_000) }));
+    await request(app).delete('/api/doctors/me/visits/visit-1/treatments/t1').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).expect(409);
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce(null);
+    await request(app).get('/api/doctors/me/visits/other/treatments').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).expect(404);
+    await request(app).get('/api/doctors/me/visits/visit-1/treatments').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(403);
+    expect(prismaMock.visitTreatment.create).not.toHaveBeenCalled();
+    expect(prismaMock.visitTreatment.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('shows treatments as lines in the patient price breakdown and in the total', async () => {
+    prismaMock.scheduleSlot.findFirst.mockResolvedValueOnce({ id: 'visit-1', patientId: 'patient-user', doctorId: 'doctor-1', updatedAt: new Date('2026-11-02T00:00:00Z'), startAt: new Date('2026-11-03T00:00:00Z'), endAt: new Date('2026-11-03T00:30:00Z'), doctor: { consultationFee: 10000, categoryId: 'cat-1', locationId: null } });
+    prismaMock.visitTreatment.findMany.mockResolvedValueOnce([{ serviceName: 'Knee ultrasound', amountKzt: 8500, ruleId: 'us' }]);
+    const response = await request(app).get('/api/me/appointments/visit-1/cost').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(200);
+    expect(response.body.totalKzt).toBe(18500);
+    expect(response.body.lines).toEqual([
+      { kind: 'consultation', label: 'Consultation fee', amountKzt: 10000 },
+      { kind: 'treatment', label: 'Knee ultrasound', amountKzt: 8500, ruleId: 'us' },
+    ]);
   });
 });
 

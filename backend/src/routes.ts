@@ -1,5 +1,5 @@
 import { getWalkInSlotStatus, NO_CHECKIN_GRACE_MS } from './visitTime';
-import { medicalHistoryRouter } from './medicalHistory';
+import { medicalHistoryRouter, NOTE_WINDOW_MS } from './medicalHistory';
 import { resolvePricingRule, calculateParkingCost, calculateVisitCost, PricingRule } from './pricing';
 import { getAdminStatistics, runAndStoreIntegrity } from './adminOperations';
 import { clockOffsetMs, realNow, setClockOffset, timeControlEnabled } from './clock';
@@ -1113,17 +1113,20 @@ async function currentVisitFees(doctors:Array<{id:string;categoryId:string;consu
 async function listPrices(slots:Array<{id:string;doctorId:string;updatedAt:Date;doctor:{consultationFee:number;categoryId:string}}>,userId:string){
   const prices=new Map<string,number>();
   if(!slots.length)return prices;
-  const [bookings,rules]=await Promise.all([
+  const [bookings,rules,treatmentTotals]=await Promise.all([
     prisma.notification.findMany({where:{slotId:{in:slots.map(slot=>slot.id)},userId,type:'BOOKED'},orderBy:{createdAt:'desc'},select:{slotId:true,createdAt:true}}),
     prisma.pricingRule.findMany({where:{kind:'visit'}}),
+    prisma.visitTreatment.groupBy({by:['slotId'],where:{slotId:{in:slots.map(slot=>slot.id)}},_sum:{amountKzt:true}}),
   ]);
+  const treatmentsBySlot=new Map((treatmentTotals??[]).map(row=>[row.slotId,row._sum.amountKzt??0]));
   const bookedAtBySlot=new Map<string,Date>();
   // Newest first, so the first row seen for a slot is its latest booking.
   for(const row of bookings??[])if(row.slotId&&!bookedAtBySlot.has(row.slotId))bookedAtBySlot.set(row.slotId,row.createdAt);
   for(const slot of slots){
     const bookedAt=bookedAtBySlot.get(slot.id)??slot.updatedAt;
     const visit=bookedAt?resolvePricingRule((rules??[]) as PricingRule[],'visit',bookedAt,slot.doctorId,slot.doctor.categoryId):undefined;
-    prices.set(slot.id,calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined).consultationKzt);
+    // The card shows what the visit costs in total: consultation plus any treatments recorded on it.
+    prices.set(slot.id,calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined).consultationKzt+(treatmentsBySlot.get(slot.id)??0));
   }
   return prices;
 }
@@ -1135,7 +1138,8 @@ async function visitCostFor(slot:{id:string;doctorId:string;startAt:Date;endAt:D
   const rules=await prisma.pricingRule.findMany({where:{kind:{in:['visit','parking']},effectiveFrom:{lte:bookedAt},OR:[{effectiveTo:null},{effectiveTo:{gt:bookedAt}}]}});
   const visit=resolvePricingRule(rules as PricingRule[],'visit',bookedAt,slot.doctorId,slot.doctor.categoryId);
   const parking=resolvePricingRule(rules as PricingRule[],'parking',bookedAt,slot.doctorId,slot.doctor.categoryId,undefined,slot.doctor.locationId);
-  const cost=calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined);
+  const treatments=(await prisma.visitTreatment.findMany({where:{slotId:slot.id},orderBy:{createdAt:'asc'},select:{serviceName:true,amountKzt:true,ruleId:true}}))??[];
+  const cost=calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined,treatments.map(item=>({label:item.serviceName,amountKzt:item.amountKzt,...(item.ruleId?{ruleId:item.ruleId}:{})})));
   const duration=(slot.endAt.getTime()-slot.startAt.getTime())/60000;
   return {...cost,bookedAt,parking:parking?{durationMinutes:duration,amountKzt:calculateParkingCost(duration,parking),ratePerHourKzt:parking.ratePerHourKzt,freeMinutes:parking.freeMinutes,rounding:parking.rounding,dailyCapKzt:parking.dailyCapKzt}:null};
 }
@@ -1143,6 +1147,58 @@ router.get('/me/appointments/:slotId/cost',requireAuth,requireRole(Role.PATIENT)
   const slot=await prisma.scheduleSlot.findFirst({where:{id:String(req.params.slotId),patientId:req.user!.id},include:{doctor:{select:{consultationFee:true,categoryId:true,locationId:true}}}});
   if(!slot)return res.status(404).json({error:'Visit not found.'});
   res.json(await visitCostFor(slot,req.user!.id));
+});
+/** When the visit was booked: the patient's BOOKED notification, else the slot's last change. Prices are fixed at this time. */
+async function bookedAtFor(slot:{id:string;patientId:string|null;updatedAt:Date}){
+  const event=slot.patientId?await prisma.notification.findFirst({where:{slotId:slot.id,userId:slot.patientId,type:'BOOKED'},orderBy:{createdAt:'desc'},select:{createdAt:true}}):null;
+  return event?.createdAt??slot.updatedAt;
+}
+/** The doctor's own checked-in visit; editable while notes are (from the start until 24 hours after it ended). */
+async function doctorVisit(slotId:string,doctorUserId:string){
+  const slot=await prisma.scheduleSlot.findFirst({where:{id:slotId,doctor:{userId:doctorUserId}},select:{id:true,status:true,patientId:true,startAt:true,endAt:true,updatedAt:true,doctorId:true,doctor:{select:{categoryId:true}}}});
+  if(!slot)return null;
+  const now=Date.now();
+  const editable=slot.status==='OCCUPIED'&&Boolean(slot.patientId)&&slot.startAt.getTime()<=now&&slot.endAt.getTime()>=now-NOTE_WINDOW_MS;
+  return {slot,editable};
+}
+/** Treatments the clinic prices for this visit: one per service, the most specific active rule in force when it was booked. */
+async function treatmentChoices(slot:{doctorId:string;doctor:{categoryId:string}},bookedAt:Date){
+  const rules=((await prisma.pricingRule.findMany({where:{kind:'treatment',active:true,effectiveFrom:{lte:bookedAt},OR:[{effectiveTo:null},{effectiveTo:{gt:bookedAt}}]}}))??[]) as Array<PricingRule&{serviceName:string|null}>;
+  const byService=new Map<string,typeof rules>();
+  for(const rule of rules){const key=(rule.serviceCode||rule.serviceName||'').trim().toLowerCase();if(key)byService.set(key,[...(byService.get(key)??[]),rule]);}
+  const choices:Array<{key:string;code:string|null;name:string;amountKzt:number;ruleId:string}>=[];
+  for(const [key,group] of byService){const rule=resolvePricingRule(group,'treatment',bookedAt,slot.doctorId,slot.doctor.categoryId);if(rule)choices.push({key,code:rule.serviceCode??null,name:(rule as {serviceName?:string|null}).serviceName||rule.serviceCode||key,amountKzt:rule.amountKzt,ruleId:rule.id});}
+  return choices.sort((a,b)=>a.name.localeCompare(b.name));
+}
+const treatmentView=(item:{id:string;serviceCode:string|null;serviceName:string;amountKzt:number;createdAt:Date})=>({id:item.id,code:item.serviceCode,name:item.serviceName,amountKzt:item.amountKzt,createdAt:item.createdAt});
+router.get('/doctors/me/visits/:slotId/treatments',requireAuth,requireRole(Role.DOCTOR),async(req,res)=>{
+  const visit=await doctorVisit(String(req.params.slotId),req.user!.id);
+  if(!visit)return res.status(404).json({error:'Visit not found.'});
+  const [added,available]=await Promise.all([
+    prisma.visitTreatment.findMany({where:{slotId:visit.slot.id},orderBy:{createdAt:'asc'}}),
+    visit.editable?bookedAtFor(visit.slot).then(at=>treatmentChoices(visit.slot,at)):Promise.resolve([]),
+  ]);
+  res.json({editable:visit.editable,available,added:(added??[]).map(treatmentView)});
+});
+router.post('/doctors/me/visits/:slotId/treatments',requireAuth,requireRole(Role.DOCTOR),async(req,res)=>{
+  const input=z.object({key:z.string().trim().min(1).max(120)}).safeParse(req.body);
+  if(!input.success)return res.status(400).json({error:'Choose a treatment from the list.'});
+  const visit=await doctorVisit(String(req.params.slotId),req.user!.id);
+  if(!visit)return res.status(404).json({error:'Visit not found.'});
+  if(!visit.editable)return res.status(409).json({error:'Treatments can be added to a checked-in visit until 24 hours after it ended.'});
+  const choice=(await treatmentChoices(visit.slot,await bookedAtFor(visit.slot))).find(item=>item.key===input.data.key.toLowerCase());
+  if(!choice)return res.status(400).json({error:'This treatment has no price for this visit.'});
+  if(await prisma.visitTreatment.count({where:{slotId:visit.slot.id}})>=30)return res.status(400).json({error:'A visit can have up to 30 treatments.'});
+  const created=await prisma.visitTreatment.create({data:{slotId:visit.slot.id,serviceCode:choice.code,serviceName:choice.name.slice(0,120),amountKzt:choice.amountKzt,ruleId:choice.ruleId,addedById:req.user!.id}});
+  res.status(201).json({treatment:treatmentView(created)});
+});
+router.delete('/doctors/me/visits/:slotId/treatments/:treatmentId',requireAuth,requireRole(Role.DOCTOR),async(req,res)=>{
+  const visit=await doctorVisit(String(req.params.slotId),req.user!.id);
+  if(!visit)return res.status(404).json({error:'Visit not found.'});
+  if(!visit.editable)return res.status(409).json({error:'Treatments can be changed until 24 hours after the visit ended.'});
+  const removed=await prisma.visitTreatment.deleteMany({where:{id:String(req.params.treatmentId),slotId:visit.slot.id}});
+  if(!removed.count)return res.status(404).json({error:'Treatment not found.'});
+  res.status(204).end();
 });
 // Demo clock: everyone reads the app time; only an admin can move it.
 const timeState = () => ({ now: new Date().toISOString(), realNow: new Date(realNow()).toISOString(), offsetMinutes: Math.round(clockOffsetMs() / 60_000), enabled: timeControlEnabled() });

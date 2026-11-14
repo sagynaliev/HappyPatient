@@ -113,6 +113,7 @@ model ScheduleSlot {
   reminders ReminderSent[]
   medicalEntries MedicalEntry[]
   receipt       Receipt?
+  treatments    VisitTreatment[]
   cancellations CancelledAppointment[]
 
   @@unique([doctorId, startAt])
@@ -335,4 +336,18 @@ model IntegrityRun {
  finishedAt DateTime?
  status String @default("running")
  results Json?
+}
+
+/** A treatment done during a visit; amountKzt is fixed from the rule in force when the visit was booked. */
+model VisitTreatment {
+ id String @id @default(cuid())
+ slotId String
+ serviceCode String? @db.VarChar(80)
+ serviceName String @db.VarChar(120)
+ amountKzt Int
+ ruleId String?
+ addedById String?
+ createdAt DateTime @default(now())
+ slot ScheduleSlot @relation(fields:[slotId],references:[id],onDelete:Cascade)
+ @@index([slotId])
 }

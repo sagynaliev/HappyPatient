@@ -71,7 +71,7 @@ function parkingNote(parking: { ratePerHourKzt?: number | null; freeMinutes?: nu
 }
 
 function VisitCost({ slotId, visible }: { slotId: string; visible: boolean }) {
-  const [cost, setCost] = useState<{ consultationKzt: number; totalKzt: number; bookedAt?: string; parking: { durationMinutes: number; amountKzt: number; ratePerHourKzt?: number | null; freeMinutes?: number; rounding?: string; dailyCapKzt?: number | null } | null } | null>(null);
+  const [cost, setCost] = useState<{ consultationKzt: number; totalKzt: number; bookedAt?: string; lines?: Array<{ kind: 'consultation' | 'treatment'; label: string; amountKzt: number }>; parking: { durationMinutes: number; amountKzt: number; ratePerHourKzt?: number | null; freeMinutes?: number; rounding?: string; dailyCapKzt?: number | null } | null } | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
     if (!visible || cost || error) return;
@@ -83,6 +83,7 @@ function VisitCost({ slotId, visible }: { slotId: string; visible: boolean }) {
   return <section className="pa-cost-breakdown" aria-label="Price breakdown">
     {!cost && !error ? <p role="status">Loading price…</p> : error ? <p className="alert error">Price breakdown unavailable.</p> : cost && <dl className="pa-price-list">
       <div><dt>Consultation fee{cost.bookedAt && <small>Price fixed when you booked on {new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "Asia/Almaty" }).format(new Date(cost.bookedAt))}</small>}</dt><dd>{formatFee(cost.consultationKzt)}</dd></div>
+      {(cost.lines ?? []).filter((line) => line.kind === "treatment").map((line, index) => <div key={`${line.label}-${index}`}><dt>{line.label}<small>Treatment</small></dt><dd>{formatFee(line.amountKzt)}</dd></div>)}
       <div className="pa-price-total"><dt>Visit total</dt><dd>{formatFee(cost.totalKzt)}</dd></div>
       {cost.parking && <div className="pa-price-extra"><dt>Parking estimate · {cost.parking.durationMinutes} min<small>{parkingNote(cost.parking)}</small></dt><dd>{formatFee(cost.parking.amountKzt)}</dd></div>}
     </dl>}
