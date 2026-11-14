@@ -26,7 +26,7 @@ router.use(medicalHistoryRouter);
 const parsed = <T>(schema: { parse: (v: unknown) => T }, body: unknown) => schema.parse(body);
 const publicUser = (u: { id: string; email: string; firstName: string; lastName: string; role: Role; phone: string | null }) =>
   ({ id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, role: u.role, phone: u.phone });
-const appointmentReference = (slotId: string) => `HP-${slotId.slice(-8).toUpperCase()}`;
+export const appointmentReference = (slotId: string) => `HP-${slotId.slice(-8).toUpperCase()}`;
 const emailKey = (req: Request) => (typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '');
 // Per address + account for guessing; a wider per-address cap for scripted floods of the hashing endpoints.
 const signInLimit = rateLimit({ windowMs: 15 * 60_000, max: 10, key: emailKey, message: 'Too many sign-in attempts. Please wait 15 minutes and try again.' });
@@ -206,7 +206,7 @@ router.get('/categories', async (req, res) => {
     res.status(500).json({ error: 'The category directory is temporarily unavailable. Please try again shortly.' });
   }
 });
-async function inactiveOfficeIds() {
+export async function inactiveOfficeIds() {
   const locations=await prisma.location.findMany({select:{id:true,kind:true,parentId:true,active:true}});
   const byId=new Map(locations.map(item=>[item.id,item]));
   return locations.filter(item=>{
@@ -1102,23 +1102,26 @@ router.patch('/admin/pricing/:id',requireAuth,requireRole(Role.ADMIN),async(req,
 });
 /** Consultation price for every visit in a patient's list, using three queries in total. */
 /** Follow-up when the patient already had a checked-in visit with this doctor; otherwise a first visit. */
-async function visitKindFor(patientId: string, doctorId: string, db: Pick<typeof prisma, 'scheduleSlot'> = prisma): Promise<VisitKind> {
+export async function visitKindFor(patientId: string, doctorId: string, db: Pick<typeof prisma, 'scheduleSlot'> = prisma): Promise<VisitKind> {
   const earlier = await db.scheduleSlot.count({ where: { patientId, doctorId, status: SlotStatus.OCCUPIED, startAt: { lt: new Date() } } });
   return earlier ? 'follow-up' : 'first';
 }
 /** What this patient would pay with this doctor now, in person and online; the visit kind follows their history. */
+export async function patientConsultationPrices(patientId: string, doctor: { id: string; categoryId: string; consultationFee: number }) {
+  const now = new Date();
+  const visitKind = await visitKindFor(patientId, doctor.id);
+  const rules = ((await prisma.pricingRule.findMany({ where: { kind: 'visit', active: true, effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] } })) ?? []) as PricingRule[];
+  const priceFor = (channel: ConsultationChannel) => { const rule = resolvePricingRule(rules, 'visit', now, doctor.id, doctor.categoryId, consultationKey(channel, visitKind)); return calculateVisitCost(doctor.consultationFee, rule ? { id: rule.id, amountKzt: rule.amountKzt } : undefined).consultationKzt; };
+  return { visitKind, prices: { 'in-person': priceFor('in-person'), online: priceFor('online') } };
+}
 router.get('/doctors/:doctorId/consultation-prices', requireAuth, requireRole(Role.PATIENT), async (req, res) => {
   const doctor = await prisma.doctor.findUnique({ where: { id: String(req.params.doctorId) }, select: { id: true, categoryId: true, consultationFee: true } });
   if (!doctor) return res.status(404).json({ error: 'Doctor not found.' });
-  const now = new Date();
-  const visitKind = await visitKindFor(req.user!.id, doctor.id);
-  const rules = ((await prisma.pricingRule.findMany({ where: { kind: 'visit', active: true, effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] } })) ?? []) as PricingRule[];
-  const priceFor = (channel: ConsultationChannel) => { const rule = resolvePricingRule(rules, 'visit', now, doctor.id, doctor.categoryId, consultationKey(channel, visitKind)); return calculateVisitCost(doctor.consultationFee, rule ? { id: rule.id, amountKzt: rule.amountKzt } : undefined).consultationKzt; };
-  res.json({ visitKind, prices: { 'in-person': priceFor('in-person'), online: priceFor('online') } });
+  res.json(await patientConsultationPrices(req.user!.id, doctor));
 });
 
 /** Visit price for a booking made at `at`, per doctor: the most specific active visit rule, else the doctor's fee. One query. */
-async function currentVisitFees(doctors:Array<{id:string;categoryId:string;consultationFee:number}>,at:Date){
+export async function currentVisitFees(doctors:Array<{id:string;categoryId:string;consultationFee:number}>,at:Date){
   const fees=new Map<string,number>();
   if(!doctors.length)return fees;
   const rules=(await prisma.pricingRule.findMany({where:{kind:'visit',effectiveFrom:{lte:at},OR:[{effectiveTo:null},{effectiveTo:{gt:at}}]}}))??[];

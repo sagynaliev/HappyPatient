@@ -7,6 +7,7 @@ import { NotificationBell } from "./NotificationBell";
 import { Icon, IconName } from "./Icons";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { SidebarCard } from "./SidebarCard";
+import { AssistantWidget } from "./AssistantWidget";
 import "../styles/appShell.css";
 
 const COMPACT_HEADER_QUERY = "(max-width: 1100px)";
@@ -159,6 +160,7 @@ function AppShell({ children }: { children: ReactNode }) {
         </header>
         <main id="main-content" tabIndex={-1} className="hp-content">{children}</main>
       </div>
+      {user.role === "PATIENT" && <AssistantWidget firstName={user.firstName} />}
     </div>
   );
 }

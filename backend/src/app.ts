@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import router from './routes';
+import { assistantRouter } from './assistant';
 import { config } from './config';
 import { errorHandler } from './middleware';
 
@@ -12,5 +13,6 @@ app.use(helmet());
 app.use(cors({ origin: config.FRONTEND_URL ?? false }));
 app.use(express.json());
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.use('/api', assistantRouter);
 app.use('/api', router);
 app.use(errorHandler);
