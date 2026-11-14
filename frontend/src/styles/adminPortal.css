@@ -433,3 +433,6 @@
     align-items: flex-start;
   }
 }
+
+/* The users table starts right under the panel edge (a global rule added 32px above it). */
+.admin-table-panel .admin-table { margin-top: 0; }

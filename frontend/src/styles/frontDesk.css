@@ -15,3 +15,8 @@
 .fdk-status-filter button[aria-pressed="true"] span { color: rgb(255 255 255 / 85%); }
 .fdk-specialty select { min-height: 40px; padding: 6px 10px; border: 1px solid var(--border, #cbd5e1); border-radius: 10px; background: #fff; font: inherit; font-size: 14px; }
 @media (max-width: 600px) { .fdk-toolbar { align-items: stretch; } .fdk-status-filter { width: 100%; justify-content: space-between; } .fdk-specialty, .fdk-specialty select { width: 100%; } }
+
+/* Day picker, Today, status chips and specialty share one 42px height. */
+.fdk-day input, .fdk-day-step, .fdk-today, .fdk-specialty select { box-sizing: border-box; height: 42px; min-height: 42px; }
+.fdk-specialty select { padding-left: 12px; border-radius: 10px; color: #0f172a; }
+.fdk-status-filter { box-sizing: border-box; height: 42px; align-items: center; }
