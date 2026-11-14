@@ -183,7 +183,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
             <h3 className="fdk-step-title" aria-hidden="true"><span className="fdk-step-number">1</span>Patient</h3>
             <div className="front-desk-inline"><label>IIN<input required inputMode="numeric" maxLength={12} placeholder="12 digits — finds an existing patient" value={patient.iin} onChange={(event) => setPatient({ ...patient, iin: event.target.value.replace(/\D/g, "").slice(0, 12) })} /></label><button className="button button-outline" type="button" disabled={busy} onClick={() => void lookup()}>Find patient</button></div>
             <div className="front-desk-two"><label>First name<input required value={patient.firstName} onChange={(event) => setPatient({ ...patient, firstName: event.target.value })} /></label><label>Last name<input required value={patient.lastName} onChange={(event) => setPatient({ ...patient, lastName: event.target.value })} /></label></div>
-            <div className="front-desk-two"><label>Email<input type="email" value={patient.email} onChange={(event) => setPatient({ ...patient, email: event.target.value })} /></label><label>Phone<input value={patient.phone ?? ""} onChange={(event) => setPatient({ ...patient, phone: event.target.value })} /></label></div>
+            <div className="front-desk-two is-stacked"><label>Email<input type="email" value={patient.email} onChange={(event) => setPatient({ ...patient, email: event.target.value })} /></label><label>Phone<input value={patient.phone ?? ""} onChange={(event) => setPatient({ ...patient, phone: event.target.value })} /></label></div>
           </fieldset>
           <fieldset className="fdk-step is-confirm">
             <legend className="sr-only">Confirm</legend>
@@ -194,7 +194,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
                 <div><strong>{picked.doctorName}</strong><small>{picked.specialty}{picked.office ? ` · ${picked.office}` : ""} · {dateText(picked.startAt)}</small></div>
                 <button type="button" className="fdk-picked-clear" onClick={() => setPicked(null)}>Change</button>
               </div>
-            ) : <p className="fdk-picked-empty">Pick a free time above.</p>}
+            ) : null}
             <label className="fdk-purpose">Visit purpose<textarea required value={purpose} onChange={(event) => setPurpose(event.target.value)} maxLength={300} rows={1} /></label>
             <button className="button" disabled={busy || !picked}>{busy ? "Saving…" : picked ? `Register and book ${timeText(picked.startAt)}` : "Register and book"}</button>
           </fieldset>

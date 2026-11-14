@@ -724,6 +724,6 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
   .bk-side .bk-summary-price { margin-top: 4px; }
 }
 
-/* Walk-in: the visit purpose is a short note (about three lines), not a field that fills the column. */
-.fdk-walkin-layout .fdk-purpose { flex: none; }
-.fdk-walkin-layout .fdk-purpose textarea { flex: none; height: 88px; min-height: 88px; resize: vertical; }
+/* Walk-in: email and phone one under the other; the visit purpose fills the rest of the column, so the button lines up with the doctor list. */
+.fdk-walkin-layout .fdk-purpose textarea { min-height: 88px; }
+.front-desk-page .front-desk-two.is-stacked { grid-template-columns: minmax(0, 1fr); }
