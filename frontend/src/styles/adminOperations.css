@@ -19,7 +19,12 @@
 .ad-ops-alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* Panels */
-.ad-ops .ad-panel { display: grid; gap: 16px; min-width: 0; margin: 0; border: 1px solid var(--border); background: var(--surface); }
+.ad-ops .ad-panel { display: grid; align-content: start; gap: 16px; min-width: 0; margin: 0; border: 1px solid var(--border); background: var(--surface); }
+/* Collapsible extras (table view of a chart, passed checks) and "show all" buttons */
+.ad-details { border-top: 1px solid var(--border); padding-top: 12px; }
+.ad-details > summary { width: max-content; max-width: 100%; padding: 6px 2px; color: var(--primary-deep); font-size: 14px; font-weight: 600; cursor: pointer; }
+.ad-details[open] > summary { margin-bottom: 12px; }
+.ad-show-more { justify-self: start; }
 .ad-ops .admin-panel-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 0; }
 .ad-ops .admin-panel-header h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 .ad-empty-state { margin: 0; padding: 26px 16px; border-radius: 16px; background: #f6f8ff; color: var(--text-secondary); text-align: center; font-size: 14px; }

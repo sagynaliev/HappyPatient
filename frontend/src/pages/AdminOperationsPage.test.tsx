@@ -27,11 +27,23 @@ describe("admin pricing", () => {
   it("lists price changes newest first with a time", async () => {
     mockPricing([rule({ id: "r1", audits: [audit("a1", "2026-11-05T04:00:00Z", "created")] }), rule({ id: "r2", kind: "parking", audits: [audit("a2", "2026-11-05T06:30:00Z", "deactivated")] })]);
     render(<AdminOperationsPage view="pricing" />);
-    const list = (await screen.findByRole("heading", { name: "Price change audit" })).closest("section")!;
+    const list = (await screen.findByRole("heading", { name: "Price change history" })).closest("section")!;
     const items = within(list).getAllByRole("listitem");
-    expect(items[0]).toHaveTextContent("deactivated");
+    expect(items[0]).toHaveTextContent("deactivated a parking price");
     expect(items[0]).toHaveTextContent("11:30");
-    expect(items[1]).toHaveTextContent("created");
+    expect(items[1]).toHaveTextContent("added a visit price");
+  });
+
+  it("explains parking terms in plain words and keeps long histories short", async () => {
+    const audits = Array.from({ length: 7 }, (_, index) => audit("h" + index, `2026-11-0${index + 1}T04:00:00Z`, "created"));
+    mockPricing([rule({ id: "p1", kind: "parking", amountKzt: 0, ratePerHourKzt: 500, freeMinutes: 15, dailyCapKzt: 3000, audits })]);
+    render(<AdminOperationsPage view="pricing" />);
+    expect(await screen.findByText("15 min free · max 3,000 KZT a day")).toBeTruthy();
+    expect(screen.getByText("7 changes recorded")).toBeTruthy();
+    const list = screen.getByRole("heading", { name: "Price change history" }).closest("section")!;
+    expect(within(list).getAllByRole("listitem")).toHaveLength(5);
+    fireEvent.click(within(list).getByRole("button", { name: "Show all 7 changes" }));
+    expect(within(list).getAllByRole("listitem")).toHaveLength(7);
   });
 
   it("shows the server's overlap error next to the form", async () => {
@@ -97,5 +109,20 @@ describe("admin data quality", () => {
     expect(row).toHaveTextContent("Doctor");
     expect(row).toHaveTextContent("Open a record");
     expect(row).toHaveTextContent("Casey Patient");
+  });
+
+  it("puts failing checks first and folds the passed ones away", async () => {
+    const checks = [
+      { id: "ok", name: "Passing check", description: "", count: 0, severity: "critical", sampleIds: [] },
+      { id: "warn", name: "Warning check", description: "", count: 2, severity: "warning", sampleIds: [] },
+      { id: "crit", name: "Critical check", description: "", count: 1, severity: "critical", sampleIds: ["x"] },
+    ];
+    vi.mocked(api).mockImplementation(async (path: string) => path === "/admin/integrity/runs" ? { runs: [{ id: "r", startedAt: "2026-11-05T06:00:00Z", finishedAt: "2026-11-05T06:00:01Z", status: "complete", results: checks }] } : { attempts: [], lastWeek: 0 });
+    render(<AdminOperationsPage view="integrity" />);
+    const latest = (await screen.findByRole("heading", { name: "Latest run" })).closest("section")!;
+    const rows = within(latest).getAllByRole("row").slice(1).map((row) => row.textContent ?? "");
+    expect(rows[0]).toContain("Critical check");
+    expect(rows[1]).toContain("Warning check");
+    expect(within(latest).getByText("1 passed check").closest("details")).not.toHaveAttribute("open");
   });
 });
