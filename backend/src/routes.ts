@@ -703,16 +703,23 @@ router.post('/notifications/read-all', requireAuth, async (req, res) => {
 
 router.get('/front-desk/appointments', requireAuth, requireRole(Role.FRONT_DESK, Role.ADMIN), async (req, res) => {
   const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  // One clinic day (Asia/Almaty) at a time, today by default; a search looks across all dates instead.
+  const requestedDay = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty' }).format(new Date());
+  const dayStart = new Date(`${requestedDay}T00:00:00+05:00`);
+  if (Number.isNaN(dayStart.getTime())) return res.status(400).json({ error: 'Choose a valid date.' });
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
   const appointments = await prisma.scheduleSlot.findMany({
     where: {
       status: { in: [SlotStatus.BOOKED, SlotStatus.OCCUPIED] },
+      ...(query ? {} : { startAt: { gte: dayStart, lt: dayEnd } }),
       ...(query ? { OR: [
         { id: { contains: query, mode: 'insensitive' } },
         { patient: { OR: [{ firstName: { contains: query, mode: 'insensitive' } }, { lastName: { contains: query, mode: 'insensitive' } }, { iin: query }] } },
       ] } : {}),
     },
-    orderBy: { startAt: 'asc' },
-    take: 50,
+    // Search: newest visits first, so the patient's current booking is on top. A day: in time order.
+    orderBy: { startAt: query ? 'desc' : 'asc' },
+    take: query ? 50 : 300,
     select: {
       id: true, startAt: true, endAt: true, status: true, visitPurpose: true, checkedInAt: true,
       patient: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },

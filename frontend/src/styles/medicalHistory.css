@@ -157,3 +157,30 @@
 .mh-edit { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--primary-deep); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .mh-edit:hover { border-color: var(--accent-strong); background: var(--accent); }
 @container (max-width: 460px) { .mh-entry-when { width: 100%; margin-left: 0; justify-items: start; } }
+
+/* Lab results: editor on test notes and the table patients and doctors read */
+.mh-results-editor { display: grid; gap: 10px; min-width: 0; margin: 4px 0 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: #f8faff; }
+.mh-results-editor legend { padding: 0 6px; color: #33406a; font-size: 13px; font-weight: 700; }
+.mh-results-hint { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.mh-results-editor > .button { justify-self: start; }
+.mh-results-grid { display: grid; gap: 8px; }
+.mh-results-row { display: grid; grid-template-columns: minmax(140px, 2fr) minmax(70px, 1fr) minmax(70px, 1fr) minmax(70px, 1fr) minmax(70px, 1fr) 36px; gap: 8px; align-items: center; }
+.mh-results-row.is-head span { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.mh-form .mh-results-row input { padding: 8px 10px; }
+.mh-results-remove { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: #b42318; cursor: pointer; }
+.mh-results-remove:disabled { opacity: .4; cursor: default; }
+.mh-results-wrap { margin-top: 8px; overflow-x: auto; }
+.mh-results { width: 100%; border-collapse: collapse; font-size: 14px; }
+.mh-results th, .mh-results td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.mh-results thead th { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.mh-results tbody th { color: var(--text-primary); font-size: 14px; font-weight: 600; letter-spacing: normal; text-transform: none; white-space: normal; }
+.mh-results tr.is-low td strong, .mh-results tr.is-high td strong { color: #b42318; }
+.mh-flag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.mh-flag.is-normal { background: #e7f6ec; color: #15803d; }
+.mh-flag.is-low, .mh-flag.is-high { background: #fdecec; color: #b42318; }
+.mh-download { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 700px) {
+  .mh-results-row { grid-template-columns: 1fr 1fr 36px; }
+  .mh-results-row.is-head { display: none; }
+  .mh-results-row input:first-child { grid-column: 1 / -1; }
+}

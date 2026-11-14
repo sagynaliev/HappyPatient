@@ -212,6 +212,8 @@ model MedicalEntry {
   category MedicalEntryCategory
   title String @db.VarChar(120)
   body String @db.VarChar(5000)
+ /** Lab results for a test note: name, numeric value, unit and normal range. */
+ results Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   patientSequence Int @default(0)

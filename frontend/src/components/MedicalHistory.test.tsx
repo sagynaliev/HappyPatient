@@ -72,7 +72,7 @@ describe('editing a note', () => {
     expect(path).toBe('/medical-history/1');
     expect(options?.method).toBe('PATCH');
     const sent = JSON.parse(String(options?.body));
-    expect(sent).toEqual({ category: 'test', title: 'Blood test, repeated', body: 'First line\nSecond line <script>' });
+    expect(sent).toEqual({ category: 'test', title: 'Blood test, repeated', body: 'First line\nSecond line <script>', results: [] });
   });
   it('shows the server reason when an edit is refused', async () => {
     vi.mocked(api).mockRejectedValueOnce(new Error('Only the doctor who wrote a note can edit it, within 24 hours after the visit.'));
@@ -97,3 +97,59 @@ describe('editing a note', () => {
   });
 });
 
+describe('lab results on test notes', () => {
+  it('lets the doctor enter values, fills a known range and sends numbers', async () => {
+    const save = vi.fn();
+    vi.mocked(api).mockResolvedValueOnce({ entry });
+    render(<MedicalNoteForm appointmentId="visit" chips onSave={save} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Tests/ }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Complete blood count' } });
+    fireEvent.change(screen.getByLabelText('Result 1 test name'), { target: { value: 'Hemoglobin' } });
+    expect(screen.getByLabelText('Result 1 unit')).toHaveValue('g/L');
+    expect(screen.getByLabelText('Result 1 normal from')).toHaveValue('120');
+    fireEvent.change(screen.getByLabelText('Result 1 value'), { target: { value: '118,5' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Add result' }));
+    fireEvent.change(screen.getByLabelText('Result 2 test name'), { target: { value: 'Ferritin' } });
+    fireEvent.change(screen.getByLabelText('Result 2 value'), { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const sent = JSON.parse(String(vi.mocked(api).mock.calls[0][1]?.body));
+    expect(sent).toMatchObject({ appointmentId: 'visit', category: 'test', title: 'Complete blood count', body: '' });
+    expect(sent.results).toEqual([
+      { name: 'Hemoglobin', value: 118.5, unit: 'g/L', low: 120, high: 160 },
+      { name: 'Ferritin', value: 9, unit: 'ng/mL', low: 15, high: 150 },
+    ]);
+  });
+  it('refuses a result without a numeric value', () => {
+    render(<MedicalNoteForm appointmentId="visit" chips onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Tests/ }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Blood test' } });
+    fireEvent.change(screen.getByLabelText('Result 1 test name'), { target: { value: 'Hemoglobin' } });
+    fireEvent.change(screen.getByLabelText('Result 1 value'), { target: { value: 'low' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('numeric value');
+    expect(api).not.toHaveBeenCalled();
+  });
+  it('shows results with Low, High and Normal flags', async () => {
+    vi.mocked(api).mockResolvedValue({ entries: [{ ...entry, body: '', results: [
+      { name: 'Hemoglobin', value: 118, unit: 'g/L', low: 120, high: 160 },
+      { name: 'Glucose', value: 4.8, unit: 'mmol/L', low: 3.9, high: 5.5 },
+      { name: 'Total cholesterol', value: 6.1, unit: 'mmol/L', low: null, high: 5.2 },
+    ] }], hasMore: false, counts: { test: 1 } });
+    render(<MedicalHistory />);
+    await openVisits();
+    const rows = (await screen.findAllByRole('row')).slice(1).map(row => row.textContent);
+    expect(rows[0]).toContain('118 g/L'); expect(rows[0]).toContain('120–160 g/L'); expect(rows[0]).toContain('Low');
+    expect(rows[1]).toContain('Normal');
+    expect(rows[2]).toContain('< 5.2 mmol/L'); expect(rows[2]).toContain('High');
+  });
+  it('offers the PDF download to the patient only when there are test notes', async () => {
+    vi.mocked(api).mockResolvedValue({ entries: [entry], hasMore: false, counts: { test: 1 } });
+    render(<MedicalHistory downloadFor="Aigerim Seitkali" />);
+    expect(await screen.findByRole('button', { name: /Download test results/ })).not.toBeDisabled();
+    cleanup();
+    vi.mocked(api).mockResolvedValue({ entries: [], hasMore: false, counts: {} });
+    render(<MedicalHistory downloadFor="Aigerim Seitkali" />);
+    expect(await screen.findByRole('button', { name: /Download test results/ })).toBeDisabled();
+  });
+});

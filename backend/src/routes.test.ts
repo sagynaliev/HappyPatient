@@ -1083,3 +1083,18 @@ describe('missed visits (released for no check-in)', () => {
     await request(app).get('/api/doctors/me/missed-visits').set('Authorization', bearer(Role.PATIENT, 'patient-user')).expect(403);
   });
 });
+
+describe('front desk appointments by day', () => {
+  it('lists one Almaty day in time order, and searches across all dates newest first', async () => {
+    await request(app).get('/api/front-desk/appointments?date=2026-11-12').set('Authorization', bearer(Role.FRONT_DESK)).expect(200);
+    expect(prismaMock.scheduleSlot.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ startAt: { gte: new Date('2026-11-11T19:00:00.000Z'), lt: new Date('2026-11-12T19:00:00.000Z') } }),
+      orderBy: { startAt: 'asc' },
+    }));
+    await request(app).get('/api/front-desk/appointments?q=Sagyn').set('Authorization', bearer(Role.FRONT_DESK)).expect(200);
+    const search = prismaMock.scheduleSlot.findMany.mock.lastCall![0];
+    expect(search.where.startAt).toBeUndefined();
+    expect(search.orderBy).toEqual({ startAt: 'desc' });
+  });
+});
+

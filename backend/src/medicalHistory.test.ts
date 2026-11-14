@@ -104,3 +104,22 @@ describe('editing medical notes', () => {
     expect(db.medicalEntry.update).not.toHaveBeenCalled();
   });
 });
+
+describe('lab results on test notes', () => {
+  const hemoglobin = { name: 'Hemoglobin', value: 118, unit: 'g/L', low: 120, high: 160 };
+  it('stores numeric results on a test note, with the text optional', async () => {
+    const result = await request(app).post('/medical-history').set('Authorization', token(Role.DOCTOR)).send({ ...valid, category: 'test', body: '', results: [hemoglobin, { name: 'Ferritin', value: 9 }] });
+    expect(result.status).toBe(201);
+    expect(db.medicalEntry.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ category: 'test', body: '', results: [hemoglobin, { name: 'Ferritin', value: 9, unit: '', low: null, high: null }] }) }));
+  });
+  it.each([
+    ['results on a non-test note', { category: 'anamnesis', results: [hemoglobin] }],
+    ['a text value', { category: 'test', results: [{ ...hemoglobin, value: 'low' }] }],
+    ['a range from high to low', { category: 'test', results: [{ ...hemoglobin, low: 160, high: 120 }] }],
+    ['no text and no results', { category: 'test', body: '', results: [] }],
+    ['more than 30 results', { category: 'test', results: Array.from({ length: 31 }, () => hemoglobin) }],
+  ])('rejects %s', async (_label, change) => {
+    expect((await request(app).post('/medical-history').set('Authorization', token(Role.DOCTOR)).send({ ...valid, ...change })).status).toBe(400);
+    expect(db.medicalEntry.create).not.toHaveBeenCalled();
+  });
+});
