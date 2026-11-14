@@ -13,6 +13,7 @@ const prismaMock = vi.hoisted(() => ({
   receipt: { upsert: vi.fn(), findUnique: vi.fn() },
   cancelledAppointment: { create: vi.fn(), findMany: vi.fn() },
   expiredAppointment: { findMany: vi.fn() },
+  historyAccessAudit: { findMany: vi.fn(), count: vi.fn() },
   user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   $transaction: vi.fn(),
   $queryRaw: vi.fn(),
@@ -746,6 +747,51 @@ describe('Sprint 2 doctor endpoints', () => {
   });
 });
 
+
+describe('Sprint 5-6 story gaps', () => {
+  const ruleBase = { kind: 'visit', doctorId: null, categoryId: null, consultationType: null, serviceCode: null, officeId: null, ratePerHourKzt: null, freeMinutes: 0, rounding: 'per_started_hour', dailyCapKzt: null, effectiveFrom: new Date('2026-01-01'), effectiveTo: null };
+
+  it('shows the active pricing rule as the doctor price in search (story 30)', async () => {
+    prismaMock.doctor.findMany.mockResolvedValue([
+      { id: 'doc-a', categoryId: 'cat-1', consultationFee: 10000, category: { name: 'Cardiology' }, user: { firstName: 'A', lastName: 'A' } },
+      { id: 'doc-b', categoryId: 'cat-2', consultationFee: 12000, category: { name: 'ENT' }, user: { firstName: 'B', lastName: 'B' } },
+    ]);
+    prismaMock.$queryRaw.mockResolvedValue([]);
+    prismaMock.pricingRule.findMany.mockResolvedValue([{ ...ruleBase, id: 'rule-cat', categoryId: 'cat-1', amountKzt: 15000 }]);
+    const response = await request(app).get('/api/doctors').expect(200);
+    const fees = Object.fromEntries(response.body.doctors.map((doctor: { id: string; consultationFee: number }) => [doctor.id, doctor.consultationFee]));
+    expect(fees).toEqual({ 'doc-a': 15000, 'doc-b': 12000 });
+  });
+
+  it('lets a doctor pick an active office from the clinic list (story 34)', async () => {
+    prismaMock.location.findMany.mockResolvedValue([{ id: 'office-1', name: 'Room 204', parent: { name: 'Floor 2', parent: { name: 'Almaty' } } }]);
+    const list = await request(app).get('/api/doctors/me/offices').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).expect(200);
+    expect(list.body.offices).toEqual([{ id: 'office-1', name: 'Room 204', floor: 'Floor 2', city: 'Almaty' }]);
+
+    prismaMock.location.findUnique.mockResolvedValue({ id: 'office-1', name: 'Room 204', kind: 'office', active: true, parent: { name: 'Floor 2', active: true, parent: { name: 'Almaty', active: true } } });
+    prismaMock.doctor.update.mockResolvedValue({ id: 'doctor-1', locationId: 'office-1', category: { name: 'Cardiology' } });
+    await request(app).put('/api/doctors/me/location').set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({ city: 'Old', clinicName: 'Central', streetAddress: null, officeNumber: null, locationId: 'office-1' }).expect(200);
+    expect(prismaMock.doctor.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ locationId: 'office-1', office: 'Room 204', officeNumber: 'Room 204', city: 'Almaty', clinicName: 'Central' }) }));
+    expect(prismaMock.referenceDataAudit.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ entity: 'doctor-office', action: 'chosen-by-doctor' }) }));
+  });
+
+  it('refuses a closed office for the doctor picker (story 34)', async () => {
+    prismaMock.location.findUnique.mockResolvedValue({ id: 'office-1', name: 'Room 204', kind: 'office', active: true, parent: { name: 'Floor 2', active: false, parent: { name: 'Almaty', active: true } } });
+    await request(app).put('/api/doctors/me/location').set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
+      .send({ city: null, clinicName: null, streetAddress: null, officeNumber: null, locationId: 'office-1' }).expect(400);
+    expect(prismaMock.doctor.update).not.toHaveBeenCalled();
+  });
+
+  it('shows admins refused record access without record content (story 23)', async () => {
+    prismaMock.historyAccessAudit.findMany.mockResolvedValue([{ id: 'a1', createdAt: new Date('2026-11-10T10:00:00Z'), actorRole: Role.DOCTOR, endpoint: 'get', targetPatientId: 'patient-user', actor: { firstName: 'Sam', lastName: 'Doctor' } }]);
+    prismaMock.historyAccessAudit.count.mockResolvedValue(3);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'patient-user', firstName: 'Casey', lastName: 'Patient' }]);
+    await request(app).get('/api/admin/security/access-attempts').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).expect(403);
+    const response = await request(app).get('/api/admin/security/access-attempts').set('Authorization', bearer(Role.ADMIN, 'admin-user')).expect(200);
+    expect(response.body).toEqual({ lastWeek: 3, attempts: [{ id: 'a1', createdAt: '2026-11-10T10:00:00.000Z', actor: 'Sam Doctor', actorRole: 'DOCTOR', action: 'get', patient: 'Casey Patient' }] });
+  });
+});
 
 describe('branded appointment emails through real routes (mocked Resend)', () => {
   const checkedInSlot = () => ({

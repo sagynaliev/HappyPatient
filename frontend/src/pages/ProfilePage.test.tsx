@@ -52,6 +52,7 @@ describe("patient profile", () => {
     vi.spyOn(authApi, "doctorProfile").mockResolvedValue({
       doctor: { id: "doctor-1", office: null, city: "Almaty", clinicName: "Central Clinic", streetAddress: "18 Abay Avenue", officeNumber: "Office 101", consultationFee: 12000, category: { name: "Cardiology" } },
     });
+    vi.spyOn(authApi, "doctorOffices").mockResolvedValue({ offices: [] });
     vi.spyOn(authApi, "updateLocation").mockResolvedValue({
       doctor: { id: "doctor-1", office: null, city: "Almaty", clinicName: "West Clinic", streetAddress: "1 Dostyk Avenue", officeNumber: "Room 4", consultationFee: 12000, category: { name: "Cardiology" } },
     });
@@ -72,5 +73,24 @@ describe("patient profile", () => {
       officeNumber: "Room 4",
     }));
     expect(await screen.findByDisplayValue("West Clinic")).toBeTruthy();
+  });
+
+  it("lets a doctor choose an office from the clinic list", async () => {
+    session.role = "DOCTOR";
+    vi.spyOn(authApi, "doctorProfile").mockResolvedValue({
+      doctor: { id: "doctor-1", office: null, locationId: null, city: "Almaty", clinicName: "Central Clinic", streetAddress: null, officeNumber: "Office 101", consultationFee: 12000, category: { name: "Cardiology" } },
+    });
+    vi.spyOn(authApi, "doctorOffices").mockResolvedValue({ offices: [{ id: "office-2", name: "Room 204", floor: "Floor 2", city: "Astana" }] });
+    vi.spyOn(authApi, "updateLocation").mockResolvedValue({
+      doctor: { id: "doctor-1", office: "Room 204", locationId: "office-2", city: "Astana", clinicName: "Central Clinic", streetAddress: null, officeNumber: "Room 204", consultationFee: 12000, category: { name: "Cardiology" } },
+    });
+    render(<MemoryRouter><ProfilePage /></MemoryRouter>);
+    const select = await screen.findByLabelText("Office");
+    expect(screen.queryByLabelText("Cabinet / office number")).toBeNull();
+    fireEvent.change(select, { target: { value: "office-2" } });
+    expect(screen.getByLabelText("City")).toHaveValue("Astana");
+    fireEvent.click(screen.getByRole("button", { name: "Save clinic location" }));
+    await waitFor(() => expect(authApi.updateLocation).toHaveBeenCalledWith(expect.objectContaining({ locationId: "office-2" })));
+    expect(await screen.findByText("Clinic location updated.")).toBeTruthy();
   });
 });
