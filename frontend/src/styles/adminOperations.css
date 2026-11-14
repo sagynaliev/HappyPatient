@@ -133,3 +133,111 @@
 .ad-sort { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; white-space: nowrap; }
 .ad-sort span { color: #a3acc2; }
 .ad-sort.is-active, .ad-sort.is-active span { color: var(--primary); }
+
+/* ---- Row badges (initials / rule kind) and table cells ---- */
+.ad-badge { display: inline-grid; flex: 0 0 34px; width: 34px; height: 34px; place-items: center; border-radius: 10px; font-size: 13px; font-weight: 700; letter-spacing: .01em; }
+.ad-badge.is-blue { background: #e8efff; color: #2b5ff0; }
+.ad-badge.is-violet { background: #f0eaff; color: #6d3fe0; }
+.ad-badge.is-green { background: #e5f6ec; color: #17803d; }
+.ad-badge.is-amber { background: #fdf3e2; color: #b45309; }
+.ad-badge.is-pink { background: #fde9ef; color: #be185d; }
+.ad-badge.is-grey { background: #eef1f6; color: #66708a; }
+.ad-cell-with-badge { display: inline-flex; align-items: center; gap: 12px; min-width: 0; }
+.ad-cell-with-badge > span:last-child { display: grid; gap: 2px; min-width: 0; }
+.ad-ops .admin-table td .ad-cell-with-badge small { margin-top: 0; }
+.ad-ops .admin-table tr.is-ended td { color: var(--text-secondary); }
+.ad-ops .admin-table tr.is-ended td strong { color: var(--text-secondary); font-weight: 600; }
+.ad-ops .admin-table td.ad-price-cell { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ad-ops .admin-table td.ad-price-cell small { font-weight: 400; }
+.admin-status.ad-dot::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: middle; }
+.ad-role-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; background: #eef2ff; color: var(--primary-deep); font-size: 12px; font-weight: 600; }
+
+/* ---- Pricing rule form: numbered steps on the left, a live preview on the right ---- */
+.ad-rule-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: stretch; }
+.ad-rule-steps { display: grid; gap: 12px; }
+.ad-rule-step { min-width: 0; margin: 0; padding: 14px 16px 16px; border: 1px solid var(--border); border-radius: 14px; background: #f8faff; }
+.ad-rule-step legend { display: flex; align-items: center; gap: 8px; padding: 0 6px; color: var(--text-primary); font-size: 13.5px; font-weight: 700; }
+.ad-rule-step legend span { display: inline-grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; }
+.ad-rule-preview { display: grid; align-content: start; gap: 8px; padding: 18px 20px; border-radius: 16px; background: #eef4ff; }
+.ad-rule-preview h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.ad-rule-preview-eyebrow { margin: 0; color: var(--primary-deep); font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.ad-rule-preview-big { margin: 0; color: var(--text-primary); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ad-rule-preview-big small { color: var(--text-secondary); font-size: 14px; font-weight: 500; letter-spacing: 0; }
+.ad-rule-examples { display: grid; margin: 4px 0; padding: 0; list-style: none; border-top: 1px solid #d6e2fb; }
+.ad-rule-examples li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #d6e2fb; font-size: 14px; }
+.ad-rule-examples li strong { font-variant-numeric: tabular-nums; }
+.ad-rule-preview-foot { margin: 6px 0 0; padding-top: 10px; border-top: 1px solid #d6e2fb; color: var(--text-secondary); font-size: 12.5px; }
+
+/* ---- Timeline (price history, reference changes, check runs) ---- */
+.ad-timeline { position: relative; display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.ad-timeline::before { content: ""; position: absolute; top: 14px; bottom: 14px; left: 15px; width: 2px; background: #e8ecf5; }
+.ad-timeline li { position: relative; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; padding: 10px 0; }
+.ad-timeline-mark { position: relative; z-index: 1; display: grid; width: 32px; height: 32px; place-items: center; border: 2px solid var(--surface); border-radius: 50%; background: #eef1f6; color: #66708a; font-size: 12px; font-weight: 700; }
+.ad-timeline-mark:empty { width: 14px; height: 14px; margin: 9px; }
+.ad-timeline li.is-green .ad-timeline-mark { background: #dff3e7; color: #17803d; }
+.ad-timeline li.is-red .ad-timeline-mark { background: #fde4e4; color: #b42318; }
+.ad-timeline li.is-blue .ad-timeline-mark { background: #e3ebff; color: #2b5ff0; }
+.ad-timeline li.is-amber .ad-timeline-mark { background: #fdf0d8; color: #b45309; }
+.ad-timeline li.is-green .ad-timeline-mark:empty { background: #22a55b; }
+.ad-timeline li.is-red .ad-timeline-mark:empty { background: #d64545; }
+.ad-timeline li.is-amber .ad-timeline-mark:empty { background: #e0a020; }
+.ad-timeline-body { display: grid; gap: 3px; min-width: 0; padding-top: 5px; }
+.ad-timeline-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--text-primary); font-size: 14px; }
+.ad-timeline-meta { margin: 0; color: var(--text-secondary); font-size: 12.5px; }
+.ad-timeline-change { justify-self: start; margin: 4px 0 0; padding: 6px 10px; border-radius: 8px; background: #f5f7fb; color: var(--text-primary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ad-old { color: var(--text-secondary); text-decoration: line-through; text-decoration-color: rgb(102 112 138 / 50%); }
+
+/* ---- Data quality: one health line, then the counts ---- */
+.ad-ops .ad-health { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 28px; border-left-width: 4px; }
+.ad-health.is-green { border-left-color: #22a55b; }
+.ad-health.is-amber { border-left-color: #e0a020; }
+.ad-health.is-red { border-left-color: #d64545; }
+.ad-health-state { display: flex; align-items: center; gap: 14px; }
+.ad-health-state h2 { margin: 0; font-size: 20px; font-weight: 700; }
+.ad-health-icon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 12px; background: #eef1f6; color: #66708a; }
+.ad-health.is-green .ad-health-icon { background: #dff3e7; color: #17803d; }
+.ad-health.is-amber .ad-health-icon { background: #fdf0d8; color: #b45309; }
+.ad-health.is-red .ad-health-icon { background: #fde4e4; color: #b42318; }
+.ad-health-counts { display: flex; gap: 10px; margin: 0; }
+.ad-health-counts > div { min-width: 120px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: #f8faff; }
+.ad-health-counts dt { color: var(--text-secondary); font-size: 12.5px; }
+.ad-health-counts dd { margin: 2px 0 0; color: var(--text-primary); font-size: 22px; font-weight: 700; }
+.ad-health-counts dd small { color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+.ad-health-counts > .is-amber dd { color: #b45309; }
+.ad-health-counts > .is-red dd { color: #b42318; }
+.ad-ops .admin-table tr.is-critical td:first-child { box-shadow: inset 3px 0 0 #d64545; }
+.ad-ops .admin-table tr.is-warning td:first-child { box-shadow: inset 3px 0 0 #e0a020; }
+
+/* ---- Statistics: utilization meter in the workload table ---- */
+.ad-meter { display: inline-flex; align-items: center; gap: 10px; min-width: 150px; }
+.ad-meter-track { flex: 1; height: 6px; overflow: hidden; border-radius: 999px; background: #edf1f8; }
+.ad-meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.ad-meter-fill.is-high { background: #e0a020; }
+.ad-meter-fill.is-low { background: #9fb4e8; }
+.ad-meter strong { min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1100px) { .ad-rule-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) { .ad-health-counts { width: 100%; } .ad-health-counts > div { flex: 1; min-width: 0; } }
+/* Step 1 across the top; Price and Starts side by side under it. */
+.ad-rule-steps { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-content: start; }
+.ad-rule-steps > .ad-rule-step:first-child { grid-column: 1 / -1; }
+@media (max-width: 800px) { .ad-rule-steps { grid-template-columns: minmax(0, 1fr); } }
+/* Long rule names and parking terms wrap instead of pushing the actions off the table. */
+.ad-ops .admin-table td:has(> .ad-cell-with-badge), .ad-ops .admin-table td.ad-price-cell { min-width: 170px; max-width: 250px; white-space: normal; }
+
+/* Panel headers with filters: title and filters on one line, each filter label beside its field. */
+.ad-ops .admin-panel-header:has(> .ad-filters) { align-items: center; }
+.ad-ops .admin-panel-header > .ad-filters label { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-secondary); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.ad-ops .admin-panel-header > .ad-filters select { min-width: 150px; }
+
+/* Bar lists: one line per row, long names shortened with … (full name on hover). */
+.ad-ops .ad-mini-chart li { grid-template-columns: minmax(0, 180px) minmax(80px, 1fr) 32px; min-height: 26px; }
+.ad-ops .ad-mini-chart li > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-ops .ad-mini-chart li > strong { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Workload numbers: a non-zero no-show count stands out in the same plain style as the zeros. */
+.ad-ops .admin-table td.ad-num-warn { color: #b45309; font-weight: 700; }
+.ad-ops .admin-table td.ad-price-cell { white-space: nowrap; }
+.ad-ops .admin-table td.ad-price-cell small { max-width: 220px; white-space: normal; }
+/* "Show all N rows" under a bar list: full list width, a little space above, text centred. */
+.ad-ops .ad-mini-chart .ad-show-more { display: block; width: 100%; margin-top: 14px; text-align: center; }

@@ -367,3 +367,19 @@
 .pa-search:focus-within, .pa-sort select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--accent); }
 .pa-sort select { height: 42px; padding: 0 34px 0 14px; border: 1px solid var(--border); border-radius: 999px; background-color: var(--surface); color: var(--text-primary); font: inherit; font-size: 14px; outline: none; }
 .pa-toolbar-count { color: var(--text-secondary); font-size: 13px; }
+
+/* Visit price as a receipt (stories 28–29): each charge on a line, a bold total, and a band saying when the price was fixed. */
+.pa-cost-breakdown { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; padding: 0; border: 0; background: transparent; }
+.pa-receipt { display: grid; align-content: start; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 6px 18px rgb(16 27 59 / 5%); }
+.pa-receipt-eyebrow { margin: 0; padding: 14px 16px 0; color: var(--primary-deep); font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.pa-receipt .pa-price-list { padding: 6px 16px 12px; }
+.pa-receipt .pa-price-list > div { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; padding: 9px 0; border-bottom: 1px dashed var(--border); }
+.pa-receipt .pa-price-list > div:last-child { border-bottom: 0; }
+.pa-receipt .pa-price-list dt { color: var(--text-primary); font-size: 13.5px; }
+.pa-receipt .pa-price-list dd { text-align: right; font-size: 14px; }
+.pa-receipt .pa-price-list .pa-price-total { margin-top: 2px; padding-top: 12px; border-top: 1.5px solid var(--text-primary); border-bottom: 0; }
+.pa-receipt .pa-price-list .pa-price-total dt, .pa-receipt .pa-price-list .pa-price-total dd { font-size: 16px; font-weight: 700; }
+.pa-receipt .pa-price-list.is-steps dt { color: var(--text-secondary); }
+.pa-receipt-band { display: flex; align-items: center; gap: 8px; margin: 0; padding: 11px 16px; background: #e9f8ef; color: #17633f; font-size: 13px; font-weight: 600; }
+.pa-receipt.is-parking { background: #fbfcff; }
+.pa-receipt-note { margin: 0; padding: 0 16px 14px; color: var(--text-secondary); font-size: 12.5px; }
