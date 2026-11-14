@@ -24,7 +24,8 @@ function useCompactHeader() {
   return compact;
 }
 
-type NavItem = { to: string; label: string; icon: IconName; end?: boolean };
+/** section: items with the same section are listed together under that heading; items without one stay under "Menu". */
+type NavItem = { to: string; label: string; icon: IconName; end?: boolean; section?: string };
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   PATIENT: [
@@ -45,12 +46,12 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   ADMIN: [
     { to: "/admin/dashboard", label: "Dashboard", icon: "grid" },
-    { to: "/admin/users", label: "Users", icon: "users" },
-    { to: "/admin/doctors", label: "Doctors", icon: "stethoscope" },
-    { to: "/admin/appointments", label: "Appointments", icon: "calendar" },
     { to: "/admin/statistics", label: "Statistics", icon: "chart" },
-    { to: "/front-desk", label: "Front desk", icon: "desk", end: true },
-    { to: "/front-desk/walk-in", label: "Walk-in", icon: "user" },
+    { to: "/admin/users", label: "Users", icon: "users", section: "People" },
+    { to: "/admin/doctors", label: "Doctors", icon: "stethoscope", section: "People" },
+    { to: "/admin/appointments", label: "Appointments", icon: "calendar", section: "Visits" },
+    { to: "/front-desk", label: "Front desk", icon: "desk", end: true, section: "Visits" },
+    { to: "/front-desk/walk-in", label: "Walk-in", icon: "user", section: "Visits" },
   ],
 };
 
@@ -92,6 +93,13 @@ function AppShell({ children }: { children: ReactNode }) {
     });
   }
 
+  const sections = Array.from(new Set(items.flatMap((item) => item.section ? [item.section] : [])));
+  const navLink = (item: NavItem) => (
+    <NavLink key={item.to} to={item.to} end={item.end} onClick={close} className="hp-nav-link" data-tooltip={item.label}>
+      <Icon name={item.icon} />
+      <span className="hp-hide-collapsed">{item.label}</span>
+    </NavLink>
+  );
   return (
     <div className={`hp-shell${open ? " is-nav-open" : ""}${collapsed ? " is-collapsed" : ""}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
@@ -110,13 +118,14 @@ function AppShell({ children }: { children: ReactNode }) {
           <p className="hp-nav-label hp-hide-collapsed">Menu</p>
           <nav className="hp-nav">
             <NavLink to="/" end onClick={close} className="hp-nav-link" data-tooltip="Home"><Icon name="home" /><span className="hp-hide-collapsed">Home</span></NavLink>
-            {items.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.end} onClick={close} className="hp-nav-link" data-tooltip={item.label}>
-                <Icon name={item.icon} />
-                <span className="hp-hide-collapsed">{item.label}</span>
-              </NavLink>
-            ))}
+            {items.filter((item) => !item.section).map(navLink)}
           </nav>
+          {sections.map((section) => (
+            <div className="hp-nav-section" key={section}>
+              <p className="hp-nav-label hp-nav-sublabel hp-hide-collapsed">{section}</p>
+              <nav className="hp-nav" aria-label={section}>{items.filter((item) => item.section === section).map(navLink)}</nav>
+            </div>
+          ))}
         </div>
         <div className="hp-nav-group">
           <p className="hp-nav-label hp-hide-collapsed">Account</p>
