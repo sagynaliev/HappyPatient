@@ -34,7 +34,9 @@ vi.mock("../lib/api", () => ({
     slotDetails: vi.fn(),
     bookSlot: vi.fn(),
     updateSlot: vi.fn(),
+    consultationPrices: vi.fn(() => Promise.resolve({ visitKind: "first", prices: { "in-person": 18000, online: 15000 } })),
   },
+  consultationLabel: (type?: string | null) => type ?? "",
 }));
 
 function BookingQuery() {
@@ -370,6 +372,11 @@ describe("doctor weekly schedule setup", () => {
     );
 
     await screen.findByRole("heading", { name: "Book your appointment" });
+    // The patient's own prices: in person and online, for a first visit with this doctor.
+    expect(await screen.findByText("30 minutes · 15,000 KZT")).not.toBeNull();
+    expect(screen.getByText("30 minutes · 18,000 KZT")).not.toBeNull();
+    expect(screen.getByText("First visit with Dr. Sam Doctor.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: /Online consultation/ }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("heading", { name: "2. Date and time" })).not.toBeNull();
     expect(new URLSearchParams(screen.getByTestId("booking-query").textContent ?? "").get("step")).toBe("2");
@@ -389,6 +396,8 @@ describe("doctor weekly schedule setup", () => {
     fireEvent.submit(form);
     expect(await screen.findByRole("button", { name: "Confirming…" })).not.toBeNull();
     expect(authApi.bookSlot).toHaveBeenCalledTimes(1);
+    expect(authApi.bookSlot).toHaveBeenCalledWith("doctor-1", "future-free", "Follow-up", "online");
+    expect(screen.getAllByText("Online · First visit · 30 minutes").length).toBeGreaterThan(0);
     expect(screen.queryByRole("heading", { name: "Appointment confirmed" })).toBeNull();
 
     finishBooking?.({ slot: { id: "future-free", startAt: "2099-05-11T10:00:00.000Z", endAt: "2099-05-11T10:30:00.000Z", status: "BOOKED" } });

@@ -711,3 +711,15 @@ button.bk-vstep-row:focus-visible { outline: 2px solid var(--primary); outline-o
 .bk-confirmed-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 16px; }
 .bk-confirmed-banner strong { font-size: 18px; font-weight: 600; }
 .bk-action-group { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* Booking side column as one card: steps on top, the appointment summary below, no step hints. */
+.bk-vstep-hint { display: none; }
+@media (min-width: 901px) {
+  .bk-side { gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-card); }
+  .bk-side .bk-vsteps { padding: 16px 14px 12px; border: 0; border-radius: 0; box-shadow: none; }
+  .bk-side .bk-vstep-row { padding: 8px 12px; }
+  .bk-side .bk-vsteps ol::before { top: 20px; bottom: 20px; }
+  .bk-side .bk-summary { padding: 16px 20px 18px; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+  .bk-side .bk-summary > h2 { margin: 0 0 12px; padding: 0; background: none; color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+  .bk-side .bk-summary-price { margin-top: 4px; }
+}

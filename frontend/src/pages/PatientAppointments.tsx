@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, authApi, CancelledAppointment, MissedAppointment, PatientAppointment, Receipt } from "../lib/api";
+import { api, authApi, CancelledAppointment, MissedAppointment, PatientAppointment, Receipt, consultationLabel } from "../lib/api";
 import { notifyNotificationsChanged } from "../lib/notificationEvents";
 import { ReceiptDialog } from "../components/ReceiptView";
 import { MiniCalendar } from "../components/MiniCalendar";
@@ -171,9 +171,10 @@ function AppointmentCard({
             <div><dt>Doctor</dt><dd>{appointment.doctor.name}</dd></div>
             <div><dt>Specialty</dt><dd>{appointment.doctor.specialty}</dd></div>
             <div><dt>Visit purpose</dt><dd>{appointment.visitPurpose || "Not provided"}</dd></div>
+            {appointment.consultationType && <div><dt>Consultation</dt><dd>{consultationLabel(appointment.consultationType)}</dd></div>}
             <div><dt>Date</dt><dd>{formatDate(appointment.startAt)}</dd></div>
             <div><dt>Time · Asia/Almaty (UTC+5)</dt><dd>{formatTime(appointment.startAt)}–{formatTime(appointment.endAt)}</dd></div>
-            <div><dt>Office</dt><dd>{appointment.doctor.office || "Not listed"}</dd></div>
+            <div><dt>Office</dt><dd>{appointment.consultationType?.startsWith("online") ? "Online · video call" : appointment.doctor.office || "Not listed"}</dd></div>
             <div><dt>Booking ID</dt><dd>{appointment.reference || appointment.id}</dd></div>
             <div><dt>Status</dt><dd>{appointment.status === "OCCUPIED" ? "Checked in" : pendingCancel ? "Cancelling…" : "Booked"}</dd></div>
           </dl>

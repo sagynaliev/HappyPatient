@@ -175,8 +175,8 @@ export default function DoctorProfilePage() {
 
             <section className="dp-card" aria-labelledby="dp-services-title">
               <h2 id="dp-services-title">Services &amp; consultation types</h2>
-              <p className="dp-service-summary">The booking service offers 30-minute appointments at the doctor’s listed office.</p>
-              <p className="dp-info-note">Online consultation details and a separate service list are not available in the current doctor record.</p>
+              <p className="dp-service-summary">30-minute appointments, in person at the doctor’s office or online by video call. You choose the format when you book.</p>
+              <p className="dp-info-note">A follow-up visit with the same doctor can cost less than a first visit; the booking screen shows your exact price.</p>
             </section>
 
             <section className="dp-card" aria-labelledby="dp-reviews-title">
@@ -189,7 +189,7 @@ export default function DoctorProfilePage() {
             <section className="dp-card" aria-labelledby="dp-book-title">
               <h2 id="dp-book-title">Book an appointment</h2>
               <p className="dp-clinic">Choose an available date and time.</p>
-              <span className="fd-status-badge fd-status-neutral">In-person · 30 minutes</span>
+              <span className="fd-status-badge fd-status-neutral">In-person or online · 30 minutes</span>
               {availabilityError && (
                 <div className="dp-inline-error" role="alert">
                   <span>{availabilityError}</span>
@@ -237,7 +237,6 @@ export default function DoctorProfilePage() {
                 Confirm your details in the next steps. No appointment is booked yet.
               </p>
             </section>
-            <p className="dp-widget-info">Choose a free time, review your details, then confirm your appointment.</p>
           </aside>
         </div>
       </div>

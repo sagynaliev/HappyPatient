@@ -714,3 +714,5 @@
 @media (prefers-reduced-motion: reduce) {
   .bk-loading-mark { animation: none; }
 }
+
+.bk-visit-kind { grid-column: 1 / -1; margin: 4px 0 0; color: var(--text-secondary, #5b6684); font-size: 13.5px; }

@@ -6,7 +6,7 @@ import AvailabilityCalendar, {
   slotDateInAlmaty,
   TimeSlotGrid,
 } from "./AvailabilityCalendar";
-import { DoctorProfile, ScheduleSlot, User } from "../lib/api";
+import { authApi, ConsultationChannel, DoctorProfile, ScheduleSlot, User, VisitKind } from "../lib/api";
 import DoctorLocation from "./DoctorLocation";
 import { doctorLocationText } from "../lib/doctorLocation";
 import { Icon } from "./Icons";
@@ -42,6 +42,8 @@ type PatientBookingFlowProps = {
   rescheduleFrom?: { startAt: string; endAt: string } | null;
   onConfirm: (event: FormEvent<HTMLFormElement>) => void;
   onSlotTaken: () => void;
+  /** Tells the page whether the patient chose an in-person or an online consultation. */
+  onChannelChange?: (channel: ConsultationChannel) => void;
 };
 
 const steps = ["Consultation type", "Date and time", "Patient details", "Review and confirm"] as const;
@@ -101,12 +103,22 @@ export default function PatientBookingFlow({
   rescheduleFrom,
   onConfirm,
   onSlotTaken,
+  onChannelChange,
 }: PatientBookingFlowProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryStep = Number(searchParams.get("step"));
   const initialStep = queryStep >= 1 && queryStep <= 4 ? queryStep as BookingStep : 1;
   const [step, setStepState] = useState<BookingStep>(initialStep);
-  const [consultationType, setConsultationType] = useState<"in-person" | "">("in-person");
+  const [consultationType, setConsultationTypeState] = useState<ConsultationChannel | "">("in-person");
+  const setConsultationType = (channel: ConsultationChannel) => { setConsultationTypeState(channel); onChannelChange?.(channel); };
+  // The patient's own prices: first or follow-up visit with this doctor, in person or online.
+  const [pricing, setPricing] = useState<{ visitKind: VisitKind; prices: Record<ConsultationChannel, number> } | null>(null);
+  useEffect(() => {
+    if (!doctor?.id || !patient) return;
+    let active = true;
+    authApi.consultationPrices(doctor.id).then((result) => { if (active) setPricing(result); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [doctor?.id, patient]);
   const [detailsConfirmed, setDetailsConfirmed] = useState(false);
   const groupedSlots = useMemo(
     () => slots.filter((slot) => slotDateInAlmaty(slot.startAt) === date),
@@ -170,9 +182,12 @@ export default function PatientBookingFlow({
     }
   }, [error, onSlotTaken]);
 
-  const fee = typeof consultationFee === "number" && consultationFee > 0
-    ? `${new Intl.NumberFormat("en-US").format(consultationFee)} KZT`
-    : "";
+  const formatFee = (value?: number) => typeof value === "number" && value > 0 ? `${new Intl.NumberFormat("en-US").format(value)} KZT` : "";
+  const feeFor = (channel: ConsultationChannel) => formatFee(pricing?.prices[channel] ?? (channel === "in-person" ? consultationFee : undefined));
+  const visitKindLabel = pricing?.visitKind === "follow-up" ? "Follow-up visit" : "First visit";
+  const consultationText = `${consultationType === "online" ? "Online" : "In-person"} · ${visitKindLabel} · 30 minutes`;
+  // The price of the chosen consultation; before the patient's prices load, the doctor's listed price.
+  const fee = feeFor(consultationType || "in-person");
   const office = doctor ? doctorLocationText(doctor, "") : "";
   const selectedDate = selectedSlot ? slotDateInAlmaty(selectedSlot.startAt) : date;
   const selectedTime = selectedSlot
@@ -194,7 +209,7 @@ export default function PatientBookingFlow({
     4: [{ label: "Details checked", done: true }, { label: "Booking complete", done: Boolean(bookingSuccess) }],
   };
   const stepHints = [
-    "In-person visit",
+    consultationType === "online" ? "Online visit" : "In-person visit",
     summarySlot ? summaryTime : "Pick a day and time",
     "Contact and reason",
     "Check and confirm",
@@ -213,7 +228,7 @@ export default function PatientBookingFlow({
       <div className="bk-review">
         <dl>
           <div><dt>Doctor</dt><dd>{bookingSuccess.doctorName}{doctor ? ` · ${doctor.category.name}` : ""}</dd></div>
-          <div><dt>Consultation</dt><dd>In-person · 30 minutes</dd></div>
+          <div><dt>Consultation</dt><dd>{consultationText}</dd></div>
           <div><dt>Date & time</dt><dd>{formatFullDate(slotDateInAlmaty(bookingSuccess.slot.startAt))} · {summaryTime}</dd></div>
           <div><dt>Timezone</dt><dd>Asia/Almaty · UTC+5</dd></div>
           {office && doctor && <div><dt>Clinic</dt><dd><DoctorLocation {...doctor} /></dd></div>}
@@ -240,7 +255,7 @@ export default function PatientBookingFlow({
                   </li>
                   <li>
                     <span className="bk-next-icon" aria-hidden="true"><Icon name="clock" size={18} /></span>
-                    <div><strong>Arrive 10 minutes early</strong><span>{formatDateInAlmaty(slotDateInAlmaty(bookingSuccess.slot.startAt), { weekday: "short", day: "numeric", month: "short" })} · {formatTimeInAlmaty(bookingSuccess.slot.startAt)}{office ? ` · ${office}` : ""}</span></div>
+                    <div><strong>{consultationType === "online" ? "Check in online from 30 minutes before" : "Arrive 10 minutes early"}</strong><span>{formatDateInAlmaty(slotDateInAlmaty(bookingSuccess.slot.startAt), { weekday: "short", day: "numeric", month: "short" })} · {formatTimeInAlmaty(bookingSuccess.slot.startAt)}{consultationType === "online" ? " · Video call" : office ? ` · ${office}` : ""}</span></div>
                   </li>
                   <li>
                     <span className="bk-next-icon" aria-hidden="true"><Icon name="desk" size={18} /></span>
@@ -272,7 +287,7 @@ export default function PatientBookingFlow({
         <dl>
           {step === 1 && (
             <>
-              <div><dt>Consultation</dt><dd>In-person · 30 minutes</dd></div>
+              <div><dt>Consultation</dt><dd>{consultationText}</dd></div>
               {office && doctor && <div><dt>Clinic</dt><dd><DoctorLocation {...doctor} /></dd></div>}
               {fee && <div><dt>Price</dt><dd>{fee}</dd></div>}
             </>
@@ -338,21 +353,31 @@ export default function PatientBookingFlow({
                         checked={consultationType === "in-person"}
                         onChange={() => setConsultationType("in-person")}
                       />
-                      <span className="bk-consult-icon" aria-hidden="true">⌂</span>
+                      <span className="bk-consult-icon" aria-hidden="true"><Icon name="pin" size={20} /></span>
                       <span className="bk-consult-copy">
                         <strong>In-person consultation</strong>
                         <span>{office && doctor ? <>Visit <DoctorLocation {...doctor} /></> : "Clinic location not listed"}</span>
-                        <small>30 minutes{fee ? ` · ${fee}` : ""}</small>
+                        <small>30 minutes{feeFor("in-person") ? ` · ${feeFor("in-person")}` : ""}</small>
                       </span>
                       {consultationType === "in-person" && <span className="bk-selected-label">Selected</span>}
                     </label>
-                    <div className="bk-consult-option is-disabled" aria-disabled="true" aria-describedby="bk-online-not-offered">
-                      <span className="bk-consult-icon" aria-hidden="true">⊘</span>
+                    <label className={`bk-consult-option${consultationType === "online" ? " is-selected" : ""}`}>
+                      <input
+                        type="radio"
+                        name="consultation-type"
+                        value="online"
+                        checked={consultationType === "online"}
+                        onChange={() => setConsultationType("online")}
+                      />
+                      <span className="bk-consult-icon" aria-hidden="true"><Icon name="video" size={20} /></span>
                       <span className="bk-consult-copy">
-                        <strong>Online consultation · Not offered</strong>
-                        <span id="bk-online-not-offered">{doctorName} does not have an online consultation option in the booking system.</span>
+                        <strong>Online consultation</strong>
+                        <span>Video call with {doctorName} at the booked time. Check in online from 30 minutes before.</span>
+                        <small>30 minutes{feeFor("online") ? ` · ${feeFor("online")}` : ""}</small>
                       </span>
-                    </div>
+                      {consultationType === "online" && <span className="bk-selected-label">Selected</span>}
+                    </label>
+                    {pricing && <p className="bk-visit-kind">{pricing.visitKind === "follow-up" ? `Follow-up visit: you have seen ${doctorName} before, so the follow-up price applies.` : `First visit with ${doctorName}.`}</p>}
                   </div>
                 )}
 
@@ -420,7 +445,7 @@ export default function PatientBookingFlow({
                   <div className="bk-review">
                     <dl>
                       <div><dt>Doctor</dt><dd>{doctorName} · {doctor.category.name}</dd></div>
-                      <div><dt>Consultation</dt><dd>In-person · 30 minutes</dd></div>
+                      <div><dt>Consultation</dt><dd>{consultationText}</dd></div>
                       <div><dt>Date & time</dt><dd>{selectedSlot ? `${formatFullDate(slotDateInAlmaty(selectedSlot.startAt))} · ${selectedTime}` : ""}</dd></div>
                       <div><dt>Timezone</dt><dd>Asia/Almaty · UTC+5</dd></div>
                       <div><dt>Clinic</dt><dd>{doctor ? <DoctorLocation {...doctor} /> : "Location not listed"}</dd></div>
@@ -462,7 +487,7 @@ export default function PatientBookingFlow({
                 </div>
               )}
               {!bookingSuccess && <div className="bk-action-bar">
-                <span>{fee ? `${fee} · ` : ""}{step === 4 ? "Final confirmation" : `${consultationType === "in-person" ? "In-person" : ""} · 30 minutes`}</span>
+                <span>{fee ? `${fee} · ` : ""}{step === 4 ? "Final confirmation" : `${consultationType === "online" ? "Online" : "In-person"} · 30 minutes`}</span>
                 {step === 4 ? (
                   <form className="bk-action-form" onSubmit={onConfirm}>
                     <button className="button" type="submit" disabled={busy || !selectedSlot || !visitPurpose.trim()}>

@@ -252,3 +252,5 @@ a.dw-agenda-row:hover .dw-row-arrow { color: var(--primary); }
 .dw-treatments-add { display: flex; flex-wrap: wrap; gap: 10px; }
 .dw-treatments-add select { flex: 1 1 260px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text-primary); font: inherit; font-size: 14px; }
 @media (max-width: 600px) { .dw-treatments-list li { grid-template-columns: minmax(0, 1fr) auto; } .dw-treatments-list li .dw-mini { grid-column: 1 / -1; justify-self: start; } .dw-treatments-add .dw-button { width: 100%; } }
+
+.dw-info-group dd small.dw-consult-type { color: var(--primary-deep, #1d4ed8); }
