@@ -110,3 +110,10 @@
 /* Account group sits at the bottom of the sidebar, right above the role card */
 .hp-nav-group + .hp-nav-group { margin-top: auto; }
 .hp-sidebar-foot { margin-top: 0; }
+
+/* Headed groups inside the main menu (admin: People, Visits). */
+.hp-nav-section { display: grid; gap: 4px; margin-top: 6px; }
+/* The longer admin menu still fits a 900px-tall window. */
+.hp-sidebar:has(.hp-nav-section) { gap: 14px; }
+.hp-nav-sublabel { margin-bottom: 0; }
+.is-collapsed .hp-nav-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
