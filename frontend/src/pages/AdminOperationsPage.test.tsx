@@ -126,3 +126,19 @@ describe("admin data quality", () => {
     expect(within(latest).getByText("1 passed check").closest("details")).not.toHaveAttribute("open");
   });
 });
+
+describe("parking daily cap", () => {
+  it("sends the daily cap with a parking rule and leaves it empty for no cap", async () => {
+    mockPricing([]);
+    render(<AdminOperationsPage view="pricing" />);
+    fireEvent.change((await screen.findAllByLabelText("Type"))[0], { target: { value: "parking" } });
+    fireEvent.change(screen.getByLabelText("Hourly rate (KZT)"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Free minutes"), { target: { value: "15" } });
+    fireEvent.change(screen.getByLabelText("Daily cap (KZT)"), { target: { value: "3000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
+    await waitFor(() => expect(vi.mocked(api).mock.calls.some(([, options]) => options?.method === "POST")).toBe(true));
+    const sent = JSON.parse(String(vi.mocked(api).mock.calls.find(([, options]) => options?.method === "POST")![1]!.body));
+    expect(sent).toMatchObject({ kind: "parking", ratePerHourKzt: 500, freeMinutes: 15, dailyCapKzt: 3000 });
+  });
+});
+
