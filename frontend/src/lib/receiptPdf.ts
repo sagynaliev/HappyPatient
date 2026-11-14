@@ -1,5 +1,6 @@
 import type { jsPDF as JsPdf } from "jspdf";
 import type { Receipt } from "./api";
+import { addNotoFont, loadNotoFont } from "./pdfFont";
 
 const TZ = "Asia/Almaty";
 const date = (value: string) => new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ }).format(new Date(value));
@@ -97,16 +98,9 @@ function draw(doc: JsPdf, receipt: Receipt): number {
 
 export async function buildReceiptPdf(receipt: Receipt) {
   const { jsPDF } = await import("jspdf");
-  const response = await fetch("/fonts/NotoSans-Regular.ttf");
-  if (!response.ok) throw new Error("Receipt font unavailable");
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  const font = btoa(binary);
+  const font = await loadNotoFont();
   const addFont = (doc: JsPdf) => {
-    doc.addFileToVFS("NotoSans.ttf", font);
-    doc.addFont("NotoSans.ttf", "NotoSans", "normal");
-    doc.addFont("NotoSans.ttf", "NotoSans", "bold");
+    addNotoFont(doc, font);
     doc.setTextColor("#111D40").setDrawColor("#2D5FF5");
   };
   // first pass measures the content height, second pass draws on a page of exactly that height

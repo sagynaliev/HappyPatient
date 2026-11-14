@@ -1,7 +1,9 @@
 import MedicalHistory from '../components/MedicalHistory';
 import { Icon } from '../components/Icons';
+import { useAuth } from '../context/AuthContext';
 
 export default function MedicalHistoryPage() {
+  const { user } = useAuth();
   return (
     <section className="mh-page" aria-labelledby="mh-title">
       <header className="mh-banner">
@@ -16,7 +18,7 @@ export default function MedicalHistoryPage() {
           <span className="mh-art-card"><Icon name="file" size={46} /></span>
         </div>
       </header>
-      <MedicalHistory />
+      <MedicalHistory downloadFor={user ? `${user.firstName} ${user.lastName}` : ''} />
     </section>
   );
 }

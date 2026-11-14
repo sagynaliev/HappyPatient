@@ -6,14 +6,32 @@ import { requireAuth } from './middleware';
 import { canAccessMedicalHistory } from './medicalHistoryPolicy';
 import { clockOffsetMs } from './clock';
 
-export const medicalEntrySchema = z.object({
-  appointmentId: z.string().min(1),
+/** One measured value of a test, e.g. Hemoglobin 118 g/L with a normal range of 120–160. */
+export const labResultSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  value: z.number().finite(),
+  unit: z.string().trim().max(20).default(''),
+  low: z.number().finite().nullable().default(null),
+  high: z.number().finite().nullable().default(null),
+}).refine(result => result.low === null || result.high === null || result.low <= result.high, 'The normal range must go from low to high.');
+const entryContent = z.object({
   category: z.enum(['test', 'anamnesis', 'conclusion']),
   title: z.string().trim().min(1).max(120),
-  body: z.string().trim().min(1).max(5000),
+  body: z.string().trim().max(5000),
+  results: z.array(labResultSchema).max(30).optional(),
 });
+// A note needs text, except a test note that carries measured results. Only test notes carry results.
+const contentRule = <T extends z.infer<typeof entryContent>>(entry: T, ctx: z.RefinementCtx) => {
+  const results = entry.results ?? [];
+  if (results.length && entry.category !== 'test') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Only test notes can have results.', path: ['results'] });
+  if (!entry.body && !(entry.category === 'test' && results.length)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a note.', path: ['body'] });
+};
+export const medicalEntrySchema = entryContent.extend({ appointmentId: z.string().min(1) }).superRefine(contentRule);
 /** Editing changes the note's content only; the visit, patient and creation time stay fixed. */
-export const medicalEntryUpdateSchema = medicalEntrySchema.omit({ appointmentId: true });
+export const medicalEntryUpdateSchema = entryContent.superRefine(contentRule);
+/** Results are stored only when there are some; an emptied list clears the column. */
+const resultsColumn = (results?: z.infer<typeof labResultSchema>[]) => results?.length ? results : Prisma.DbNull;
+const INVALID_NOTE = 'Choose a category and enter a title (1–120) and a note (up to 5000 characters). A test note can have up to 30 results with numeric values instead of text.';
 const querySchema = z.object({
   offset: z.coerce.number().int().min(0).max(100000).default(0), direction: z.enum(['asc','desc']).default('asc'), category: z.enum(['test','anamnesis','conclusion']).optional(),
   // Visit scope: only one visit's notes, or everything except one visit (earlier history on a visit page).
@@ -62,13 +80,13 @@ medicalHistoryRouter.get('/medical-history', privateRoute(async (req, res) => {
     ${q.specialty ? Prisma.sql`AND c."name"=${q.specialty}` : Prisma.empty}
     ${q.from ? Prisma.sql`AND COALESCE(s."startAt", e."createdAt") >= ${q.from}` : Prisma.empty}
     ${q.to ? Prisma.sql`AND COALESCE(s."startAt", e."createdAt") < ${q.to}` : Prisma.empty}
-    ${q.q ? Prisma.sql`AND (e."title" ILIKE ${'%' + q.q + '%'} OR e."body" ILIKE ${'%' + q.q + '%'})` : Prisma.empty}`;
+    ${q.q ? Prisma.sql`AND (e."title" ILIKE ${'%' + q.q + '%'} OR e."body" ILIKE ${'%' + q.q + '%'} OR e."results"::text ILIKE ${'%' + q.q + '%'})` : Prisma.empty}`;
   const from = Prisma.sql`FROM "MedicalEntry" e LEFT JOIN "ScheduleSlot" s ON s."id"=e."appointmentId"
       JOIN "Doctor" d ON d."id"=e."doctorId" JOIN "User" u ON u."id"=d."userId" JOIN "Category" c ON c."id"=d."categoryId"`;
   const direction = Prisma.raw(q.direction.toUpperCase());
   const [entries, grouped, specialties] = await Promise.all([
-    prisma.$queryRaw<Array<{id:string;patientId:string;doctorId:string;appointmentId:string|null;category:string;title:string;body:string;createdAt:Date;updatedAt:Date;eventAt:Date;appointmentStartAt:Date|null;doctorFirstName:string;doctorLastName:string;specialty:string}>>(Prisma.sql`
-      SELECT e."id", e."patientId", e."doctorId", e."appointmentId", e."category", e."title", e."body", e."createdAt", e."updatedAt",
+    prisma.$queryRaw<Array<{id:string;patientId:string;doctorId:string;appointmentId:string|null;category:string;title:string;body:string;results:unknown;createdAt:Date;updatedAt:Date;eventAt:Date;appointmentStartAt:Date|null;doctorFirstName:string;doctorLastName:string;specialty:string}>>(Prisma.sql`
+      SELECT e."id", e."patientId", e."doctorId", e."appointmentId", e."category", e."title", e."body", e."results", e."createdAt", e."updatedAt",
         COALESCE(s."startAt", e."createdAt") AS "eventAt", s."startAt" AS "appointmentStartAt", u."firstName" AS "doctorFirstName", u."lastName" AS "doctorLastName", c."name" AS "specialty"
       ${from}
       WHERE ${filters} ${q.category ? Prisma.sql`AND e."category"=${q.category}::"MedicalEntryCategory"` : Prisma.empty}
@@ -88,7 +106,7 @@ medicalHistoryRouter.get('/medical-history', privateRoute(async (req, res) => {
 medicalHistoryRouter.get('/medical-history/export', privateRoute(async (req,res) => {
   const patientId=req.user!.role===Role.PATIENT?req.user!.id:typeof req.query.patientId==='string'?req.query.patientId:'';
   if(!await canAccessMedicalHistory(req.user,patientId)){await prisma.historyAccessAudit.create({data:{actorId:req.user?.id,actorRole:req.user?.role,targetPatientId:patientId||'unknown',endpoint:'export',outcome:'denied'}}).catch(()=>undefined);return res.status(404).json({error:'History unavailable.'});}
-  const entries=await prisma.$queryRawUnsafe<Array<{id:string;patientId:string;doctorId:string;appointmentId:string|null;category:string;title:string;body:string;createdAt:Date;updatedAt:Date;eventAt:Date;doctorFirstName:string;doctorLastName:string}>>('SELECT e."id",e."patientId",e."doctorId",e."appointmentId",e."category",e."title",e."body",e."createdAt",e."updatedAt",COALESCE(s."startAt",e."createdAt") AS "eventAt",u."firstName" AS "doctorFirstName",u."lastName" AS "doctorLastName" FROM "MedicalEntry" e LEFT JOIN "ScheduleSlot" s ON s."id"=e."appointmentId" JOIN "Doctor" d ON d."id"=e."doctorId" JOIN "User" u ON u."id"=d."userId" WHERE e."patientId"=$1 ORDER BY COALESCE(s."startAt",e."createdAt") ASC,e."createdAt" ASC,e."id" ASC',patientId);
+  const entries=await prisma.$queryRawUnsafe<Array<{id:string;patientId:string;doctorId:string;appointmentId:string|null;category:string;title:string;body:string;results:unknown;createdAt:Date;updatedAt:Date;eventAt:Date;doctorFirstName:string;doctorLastName:string;specialty:string}>>('SELECT e."id",e."patientId",e."doctorId",e."appointmentId",e."category",e."title",e."body",e."results",e."createdAt",e."updatedAt",COALESCE(s."startAt",e."createdAt") AS "eventAt",u."firstName" AS "doctorFirstName",u."lastName" AS "doctorLastName",c."name" AS "specialty" FROM "MedicalEntry" e LEFT JOIN "ScheduleSlot" s ON s."id"=e."appointmentId" JOIN "Doctor" d ON d."id"=e."doctorId" JOIN "User" u ON u."id"=d."userId" JOIN "Category" c ON c."id"=d."categoryId" WHERE e."patientId"=$1 ORDER BY COALESCE(s."startAt",e."createdAt") ASC,e."createdAt" ASC,e."id" ASC',patientId);
   return res.json({entries:entries.map(({doctorFirstName,doctorLastName,...entry})=>({...entry,doctor:{user:{firstName:doctorFirstName,lastName:doctorLastName}}}))});
 }));
 medicalHistoryRouter.get('/medical-history/:entryId', privateRoute(async (req,res) => {
@@ -103,14 +121,14 @@ medicalHistoryRouter.post('/medical-history', privateRoute(async (req, res) => {
     return res.status(404).json({error:'History unavailable.'});
   }
   const input = medicalEntrySchema.safeParse(req.body);
-  if (!input.success) return res.status(400).json({ error: 'Choose a category and enter a title (1–120) and note (1–5000 characters).' });
+  if (!input.success) return res.status(400).json({ error: INVALID_NOTE });
   const entry = await prisma.$transaction(async tx => {
     // Demo clock: the database trigger stamps the entry with this time instead of its own clock.
     if (clockOffsetMs() !== 0) await tx.$executeRaw`SELECT set_config('app.now', ${new Date().toISOString()}, true)`;
     const visit = await tx.scheduleSlot.findFirst({ where: { id: input.data.appointmentId, doctor: {userId:req.user!.id}, status:'OCCUPIED', startAt:{lte:new Date()}, endAt:{gte:new Date(Date.now()-NOTE_WINDOW_MS)}, patient: {role:Role.PATIENT} }, select: { id: true, patientId: true, doctorId: true } });
     if (!visit?.patientId) return null;
     if (!await canAccessMedicalHistory(req.user, visit.patientId)) return null;
-    return tx.medicalEntry.create({ data: { ...input.data, patientId: visit.patientId, doctorId: visit.doctorId }, include });
+    return tx.medicalEntry.create({ data: { ...input.data, results: resultsColumn(input.data.results), patientId: visit.patientId, doctorId: visit.doctorId }, include });
   });
   if (!entry) {
     await prisma.historyAccessAudit.create({data:{actorId:req.user?.id,actorRole:req.user?.role,targetPatientId:'unknown',endpoint:'create',outcome:'denied'}}).catch(()=>undefined);
@@ -125,7 +143,7 @@ medicalHistoryRouter.patch('/medical-history/:entryId', privateRoute(async (req,
   };
   if (req.user?.role !== Role.DOCTOR) return deny();
   const input = medicalEntryUpdateSchema.safeParse(req.body);
-  if (!input.success) return res.status(400).json({ error: 'Choose a category and enter a title (1–120) and note (1–5000 characters).' });
+  if (!input.success) return res.status(400).json({ error: INVALID_NOTE });
   // Same rule as writing a note: the author, on a checked-in visit, until 24 hours after it ended.
   const editable = await prisma.medicalEntry.findFirst({
     where: { id: String(req.params.entryId), doctor: { userId: req.user.id }, appointment: { status: 'OCCUPIED', endAt: { gte: new Date(Date.now() - NOTE_WINDOW_MS) } } },
@@ -134,6 +152,6 @@ medicalHistoryRouter.patch('/medical-history/:entryId', privateRoute(async (req,
   if (!editable) return deny();
   if (!await canAccessMedicalHistory(req.user, editable.patientId)) return deny(editable.patientId);
   // updatedAt is set explicitly so it follows the app clock, like createdAt does.
-  const entry = await prisma.medicalEntry.update({ where: { id: editable.id }, data: { ...input.data, updatedAt: new Date() }, include });
+  const entry = await prisma.medicalEntry.update({ where: { id: editable.id }, data: { ...input.data, results: resultsColumn(input.data.results), updatedAt: new Date() }, include });
   return res.json({ entry });
 }));

@@ -179,7 +179,8 @@ export const authApi = {
   markNotificationsRead: () => api<{ updated: number }>('/notifications/read-all', { method: 'POST' }),
   markNotificationRead: (id: string) => api<{ updated: number }>('/notifications/' + encodeURIComponent(id) + '/read', { method: 'POST' }),
   frontDeskLookup: (iin: string) => api<{ patient: { id: string; firstName: string; lastName: string; email: string; phone: string | null; iin: string } }>(`/front-desk/patients/lookup?iin=${encodeURIComponent(iin)}`),
-  frontDeskAppointments: (query = '') => api<{ appointments: FrontDeskAppointment[] }>(`/front-desk/appointments${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+  /** A search looks across all dates; otherwise one day (YYYY-MM-DD, Almaty), today by default. */
+  frontDeskAppointments: (query = '', date = '') => api<{ appointments: FrontDeskAppointment[] }>(`/front-desk/appointments${query ? `?q=${encodeURIComponent(query)}` : date ? `?date=${date}` : ''}`),
   frontDeskAvailability: (params: { date: string; categories?: string[]; q?: string }) =>
     api<{ date: string; doctors: AvailabilityDoctor[]; specialtyCounts?: Record<string, number> }>(`/front-desk/availability?${new URLSearchParams({ date: params.date, ...(params.categories?.length ? { category: params.categories.join(",") } : {}), ...(params.q ? { q: params.q } : {}) }).toString()}`),
   frontDeskWalkIn: (body: { firstName: string; lastName: string; iin: string; email?: string; phone?: string; doctorId: string; slotId: string; visitPurpose: string }) => api<{ patient: { id: string; firstName: string; lastName: string }; slot: { id: string; status: ScheduleSlot['status'] }; reference: string }>('/front-desk/walk-ins', { method: 'POST', body: JSON.stringify(body) }),

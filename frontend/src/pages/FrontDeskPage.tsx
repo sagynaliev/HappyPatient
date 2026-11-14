@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { authApi, FrontDeskAppointment, Receipt } from "../lib/api";
+import { api, authApi, FrontDeskAppointment, Receipt } from "../lib/api";
 import WalkInSlotPicker, { PickedSlot } from "../components/WalkInSlotPicker";
 import "../styles/frontDesk.css";
 import { isValidPhone } from "../lib/iin";
@@ -10,6 +10,10 @@ import { toast } from "../lib/toast";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty" }).format(new Date());
 const dateText = (value: string) => new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "Asia/Almaty" }).format(new Date(value));
+const shortDay = (day: string) => new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Almaty" }).format(new Date(`${day}T12:00:00+05:00`));
+/** Moves a YYYY-MM-DD day by whole days in Almaty time. */
+const shiftDay = (day: string, days: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty" }).format(new Date(Date.parse(`${day}T12:00:00+05:00`) + days * 86_400_000));
+type StatusFilter = "all" | "BOOKED" | "OCCUPIED";
 const timeText = (value: string) => new Intl.DateTimeFormat("en-GB", { timeStyle: "short", timeZone: "Asia/Almaty" }).format(new Date(value));
 
 /** Check-in opens 30 minutes before the visit and closes when it ends (same rule as the API). */
@@ -21,6 +25,18 @@ type FrontDeskView = "appointments" | "walk-in";
 export default function FrontDeskPage({ view = "appointments" }: { view?: FrontDeskView }) {
   const [query, setQuery] = useState("");
   const [appointments, setAppointments] = useState<FrontDeskAppointment[]>([]);
+  const [day, setDay] = useState(today);
+  const [dayList, setDayList] = useState<FrontDeskAppointment[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [specialty, setSpecialty] = useState("");
+  const [clinicSpecialties, setClinicSpecialties] = useState<string[]>([]);
+  // Every active specialty is offered, also ones with no visits on the chosen day.
+  useEffect(() => {
+    if (view !== "appointments") return;
+    let active = true;
+    api<{ categories: Array<{ name: string }> }>("/categories").then((result) => { if (active) setClinicSpecialties(result.categories.map((item) => item.name)); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [view]);
   const [selected, setSelected] = useState<FrontDeskAppointment | null>(null);
   const [patient, setPatient] = useState<{ firstName: string; lastName: string; iin: string; email: string; phone: string | null }>({ firstName: "", lastName: "", iin: "", email: "", phone: "" });
   const [picked, setPicked] = useState<PickedSlot | null>(null);
@@ -49,9 +65,23 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
   const [busy, setBusy] = useState(false);
 
   const loadAppointments = useCallback(async () => {
-    try { setAppointments((await authApi.frontDeskAppointments(query)).appointments); setError(""); }
+    const search = query.trim();
+    try {
+      const result = (await authApi.frontDeskAppointments(search, day)).appointments;
+      setAppointments(result);
+      // The banner numbers always describe the chosen day, also while a search shows other dates.
+      if (!search) setDayList(result);
+      setError("");
+    }
     catch (cause: unknown) { setError(cause instanceof Error ? cause.message : "Unable to load appointments."); }
-  }, [query]);
+  }, [query, day]);
+  const searching = Boolean(query.trim());
+  const specialties = Array.from(new Set([...clinicSpecialties, ...appointments.map((item) => item.doctor.specialty)])).sort((a, b) => a.localeCompare(b));
+  const specialtyCount = (name: string) => appointments.filter((item) => item.doctor.specialty === name && (statusFilter === "all" || item.status === statusFilter)).length;
+  const bySpecialty = appointments.filter((item) => !specialty || item.doctor.specialty === specialty);
+  const visible = bySpecialty.filter((item) => statusFilter === "all" || item.status === statusFilter);
+  const statusCount = (status: StatusFilter) => bySpecialty.filter((item) => status === "all" || item.status === status).length;
+  const isToday = day === today();
 
   useEffect(() => { void loadAppointments(); }, [loadAppointments]);
 
@@ -99,17 +129,33 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
     <header className={`front-desk-heading fdk-banner${view === "walk-in" ? " is-slim" : ""}`}>
       <div className="fdk-banner-copy">{view === "walk-in" ? <><h1>Walk-in registration</h1><p>Register a patient who arrived without a booking and give them the next free time.</p></> : <><h1>Front desk</h1><p>Find appointments and confirm arrivals.</p></>}</div>
       {view === "walk-in" ? <Link className="fdk-banner-link" to="/front-desk">Today’s appointments</Link> : <dl className="fdk-stats">
-        <div><dt>Today’s visits</dt><dd>{appointments.filter((item) => item.startAt.slice(0, 10) && new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty" }).format(new Date(item.startAt)) === today()).length}</dd></div>
-        <div><dt>Waiting to check in</dt><dd>{appointments.filter((item) => item.status === "BOOKED").length}</dd></div>
-        <div><dt>Checked in</dt><dd>{appointments.filter((item) => item.status === "OCCUPIED").length}</dd></div>
+        <div><dt>{isToday ? "Today’s visits" : `Visits · ${shortDay(day)}`}</dt><dd>{dayList.length}</dd></div>
+        <div><dt>Waiting to check in</dt><dd>{dayList.filter((item) => item.status === "BOOKED").length}</dd></div>
+        <div><dt>Checked in</dt><dd>{dayList.filter((item) => item.status === "OCCUPIED").length}</dd></div>
       </dl>}
     </header>
     {message && <div className="front-desk-alert success" role="status">{message}</div>}
     {error && <div id="fd-form-error" className="front-desk-alert alert error" role="alert">{error}</div>}
     <div className={`${view === "walk-in" ? "fdk-walkin-layout" : "fdk-appointments-layout"}${walkInConfirmation && view === "walk-in" ? " has-walkin-notice" : ""}`}>
-      {view === "appointments" && <section className="front-desk-card"><div className="fdk-section-head"><h2>Appointments</h2><Link className="fdk-walkin-link" to="/front-desk/walk-in">+ Walk-in</Link></div><p className="front-desk-muted">Booked and checked-in visits, soonest first.</p><form className="front-desk-search" onSubmit={(event) => { event.preventDefault(); void loadAppointments(); }}><input aria-label="Search appointments" placeholder="Patient, reference, or IIN" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="button" type="submit">Search</button></form>
-        {appointments.length > 0 && <div className="fdk-list-head" aria-hidden="true"><span /><span>Patient</span><span>Doctor</span><span>Date &amp; time</span><span>Reference</span><span>Status</span></div>}
-        <div className="front-desk-list">{appointments.length ? appointments.map((appointment) => <article className={`front-desk-appointment${selected?.id === appointment.id ? " selected" : ""}`} key={appointment.id} onClick={() => setSelected(appointment)}>
+      {view === "appointments" && <section className="front-desk-card"><div className="fdk-section-head"><h2>Appointments</h2><Link className="fdk-walkin-link" to="/front-desk/walk-in">+ Walk-in</Link></div><p className="front-desk-muted">{searching ? "Matches from all dates, newest first." : `Booked and checked-in visits for ${isToday ? "today" : shortDay(day)}, in time order.`}</p><form className="front-desk-search" onSubmit={(event) => { event.preventDefault(); void loadAppointments(); }}><input aria-label="Search appointments" placeholder="Patient, reference, or IIN" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="button" type="submit">Search</button></form>
+        <div className="fdk-toolbar">
+          {searching
+            ? <button type="button" className="fdk-today" onClick={() => setQuery("")}>← Back to {isToday ? "today" : shortDay(day)}</button>
+            : <div className="fdk-day" role="group" aria-label="Day">
+              <button type="button" className="fdk-day-step" aria-label="Previous day" onClick={() => setDay((value) => shiftDay(value, -1))}>‹</button>
+              <label className="sr-only" htmlFor="fdk-day">Day</label>
+              <input id="fdk-day" type="date" value={day} onChange={(event) => { if (event.target.value) setDay(event.target.value); }} />
+              <button type="button" className="fdk-day-step" aria-label="Next day" onClick={() => setDay((value) => shiftDay(value, 1))}>›</button>
+              {!isToday && <button type="button" className="fdk-today" onClick={() => setDay(today())}>Today</button>}
+            </div>}
+          <div className="fdk-status-filter" role="group" aria-label="Status">
+            {([["all", "All"], ["BOOKED", "Waiting"], ["OCCUPIED", "Checked in"]] as Array<[StatusFilter, string]>).map(([key, label]) => <button type="button" key={key} aria-pressed={statusFilter === key} onClick={() => setStatusFilter(key)}>{label} <span>{statusCount(key)}</span></button>)}
+          </div>
+          <label className="fdk-specialty"><span className="sr-only">Specialty</span><select value={specialty} onChange={(event) => setSpecialty(event.target.value)}><option value="">All specialties</option>{specialties.map((name) => <option key={name} value={name}>{name} ({specialtyCount(name)})</option>)}</select></label>
+          {(specialty || statusFilter !== "all") && <button type="button" className="fdk-today" onClick={() => { setSpecialty(""); setStatusFilter("all"); }}>Clear filters</button>}
+        </div>
+        {visible.length > 0 && <div className="fdk-list-head" aria-hidden="true"><span /><span>Patient</span><span>Doctor</span><span>Date &amp; time</span><span>Reference</span><span>Status</span></div>}
+        <div className="front-desk-list">{visible.length ? visible.map((appointment) => <article className={`front-desk-appointment${selected?.id === appointment.id ? " selected" : ""}`} key={appointment.id} onClick={() => setSelected(appointment)}>
           <span className="fdk-avatar" aria-hidden="true">{(appointment.patient?.name ?? "?").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
           <div className="fdk-info">
             <strong>{appointment.patient?.name ?? "Unknown patient"}</strong>
@@ -126,7 +172,7 @@ export default function FrontDeskPage({ view = "appointments" }: { view?: FrontD
                 ? <span className="fdk-checkin-later">Missed</span>
                 : <span className="fdk-checkin-later">Check-in from {timeText(new Date(Date.parse(appointment.startAt) - 30 * 60_000).toISOString())}</span>)}
           </div>
-        </article>) : <p className="front-desk-empty">No booked or checked-in appointments found.</p>}</div>
+        </article>) : <p className="front-desk-empty">{appointments.length ? "No visits match these filters." : searching ? "No appointments match this search." : `No booked or checked-in visits ${isToday ? "today" : `on ${shortDay(day)}`}.`}</p>}</div>
       </section>}
       {view === "walk-in" && <section ref={walkInCard} className="front-desk-card fdk-walkin" aria-label="Register walk-in patient">
         <form onSubmit={register} className="front-desk-form" aria-describedby={error ? "fd-form-error" : undefined}>
