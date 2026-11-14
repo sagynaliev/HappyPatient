@@ -233,3 +233,11 @@ export const doctorDirectoryApi = {
   cities: (options: RequestInit = {}) =>
     api<{ cities: string[] }>('/doctors/locations', options),
 };
+
+/** A booking the assistant proposes; nothing is booked until the patient presses Confirm. */
+export type AssistantBookingCard = { slotId: string; doctorId: string; doctorName: string; specialty: string; office: string | null; startAt: string; endAt: string; channel: ConsultationChannel; visitKind: VisitKind; priceKzt: number; visitPurpose: string };
+export type AssistantMessage = { role: 'user' | 'assistant'; content: string };
+export const assistantApi = {
+  chat: (messages: AssistantMessage[]) =>
+    api<{ reply: string; cards: AssistantBookingCard[] }>('/assistant/chat', { method: 'POST', body: JSON.stringify({ messages }) }),
+};
