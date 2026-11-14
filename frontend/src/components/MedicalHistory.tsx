@@ -5,6 +5,8 @@ import '../styles/medicalHistory.css';
 import { toast } from '../lib/toast';
 
 export const categoryLabels = { test: 'Tests', anamnesis: 'Anamnesis', conclusion: 'Conclusions' };
+/** "1 Test", "2 Tests": the per-visit counts read as plain English. */
+const countLabel = (key: keyof typeof categoryLabels, count: number) => `${count} ${count === 1 ? { test: 'Test', anamnesis: 'Anamnesis', conclusion: 'Conclusion' }[key] : { test: 'Tests', anamnesis: 'Anamneses', conclusion: 'Conclusions' }[key]}`;
 export type MedicalCategory = keyof typeof categoryLabels;
 export type MedicalEntry = { id: string; category: MedicalCategory; title: string; body: string; createdAt: string; updatedAt: string; eventAt?: string; appointmentId?: string|null; appointmentStartAt?: string|null; specialty?: string; doctor: { user: { firstName: string; lastName: string } } };
 type HistoryResponse = { entries: MedicalEntry[]; hasMore: boolean; counts: Partial<Record<MedicalCategory, number>>; specialties?: Array<{ name: string; count: number }> };
@@ -69,7 +71,7 @@ function VisitGroup({ group, open, onToggle, newId, newLabel, onEdit }: { group:
         <span className="mh-group-title">{group.visit ? 'Visit' : 'Notes'} · {visitText.format(new Date(group.at))}{group.visit ? ` · ${timeText.format(new Date(group.at))}` : ''}</span>
         <span className="mh-group-meta">{doctors.size === 1 ? doctorName(first) : `${doctors.size} doctors`}{first.specialty ? ` · ${first.specialty}` : ''}</span>
       </span>
-      <span className="mh-group-tally">{tally.map(([key, count]) => <span key={key} className={`mh-pill is-${key}`}>{count} {categoryLabels[key]}</span>)}</span>
+      <span className="mh-group-tally">{tally.map(([key, count]) => <span key={key} className={`mh-pill is-${key}`}>{countLabel(key, count)}</span>)}</span>
       <Icon name="arrow-right" size={18} className="mh-group-chevron" />
     </button>
     {open && <div className="mh-group-body" id={panelId}>{group.entries.map(entry => <MedicalEntryCard key={entry.id} entry={entry} showDoctor={doctors.size > 1} isNew={entry.id === newId} newLabel={newLabel} onEdit={onEdit} />)}</div>}

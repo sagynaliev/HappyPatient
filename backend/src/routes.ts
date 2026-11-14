@@ -1130,7 +1130,7 @@ async function visitCostFor(slot:{id:string;doctorId:string;startAt:Date;endAt:D
   const parking=resolvePricingRule(rules as PricingRule[],'parking',bookedAt,slot.doctorId,slot.doctor.categoryId,undefined,slot.doctor.locationId);
   const cost=calculateVisitCost(slot.doctor.consultationFee,visit?{id:visit.id,amountKzt:visit.amountKzt}:undefined);
   const duration=(slot.endAt.getTime()-slot.startAt.getTime())/60000;
-  return {...cost,bookedAt,parking:parking?{durationMinutes:duration,amountKzt:calculateParkingCost(duration,parking)}:null};
+  return {...cost,bookedAt,parking:parking?{durationMinutes:duration,amountKzt:calculateParkingCost(duration,parking),ratePerHourKzt:parking.ratePerHourKzt,freeMinutes:parking.freeMinutes,rounding:parking.rounding,dailyCapKzt:parking.dailyCapKzt}:null};
 }
 router.get('/me/appointments/:slotId/cost',requireAuth,requireRole(Role.PATIENT),async(req,res)=>{
   const slot=await prisma.scheduleSlot.findFirst({where:{id:String(req.params.slotId),patientId:req.user!.id},include:{doctor:{select:{consultationFee:true,categoryId:true,locationId:true}}}});

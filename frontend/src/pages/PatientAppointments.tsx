@@ -59,8 +59,19 @@ function AppointmentIcon({ kind }: { kind: "calendar" | "clock" | "location" | "
   );
 }
 
+/** "First 15 min free · 500 KZT per started hour · max 3,000 KZT a day · paid at the car park". */
+function parkingNote(parking: { ratePerHourKzt?: number | null; freeMinutes?: number; rounding?: string; dailyCapKzt?: number | null }) {
+  const money = (value: number) => `${new Intl.NumberFormat("en-US").format(value)} KZT`;
+  return [
+    parking.freeMinutes ? `First ${parking.freeMinutes} min free` : "",
+    typeof parking.ratePerHourKzt === "number" ? `${money(parking.ratePerHourKzt)} ${parking.rounding === "per_minute" ? "per hour, by the minute" : "per started hour"}` : "",
+    typeof parking.dailyCapKzt === "number" ? `max ${money(parking.dailyCapKzt)} a day` : "",
+    "paid at the car park",
+  ].filter(Boolean).join(" · ").replace(/^./, (first) => first.toUpperCase());
+}
+
 function VisitCost({ slotId, visible }: { slotId: string; visible: boolean }) {
-  const [cost, setCost] = useState<{ consultationKzt: number; totalKzt: number; parking: { durationMinutes: number; amountKzt: number } | null } | null>(null);
+  const [cost, setCost] = useState<{ consultationKzt: number; totalKzt: number; bookedAt?: string; parking: { durationMinutes: number; amountKzt: number; ratePerHourKzt?: number | null; freeMinutes?: number; rounding?: string; dailyCapKzt?: number | null } | null } | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
     if (!visible || cost || error) return;
@@ -71,9 +82,9 @@ function VisitCost({ slotId, visible }: { slotId: string; visible: boolean }) {
   if (!visible) return null;
   return <section className="pa-cost-breakdown" aria-label="Price breakdown">
     {!cost && !error ? <p role="status">Loading price…</p> : error ? <p className="alert error">Price breakdown unavailable.</p> : cost && <dl className="pa-price-list">
-      <div><dt>Consultation fee</dt><dd>{formatFee(cost.consultationKzt)}</dd></div>
+      <div><dt>Consultation fee{cost.bookedAt && <small>Price fixed when you booked on {new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "Asia/Almaty" }).format(new Date(cost.bookedAt))}</small>}</dt><dd>{formatFee(cost.consultationKzt)}</dd></div>
       <div className="pa-price-total"><dt>Visit total</dt><dd>{formatFee(cost.totalKzt)}</dd></div>
-      {cost.parking && <div className="pa-price-extra"><dt>Parking estimate · {cost.parking.durationMinutes} min<small>Paid separately at the car park</small></dt><dd>{formatFee(cost.parking.amountKzt)}</dd></div>}
+      {cost.parking && <div className="pa-price-extra"><dt>Parking estimate · {cost.parking.durationMinutes} min<small>{parkingNote(cost.parking)}</small></dt><dd>{formatFee(cost.parking.amountKzt)}</dd></div>}
     </dl>}
   </section>;
 }
