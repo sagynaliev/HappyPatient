@@ -235,3 +235,20 @@ a.dw-agenda-row:hover .dw-row-arrow { color: var(--primary); }
   .dw-legend { display: none; }
   .dw-visit-actions { width: 100%; justify-content: space-between; }
 }
+
+/* Treatments recorded on a visit */
+.dw-treatments { display: grid; gap: 14px; }
+.dw-treatments-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; }
+.dw-treatments-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.dw-treatments-head p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13.5px; }
+.dw-treatments-total { font-size: 18px; font-variant-numeric: tabular-nums; }
+.dw-treatments-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.dw-treatments-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14.5px; }
+.dw-treatments-list li:first-child { border-top: 0; }
+.dw-treatments-list li > span:first-child { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--text-primary); font-weight: 600; }
+.dw-treatments-list li > span:first-child svg { color: var(--status-success, #17633f); }
+.dw-treatments-list small { color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.dw-treatments-price { font-variant-numeric: tabular-nums; }
+.dw-treatments-add { display: flex; flex-wrap: wrap; gap: 10px; }
+.dw-treatments-add select { flex: 1 1 260px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text-primary); font: inherit; font-size: 14px; }
+@media (max-width: 600px) { .dw-treatments-list li { grid-template-columns: minmax(0, 1fr) auto; } .dw-treatments-list li .dw-mini { grid-column: 1 / -1; justify-self: start; } .dw-treatments-add .dw-button { width: 100%; } }

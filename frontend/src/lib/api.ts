@@ -62,6 +62,9 @@ export type ScheduleSlot = {
   visitPurpose?: string | null;
   patient?: { id: string; firstName: string; lastName: string; email?: string } | null;
 };
+/** A priced treatment the doctor can record on a visit (price from the rule in force when it was booked). */
+export type TreatmentChoice = { key: string; code: string | null; name: string; amountKzt: number; ruleId: string };
+export type VisitTreatment = { id: string; code: string | null; name: string; amountKzt: number; createdAt: string };
 /** An active office from the clinic's reference list. */
 export type ClinicOffice = { id: string; name: string; floor: string; city: string };
 export type DoctorProfile = {
@@ -153,6 +156,9 @@ export const authApi = {
   register: (body: Record<string, unknown>) =>
     api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   doctorProfile: () => api<{ doctor: DoctorProfile }>('/doctors/me'),
+  visitTreatments: (slotId: string) => api<{ editable: boolean; available: TreatmentChoice[]; added: VisitTreatment[] }>(`/doctors/me/visits/${encodeURIComponent(slotId)}/treatments`),
+  addVisitTreatment: (slotId: string, key: string) => api<{ treatment: VisitTreatment }>(`/doctors/me/visits/${encodeURIComponent(slotId)}/treatments`, { method: 'POST', body: JSON.stringify({ key }) }),
+  removeVisitTreatment: (slotId: string, treatmentId: string) => api<void>(`/doctors/me/visits/${encodeURIComponent(slotId)}/treatments/${encodeURIComponent(treatmentId)}`, { method: 'DELETE' }),
   updateOffice: (office: string) => api<{ doctor: DoctorProfile }>('/doctors/me/office', { method: 'PATCH', body: JSON.stringify({ office }) }),
   doctorOffices: () => api<{ offices: ClinicOffice[] }>('/doctors/me/offices'),
   updateLocation: (body: { city: string | null; clinicName: string | null; streetAddress: string | null; officeNumber: string | null; locationId?: string | null }) =>

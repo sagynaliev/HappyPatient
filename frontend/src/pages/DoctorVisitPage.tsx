@@ -7,6 +7,7 @@ import { toast } from "../lib/toast";
 import { Icon } from "../components/Icons";
 import { patientName, slotKind } from "./DoctorSchedulePage";
 import MedicalHistory, { MedicalEntry, MedicalNoteForm } from "../components/MedicalHistory";
+import VisitTreatments from "../components/VisitTreatments";
 import "../styles/medicalHistory.css";
 import "../styles/doctorWorkspace.css";
 
@@ -146,6 +147,7 @@ export default function DoctorVisitPage() {
       </header>
 
       <div className="dw-visit-work">
+        {slot.status === "OCCUPIED" && slot.patient && started && <VisitTreatments key={slot.id} slotId={slot.id} />}
         <section className="dw-notes" aria-label="Medical notes">
           {slot.patient && canReadHistory ? <>
             <div className="dw-notes-bar">

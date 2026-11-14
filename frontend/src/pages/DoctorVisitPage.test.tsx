@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DoctorVisitPage from "./DoctorVisitPage";
 import { api, authApi } from "../lib/api";
 
-vi.mock("../lib/api", () => ({ authApi: { doctorProfile: vi.fn(), getSchedule: vi.fn(), slotDetails: vi.fn(), updateSlot: vi.fn() }, api: vi.fn(() => Promise.resolve({ entries: [], hasMore: false, counts: {} })) }));
+vi.mock("../lib/api", () => ({ authApi: { doctorProfile: vi.fn(), getSchedule: vi.fn(), slotDetails: vi.fn(), updateSlot: vi.fn(), visitTreatments: vi.fn(() => Promise.resolve({ editable: true, available: [], added: [] })), addVisitTreatment: vi.fn(), removeVisitTreatment: vi.fn() }, api: vi.fn(() => Promise.resolve({ entries: [], hasMore: false, counts: {} })) }));
 afterEach(cleanup);
 
 const doctor = { id: "doctor-1", office: "Office 102", category: { name: "Pediatrics" }, user: { firstName: "Arman", lastName: "Akhmetov" } };
