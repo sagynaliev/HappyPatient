@@ -332,3 +332,18 @@
 .ad-button-small { min-height: 34px !important; padding: 0 14px !important; font-size: 13px !important; }
 .ad-sample-more { margin-top: 8px; } .ad-sample-more > .ad-sample-list { margin-top: 8px; }
 .ad-rule-step .ad-end-field .ad-switch { display: inline-flex; flex-direction: row; align-items: center; min-height: 20px; margin-top: 2px; }
+/* Price (one field) and When (start and optional end) sit side by side; When gets twice the width, so "Effective from" and the end date share one row and
+   neither box is stretched with empty space. Parking has four price fields: both steps take the full width. */
+.ad-rule-steps { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.ad-rule-steps.is-parking > .ad-rule-step { grid-column: 1 / -1; }
+.ad-rule-steps .ad-rule-step:nth-child(3) .ad-form-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+@media (max-width: 800px) { .ad-rule-steps { grid-template-columns: minmax(0, 1fr); } }
+/* Every pricing input is the same height, and the end-date switch row is as tall as a field label,
+   so Amount, Effective from and the end date line up exactly. */
+.ad-rule-step .ad-form-grid input:not([type="checkbox"]), .ad-rule-step .ad-form-grid select { box-sizing: border-box; height: 44px; margin: 0; }
+.ad-rule-step .ad-end-field { gap: 6px; }
+.ad-rule-step .ad-end-field .ad-switch { height: 19.5px; min-height: 0; margin: 0; line-height: 19.5px; }
+.ad-rule-step .ad-end-field .ad-switch span { width: 32px; height: 18px; }
+.ad-rule-step .ad-end-field .ad-switch span::after { width: 14px; height: 14px; }
+.ad-rule-step .ad-end-field .ad-switch input:checked + span::after { transform: translateX(14px); }
+.ad-rule-step .ad-end-field .ad-muted { display: flex; align-items: center; height: 44px; padding: 0; line-height: 1.35; }
