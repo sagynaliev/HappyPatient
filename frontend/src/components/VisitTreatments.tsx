@@ -1,72 +1,151 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authApi, TreatmentChoice, VisitTreatment } from "../lib/api";
 import { toast } from "../lib/toast";
 import { Icon } from "./Icons";
 
-const money = (value: number) => `${new Intl.NumberFormat("en-US").format(value)} KZT`;
+export const money = (value: number) => `${new Intl.NumberFormat("en-US").format(value)} KZT`;
+const time = (iso: string) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
 
-/** Treatments done during a checked-in visit. The patient sees them, with prices, in the visit's price breakdown. */
-export default function VisitTreatments({ slotId }: { slotId: string }) {
+/** Treatments of one checked-in visit: what was added, what can be added, and whether the doctor may still change them. */
+export function useVisitTreatments(slotId: string, enabled: boolean) {
   const [added, setAdded] = useState<VisitTreatment[]>([]);
   const [available, setAvailable] = useState<TreatmentChoice[]>([]);
   const [editable, setEditable] = useState(false);
-  const [choice, setChoice] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     authApi.visitTreatments(slotId)
       .then((result) => { if (active) { setAdded(result.added); setAvailable(result.available); setEditable(result.editable); } })
-      .catch(() => { if (active) setError("Treatments could not be loaded."); })
-      .finally(() => { if (active) setLoading(false); });
+      .catch(() => { if (active) toast.error("Treatments could not be loaded"); })
+      .finally(() => { if (active) setLoaded(true); });
     return () => { active = false; };
+  }, [slotId, enabled]);
+
+  /** Adds each chosen treatment as many times as asked; stops at the first refusal and keeps what was saved. */
+  const add = useCallback(async (picks: Array<{ key: string; count: number }>) => {
+    setBusy(true);
+    const saved: VisitTreatment[] = [];
+    try {
+      for (const pick of picks) for (let index = 0; index < pick.count; index += 1) saved.push((await authApi.addVisitTreatment(slotId, pick.key)).treatment);
+      toast.success(saved.length === 1 ? "Treatment added" : `${saved.length} treatments added`, money(saved.reduce((sum, item) => sum + item.amountKzt, 0)));
+      return true;
+    } catch (caught) {
+      toast.error("Treatment not added", caught instanceof Error ? caught.message : "Try again.");
+      return false;
+    } finally {
+      if (saved.length) setAdded((current) => [...current, ...saved]);
+      setBusy(false);
+    }
   }, [slotId]);
 
-  async function add(event: FormEvent) {
-    event.preventDefault();
-    if (!choice) return;
-    setBusy(true); setError("");
-    try {
-      const { treatment } = await authApi.addVisitTreatment(slotId, choice);
-      setAdded((current) => [...current, treatment]);
-      setChoice("");
-      toast.success("Treatment added", `${treatment.name} · ${money(treatment.amountKzt)}`);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "The treatment was not added."); }
+  const remove = useCallback(async (item: VisitTreatment) => {
+    setBusy(true);
+    try { await authApi.removeVisitTreatment(slotId, item.id); setAdded((current) => current.filter((row) => row.id !== item.id)); toast.neutral("Treatment removed", item.name); }
+    catch (caught) { toast.error("Treatment not removed", caught instanceof Error ? caught.message : "Try again."); }
     finally { setBusy(false); }
+  }, [slotId]);
+
+  return { added, available, editable, loaded, busy, add, remove };
+}
+
+/** The visit's treatments as one timeline record: each line with its price, the total, and Remove while still editable. */
+export function TreatmentTimelineBlock({ items, editable, busy, onRemove }: { items: VisitTreatment[]; editable: boolean; busy: boolean; onRemove: (item: VisitTreatment) => void }) {
+  if (items.length === 0) return null;
+  const total = items.reduce((sum, item) => sum + item.amountKzt, 0);
+  return (
+    <article className="mh-treatments" aria-label="Treatments in this visit">
+      <header>
+        <span className="mh-treatments-chip"><Icon name="spark" size={14} /> Treatments</span>
+        <strong>{money(total)}</strong>
+      </header>
+      <ul>
+        {items.map((item) => (
+          <li key={item.id}>
+            <span className="mh-treatments-name">{item.name}{item.code && <small>{item.code}</small>}</span>
+            <span className="mh-treatments-time">{time(item.createdAt)}</span>
+            <span className="mh-treatments-price">{money(item.amountKzt)}</span>
+            {editable && <button type="button" className="mh-treatments-remove" disabled={busy} aria-label={`Remove ${item.name}`} onClick={() => onRemove(item)}><Icon name="close" size={15} /></button>}
+          </li>
+        ))}
+      </ul>
+      <p>The patient sees these in the visit's price breakdown.</p>
+    </article>
+  );
+}
+
+/** Pick treatments the way services are added at a salon desk: search, +/- per item, then one Add. */
+export function AddTreatmentDialog({ available, specialty, busy, onAdd, onClose }: { available: TreatmentChoice[]; specialty?: string; busy: boolean; onAdd: (picks: Array<{ key: string; count: number }>) => Promise<boolean>; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    searchRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const text = query.trim().toLocaleLowerCase();
+  const matches = available.filter((item) => !text || item.name.toLocaleLowerCase().includes(text) || (item.code ?? "").toLocaleLowerCase().includes(text));
+  const groups = useMemo(() => [
+    { title: specialty ? `For ${specialty}` : "For your specialty", items: matches.filter((item) => item.scope === "specialty" || item.scope === "doctor") },
+    { title: "For every doctor", items: matches.filter((item) => !item.scope || item.scope === "general") },
+  ].filter((group) => group.items.length), [matches, specialty]);
+  const picked = available.filter((item) => counts[item.key]);
+  const pickedCount = picked.reduce((sum, item) => sum + counts[item.key], 0);
+  const pickedTotal = picked.reduce((sum, item) => sum + counts[item.key] * item.amountKzt, 0);
+  const step = (key: string, delta: number) => setCounts((current) => { const next = Math.max(0, Math.min(9, (current[key] ?? 0) + delta)); const copy = { ...current }; if (next) copy[key] = next; else delete copy[key]; return copy; });
+
+  async function submit() {
+    if (!pickedCount) return;
+    if (await onAdd(picked.map((item) => ({ key: item.key, count: counts[item.key] })))) onClose();
   }
 
-  async function remove(item: VisitTreatment) {
-    setBusy(true); setError("");
-    try { await authApi.removeVisitTreatment(slotId, item.id); setAdded((current) => current.filter((row) => row.id !== item.id)); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "The treatment was not removed."); }
-    finally { setBusy(false); }
-  }
-
-  if (loading) return null;
-  if (!editable && added.length === 0) return null;
-  const total = added.reduce((sum, item) => sum + item.amountKzt, 0);
-  return <section className="dw-card dw-treatments" aria-labelledby="dw-treatments-title">
-    <header className="dw-treatments-head">
-      <div><h2 id="dw-treatments-title">Treatments</h2><p>{editable ? "Record what was done during this visit. The patient sees each treatment and its price." : "Recorded during this visit."}</p></div>
-      {added.length > 0 && <strong className="dw-treatments-total">{money(total)}</strong>}
-    </header>
-    {error && <p className="dw-alert" role="alert">{error}</p>}
-    {added.length > 0 && <ul className="dw-treatments-list">{added.map((item) => <li key={item.id}>
-      <span><Icon name="check" size={15} /> {item.name}{item.code ? <small>{item.code}</small> : null}</span>
-      <span className="dw-treatments-price">{money(item.amountKzt)}</span>
-      {editable && <button type="button" className="dw-mini is-danger" disabled={busy} aria-label={`Remove ${item.name}`} onClick={() => void remove(item)}>Remove</button>}
-    </li>)}</ul>}
-    {editable && (available.length
-      ? <form className="dw-treatments-add" onSubmit={add}>
-        <label className="sr-only" htmlFor="dw-treatment">Treatment</label>
-        <select id="dw-treatment" value={choice} disabled={busy} onChange={(event) => setChoice(event.target.value)}>
-          <option value="">Choose a treatment…</option>
-          {available.map((item) => <option key={item.key} value={item.key}>{item.name} · {money(item.amountKzt)}</option>)}
-        </select>
-        <button type="submit" className="dw-button" disabled={busy || !choice}>{busy ? "Saving…" : "Add treatment"}</button>
-      </form>
-      : <p className="dw-muted">The clinic has not priced any treatments yet. An administrator adds them under Pricing.</p>)}
-  </section>;
+  return (
+    <div className="dw-modal-backdrop tr-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="tr-dialog" role="dialog" aria-modal="true" aria-labelledby="tr-title">
+        <header className="tr-head">
+          <h2 id="tr-title">Add treatment</h2>
+          <button type="button" className="tr-close" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
+        </header>
+        <label className="tr-search"><Icon name="search" size={16} /><span className="sr-only">Search treatments</span>
+          <input ref={searchRef} type="search" value={query} placeholder="Search treatments…" onChange={(event) => setQuery(event.target.value)} />
+        </label>
+        <div className="tr-list">
+          {available.length === 0 ? <p className="tr-empty">The clinic has not priced any treatments for this visit yet. An administrator adds them under Pricing.</p>
+            : groups.length === 0 ? <p className="tr-empty">Nothing matches “{query.trim()}”.</p>
+            : groups.map((group) => (
+              <section key={group.title} aria-label={group.title}>
+                <h3>{group.title}</h3>
+                <ul>
+                  {group.items.map((item) => {
+                    const count = counts[item.key] ?? 0;
+                    return (
+                      <li key={item.key} className={count ? "is-picked" : undefined}>
+                        <span className="tr-letter" aria-hidden="true">{item.name[0]?.toUpperCase() ?? "?"}</span>
+                        <span className="tr-name"><strong>{item.name}</strong><small>{[item.code, money(item.amountKzt)].filter(Boolean).join(" · ")}</small></span>
+                        {count === 0
+                          ? <button type="button" className="tr-plus" aria-label={`Add ${item.name}`} onClick={() => step(item.key, 1)}>+</button>
+                          : <span className="tr-stepper" role="group" aria-label={`${item.name} quantity`}>
+                              <button type="button" aria-label={`One less ${item.name}`} onClick={() => step(item.key, -1)}>−</button>
+                              <output aria-live="polite">{count}</output>
+                              <button type="button" aria-label={`One more ${item.name}`} onClick={() => step(item.key, 1)}>+</button>
+                            </span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+        </div>
+        <footer className="tr-foot">
+          <span>{pickedCount ? `${pickedCount} selected · ${money(pickedTotal)}` : "Nothing selected"}</span>
+          <button type="button" className="dw-button" disabled={!pickedCount || busy} onClick={() => void submit()}>{busy ? "Adding…" : "Add"}</button>
+        </footer>
+      </div>
+    </div>
+  );
 }

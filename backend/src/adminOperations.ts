@@ -21,7 +21,7 @@ const CHECKS: CheckDefinition[] = [
   {id:'medical-entry-invalid-timestamps',name:'Medical entry timestamps are inconsistent',description:'An entry updated timestamp cannot be earlier than its creation timestamp.',severity:'critical',sql:`SELECT e."id" FROM "MedicalEntry" e WHERE e."updatedAt"<e."createdAt"`},
   {id:'medical-entry-sequence-gap',name:'Medical history sequence is not monotonic',description:'Each patient history must have contiguous, increasing server-assigned sequence numbers.',severity:'critical',sql:`WITH numbered AS (SELECT e."id",e."patientSequence",ROW_NUMBER() OVER(PARTITION BY e."patientId" ORDER BY e."patientSequence") AS expected FROM "MedicalEntry" e) SELECT "id" FROM numbered WHERE "patientSequence"<>expected`},
   {id:'duplicate-medical-entry',name:'Near-duplicate medical entries',description:'Same patient, doctor, category, title and body within five minutes may be accidental duplicates.',severity:'warning',sql:`SELECT DISTINCT a."id" FROM "MedicalEntry" a JOIN "MedicalEntry" b ON b."patientId"=a."patientId" AND b."doctorId"=a."doctorId" AND b."category"=a."category" AND b."title"=a."title" AND b."body"=a."body" AND b."id">a."id" AND ABS(EXTRACT(EPOCH FROM(b."createdAt"-a."createdAt")))<=300`},
-  {id:'invalid-office-hierarchy',name:'Office hierarchy is invalid',description:'Cities have no parent; floors belong to cities; offices belong to floors.',severity:'critical',sql:`SELECT l."id" FROM "Location" l LEFT JOIN "Location" p ON p."id"=l."parentId" WHERE (l."kind"='city' AND l."parentId" IS NOT NULL) OR (l."kind"='floor' AND (p."id" IS NULL OR p."kind"<>'city')) OR (l."kind"='office' AND (p."id" IS NULL OR p."kind"<>'floor'))`},
+  {id:'invalid-office-hierarchy',name:'Office hierarchy is invalid',description:'Cities have no parent; clinics belong to cities, floors to clinics and offices to floors.',severity:'critical',sql:`SELECT l."id" FROM "Location" l LEFT JOIN "Location" p ON p."id"=l."parentId" WHERE (l."kind"='city' AND l."parentId" IS NOT NULL) OR (l."kind"='clinic' AND (p."id" IS NULL OR p."kind"<>'city')) OR (l."kind"='floor' AND (p."id" IS NULL OR p."kind"<>'clinic')) OR (l."kind"='office' AND (p."id" IS NULL OR p."kind"<>'floor'))`},
 ];
 
 export async function collectIntegrityChecks(now = new Date()): Promise<IntegrityCheck[]> {
@@ -88,4 +88,52 @@ export async function getAdminStatistics(from: Date, to: Date, period: 'day'|'we
     byOffice:offices.map(row=>({name:row.name,visits:Number(row.visits)})),
     doctorWorkload:workload.map(row=>({...row,bookedCount:Number(row.bookedCount),completedCount:Number(row.completedCount),bookedMinutes:Number(row.bookedMinutes),availableMinutes:Number(row.availableMinutes),utilization:Number(row.utilization),averageAppointmentsPerWorkingDay:Number(row.averageAppointmentsPerWorkingDay),cancelled:Number(row.cancelled),expired:Number(row.expired)})),
   };
+}
+
+/** A record a check flagged, in words an administrator can act on (who, which visit, when). */
+export type IntegritySample = { id: string; title: string; detail: string };
+
+const SAMPLE_ENTITY: Record<string, 'slot' | 'entry' | 'doctor' | 'user' | 'location'> = {
+  'appointment-invalid-reference': 'slot', 'overlapping-doctor-slots': 'slot', 'slot-status-inconsistent': 'slot', 'overdue-unchecked-booking': 'slot',
+  'medical-entry-invalid-owner': 'entry', 'medical-entry-future': 'entry', 'medical-entry-before-account': 'entry', 'medical-entry-before-visit': 'entry',
+  'medical-entry-invalid-timestamps': 'entry', 'medical-entry-sequence-gap': 'entry', 'duplicate-medical-entry': 'entry',
+  'doctor-missing-reference': 'doctor', 'user-empty-email': 'user', 'duplicate-patient-email': 'user', 'duplicate-patient-phone': 'user',
+  'invalid-office-hierarchy': 'location',
+};
+const when = (value: Date) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Almaty' }).format(value);
+const fullName = (person?: { firstName: string; lastName: string } | null) => person ? `${person.firstName} ${person.lastName}` : 'missing';
+const STATUS_WORD: Record<string, string> = { FREE: 'free', BOOKED: 'booked', OCCUPIED: 'checked in' };
+
+/** Turns a check's sample IDs into readable rows. Duplicate checks list every account in the duplicate group. */
+export async function describeSamples(checkId: string, ids: string[]): Promise<IntegritySample[]> {
+  const entity = SAMPLE_ENTITY[checkId];
+  if (!entity || ids.length === 0) return [];
+  if (entity === 'slot') {
+    const slots = await prisma.scheduleSlot.findMany({ where: { id: { in: ids } }, select: { id: true, startAt: true, endAt: true, status: true, checkedInAt: true, patient: { select: { firstName: true, lastName: true } }, doctor: { select: { user: { select: { firstName: true, lastName: true } } } } } });
+    return slots.map((slot) => ({ id: slot.id, title: `HP-${slot.id.slice(-8).toUpperCase()} · Dr. ${fullName(slot.doctor?.user)}`, detail: [when(slot.startAt) + '–' + when(slot.endAt).slice(-5), `patient: ${slot.patient ? fullName(slot.patient) : 'none'}`, `status: ${STATUS_WORD[slot.status] ?? slot.status}`, slot.checkedInAt ? `checked in ${when(slot.checkedInAt)}` : 'not checked in'].join(' · ') }));
+  }
+  if (entity === 'entry') {
+    const entries = await prisma.medicalEntry.findMany({ where: { id: { in: ids } }, select: { id: true, title: true, category: true, createdAt: true, updatedAt: true, patientSequence: true, patient: { select: { firstName: true, lastName: true } }, doctor: { select: { user: { select: { firstName: true, lastName: true } } } } } });
+    return entries.map((entry) => ({ id: entry.id, title: `${entry.title} (${entry.category}, #${entry.patientSequence})`, detail: [`patient: ${fullName(entry.patient)}`, `Dr. ${fullName(entry.doctor?.user)}`, `written ${when(entry.createdAt)}`, entry.updatedAt.getTime() !== entry.createdAt.getTime() ? `edited ${when(entry.updatedAt)}` : ''].filter(Boolean).join(' · ') }));
+  }
+  if (entity === 'doctor') {
+    const doctors = await prisma.doctor.findMany({ where: { id: { in: ids } }, select: { id: true, office: true, clinicName: true, city: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true, email: true } } } });
+    return doctors.map((doctor) => ({ id: doctor.id, title: `Dr. ${fullName(doctor.user)}`, detail: [doctor.user.email, `specialty: ${doctor.category?.name ?? 'missing'}`, `office: ${[doctor.city, doctor.clinicName, doctor.office].filter(Boolean).join(', ') || 'not set'}`].join(' · ') }));
+  }
+  if (entity === 'user') {
+    const select = { id: true, firstName: true, lastName: true, email: true, phone: true, createdAt: true } as const;
+    let users = await prisma.user.findMany({ where: { id: { in: ids } }, select });
+    // The duplicate checks return one account per group; show the whole group so the admin sees what clashes.
+    if (checkId === 'duplicate-patient-phone' || checkId === 'duplicate-patient-email') {
+      const groupIds = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        checkId === 'duplicate-patient-phone'
+          ? `SELECT u."id" FROM "User" u JOIN "User" s ON s."id" = ANY($1::text[]) WHERE u."role"='PATIENT' AND REGEXP_REPLACE(u."phone",'[^0-9+]','','g') = REGEXP_REPLACE(s."phone",'[^0-9+]','','g') ORDER BY u."createdAt"`
+          : `SELECT u."id" FROM "User" u JOIN "User" s ON s."id" = ANY($1::text[]) WHERE u."role"='PATIENT' AND LOWER(BTRIM(u."email")) = LOWER(BTRIM(s."email")) ORDER BY u."createdAt"`,
+        ids);
+      users = await prisma.user.findMany({ where: { id: { in: groupIds.map((row) => row.id) } }, select, orderBy: { createdAt: 'asc' } });
+    }
+    return users.map((user) => ({ id: user.id, title: fullName(user), detail: [user.email?.trim() || 'no email', user.phone || 'no phone', `registered ${when(user.createdAt)}`].join(' · ') }));
+  }
+  const locations = await prisma.location.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, kind: true, parent: { select: { name: true, kind: true } } } });
+  return locations.map((location) => ({ id: location.id, title: `${location.name} (${location.kind})`, detail: location.parent ? `under ${location.parent.name} (${location.parent.kind})` : 'no parent' }));
 }

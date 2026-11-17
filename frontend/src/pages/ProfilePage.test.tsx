@@ -80,7 +80,7 @@ describe("patient profile", () => {
     vi.spyOn(authApi, "doctorProfile").mockResolvedValue({
       doctor: { id: "doctor-1", office: null, locationId: null, city: "Almaty", clinicName: "Central Clinic", streetAddress: null, officeNumber: "Office 101", consultationFee: 12000, category: { name: "Cardiology" } },
     });
-    vi.spyOn(authApi, "doctorOffices").mockResolvedValue({ offices: [{ id: "office-2", name: "Room 204", floor: "Floor 2", city: "Astana" }] });
+    vi.spyOn(authApi, "doctorOffices").mockResolvedValue({ offices: [{ id: "office-2", name: "Room 204", floor: "Floor 2", clinic: "Astana Clinic", city: "Astana" }] });
     vi.spyOn(authApi, "updateLocation").mockResolvedValue({
       doctor: { id: "doctor-1", office: "Room 204", locationId: "office-2", city: "Astana", clinicName: "Central Clinic", streetAddress: null, officeNumber: "Room 204", consultationFee: 12000, category: { name: "Cardiology" } },
     });
@@ -89,6 +89,7 @@ describe("patient profile", () => {
     expect(screen.queryByLabelText("Cabinet / office number")).toBeNull();
     fireEvent.change(select, { target: { value: "office-2" } });
     expect(screen.getByLabelText("City")).toHaveValue("Astana");
+    expect(screen.getByLabelText("Clinic name")).toHaveValue("Astana Clinic");
     fireEvent.click(screen.getByRole("button", { name: "Save clinic location" }));
     await waitFor(() => expect(authApi.updateLocation).toHaveBeenCalledWith(expect.objectContaining({ locationId: "office-2" })));
     expect(await screen.findByText("Clinic location updated.")).toBeTruthy();

@@ -73,10 +73,10 @@ export function consultationLabel(type?: string | null) {
   return [channel === 'online' ? 'Online' : channel === 'in-person' ? 'In-person' : '', kind === 'follow-up' ? 'Follow-up visit' : kind === 'first' ? 'First visit' : ''].filter(Boolean).join(' · ');
 }
 /** A priced treatment the doctor can record on a visit (price from the rule in force when it was booked). */
-export type TreatmentChoice = { key: string; code: string | null; name: string; amountKzt: number; ruleId: string };
+export type TreatmentChoice = { key: string; code: string | null; name: string; amountKzt: number; ruleId: string; scope?: 'doctor' | 'specialty' | 'general' };
 export type VisitTreatment = { id: string; code: string | null; name: string; amountKzt: number; createdAt: string };
 /** An active office from the clinic's reference list. */
-export type ClinicOffice = { id: string; name: string; floor: string; city: string };
+export type ClinicOffice = { id: string; name: string; floor: string; clinic: string; city: string };
 export type DoctorProfile = {
   id: string;
   office: string | null;

@@ -6,7 +6,7 @@ const prismaMock = vi.hoisted(() => ({
   doctor: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
   referenceDataAudit: { findMany: vi.fn(), create: vi.fn() },
-  location: { findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
+  location: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
   scheduleSlot: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
   notification: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
   pricingRule: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -770,20 +770,19 @@ describe('Sprint 5-6 story gaps', () => {
   });
 
   it('lets a doctor pick an active office from the clinic list (story 34)', async () => {
-    prismaMock.location.findMany.mockResolvedValue([{ id: 'office-1', name: 'Room 204', parent: { name: 'Floor 2', parent: { name: 'Almaty' } } }]);
+    prismaMock.location.findMany.mockResolvedValue([{ id: 'office-1', name: 'Room 204', kind: 'office', parentId: 'floor-2', active: true }, { id: 'floor-2', name: 'Floor 2', kind: 'floor', parentId: 'clinic-1', active: true }, { id: 'clinic-1', name: 'Central Clinic', kind: 'clinic', parentId: 'city-1', active: true }, { id: 'city-1', name: 'Almaty', kind: 'city', parentId: null, active: true }]);
     const list = await request(app).get('/api/doctors/me/offices').set('Authorization', bearer(Role.DOCTOR, 'doctor-user')).expect(200);
-    expect(list.body.offices).toEqual([{ id: 'office-1', name: 'Room 204', floor: 'Floor 2', city: 'Almaty' }]);
+    expect(list.body.offices).toEqual([{ id: 'office-1', name: 'Room 204', floor: 'Floor 2', clinic: 'Central Clinic', city: 'Almaty' }]);
 
-    prismaMock.location.findUnique.mockResolvedValue({ id: 'office-1', name: 'Room 204', kind: 'office', active: true, parent: { name: 'Floor 2', active: true, parent: { name: 'Almaty', active: true } } });
     prismaMock.doctor.update.mockResolvedValue({ id: 'doctor-1', locationId: 'office-1', category: { name: 'Cardiology' } });
     await request(app).put('/api/doctors/me/location').set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
       .send({ city: 'Old', clinicName: 'Central', streetAddress: null, officeNumber: null, locationId: 'office-1' }).expect(200);
-    expect(prismaMock.doctor.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ locationId: 'office-1', office: 'Room 204', officeNumber: 'Room 204', city: 'Almaty', clinicName: 'Central' }) }));
+    expect(prismaMock.doctor.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ locationId: 'office-1', office: 'Room 204', officeNumber: 'Room 204', city: 'Almaty', clinicName: 'Central Clinic' }) }));
     expect(prismaMock.referenceDataAudit.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ entity: 'doctor-office', action: 'chosen-by-doctor' }) }));
   });
 
   it('refuses a closed office for the doctor picker (story 34)', async () => {
-    prismaMock.location.findUnique.mockResolvedValue({ id: 'office-1', name: 'Room 204', kind: 'office', active: true, parent: { name: 'Floor 2', active: false, parent: { name: 'Almaty', active: true } } });
+    prismaMock.location.findMany.mockResolvedValue([{ id: 'office-1', name: 'Room 204', kind: 'office', parentId: 'floor-2', active: true }, { id: 'floor-2', name: 'Floor 2', kind: 'floor', parentId: 'clinic-1', active: false }, { id: 'clinic-1', name: 'Central Clinic', kind: 'clinic', parentId: 'city-1', active: true }, { id: 'city-1', name: 'Almaty', kind: 'city', parentId: null, active: true }]);
     await request(app).put('/api/doctors/me/location').set('Authorization', bearer(Role.DOCTOR, 'doctor-user'))
       .send({ city: null, clinicName: null, streetAddress: null, officeNumber: null, locationId: 'office-1' }).expect(400);
     expect(prismaMock.doctor.update).not.toHaveBeenCalled();
@@ -1002,7 +1001,17 @@ describe('Sprint 5–6 reference data management',()=>{
     expect(prismaMock.category.create).toHaveBeenCalledOnce();
     expect(prismaMock.referenceDataAudit.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({entity:'category',entityId:'category-new',action:'created'})}));
   });
-  it('rejects an unconfirmed location move',async()=>{
+  it('puts clinics in cities and floors in clinics (city → clinic → floor → office)',async()=>{
+    prismaMock.location.findUnique.mockResolvedValueOnce({id:'city-1',kind:'city',name:'Almaty',parentId:null,active:true});
+    await request(app).post('/api/admin/reference/locations').set('Authorization',bearer(Role.ADMIN)).send({name:'Floor 2',kind:'floor',parentId:'city-1'}).expect(400);
+    prismaMock.location.findUnique.mockResolvedValueOnce({id:'city-1',kind:'city',name:'Almaty',parentId:null,active:true});
+    prismaMock.location.findFirst.mockResolvedValueOnce(null);
+    prismaMock.$transaction.mockImplementationOnce(async(fn:(tx:typeof prismaMock)=>unknown)=>fn(prismaMock));
+    prismaMock.location.create.mockResolvedValueOnce({id:'clinic-1',kind:'clinic',name:'Central Clinic',parentId:'city-1',active:true});
+    const created=await request(app).post('/api/admin/reference/locations').set('Authorization',bearer(Role.ADMIN)).send({name:'Central Clinic',kind:'clinic',parentId:'city-1'}).expect(201);
+    expect(created.body.location).toEqual(expect.objectContaining({kind:'clinic',parentId:'city-1'}));
+  });
+  it('does not move a location to another parent',async()=>{
     prismaMock.location.findUnique.mockResolvedValueOnce({id:'office',kind:'office',name:'Room 1',parentId:'floor',active:true});
     await request(app).patch('/api/admin/reference/locations/office').set('Authorization',bearer(Role.ADMIN)).send({parentId:'other-floor'}).expect(400);
     expect(prismaMock.location.update).not.toHaveBeenCalled();
