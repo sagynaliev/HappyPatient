@@ -1,8 +1,9 @@
 /* Patient assistant: floating launcher bottom-right that opens a chat panel. */
+/* Right edge lines up with the page content and the notification bell (the shell's side padding: 32px, 16px below 1100px). */
 .hp-assistant {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: 32px;
+  bottom: 32px;
   z-index: 60;
   display: flex;
   flex-direction: column;
@@ -219,8 +220,11 @@
 .hp-assistant-input button:disabled { background: var(--accent-strong); cursor: default; }
 .hp-assistant-note { margin: 8px 12px 12px; color: var(--text-secondary); font-size: 0.72rem; text-align: center; }
 
-@media (max-width: 640px) {
+@media (max-width: 1100px) {
   .hp-assistant { right: 16px; bottom: 16px; }
+}
+
+@media (max-width: 640px) {
   .hp-assistant-panel {
     position: fixed;
     inset: 0;
