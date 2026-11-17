@@ -184,3 +184,20 @@
   .mh-results-row.is-head { display: none; }
   .mh-results-row input:first-child { grid-column: 1 / -1; }
 }
+
+/* Treatments recorded in this visit: one record in the visit timeline, with prices and a total. */
+.mh-treatments { display: grid; gap: 10px; margin: 0 0 14px; padding: 14px 16px; border: 1px solid #f1dcc0; border-left: 4px solid #e08a1e; border-radius: 14px; background: #fffaf3; }
+.mh-treatments header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mh-treatments header strong { color: var(--text-primary); font-size: 16px; font-variant-numeric: tabular-nums; }
+.mh-treatments-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: #fdebd3; color: #9a4b00; font-size: 12.5px; font-weight: 700; }
+.mh-treatments ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.mh-treatments li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto 32px; align-items: center; gap: 12px; min-height: 40px; padding: 4px 0; border-top: 1px solid #f3e6d4; }
+.mh-treatments li:first-child { border-top: 0; }
+.mh-treatments-name { color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.mh-treatments-name small { margin-left: 8px; color: var(--text-secondary); font-weight: 500; }
+.mh-treatments-time { color: var(--text-secondary); font-size: 12.5px; }
+.mh-treatments-price { color: var(--text-primary); font-size: 14px; font-variant-numeric: tabular-nums; text-align: right; }
+.mh-treatments-remove { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.mh-treatments-remove:hover:not(:disabled) { background: var(--status-error-bg); color: var(--status-error); }
+.mh-treatments p { margin: 0; color: var(--text-secondary); font-size: 12.5px; }
+@media (max-width: 560px) { .mh-treatments li { grid-template-columns: minmax(0, 1fr) auto 32px; } .mh-treatments-time { display: none; } }

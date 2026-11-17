@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Icon } from './Icons';
 import '../styles/medicalHistory.css';
@@ -194,13 +194,14 @@ export function MedicalNoteForm({ appointmentId, onSave, onCancel, savedCount = 
 
 /** appointmentId enables adding notes to that visit; scope limits the list to one visit (only) or everything but one visit (except).
  * compact puts the category counts in a chip row inside the timeline; refreshKey reloads and highlightId marks a note saved from outside. */
-export default function MedicalHistory({ patientId, appointmentId, scope, emptyText, compact = false, refreshKey = 0, highlightId, highlightLabel, onAddNote, onEditEntry, downloadFor }: { downloadFor?: string; patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string }; compact?: boolean; refreshKey?: number; highlightId?: string; highlightLabel?: string; onAddNote?: () => void; onEditEntry?: (entry: MedicalEntry) => void }) {
+export default function MedicalHistory({ patientId, appointmentId, scope, emptyText, compact = false, refreshKey = 0, highlightId, highlightLabel, onAddNote, onEditEntry, downloadFor, onAddTreatment, treatments, treatmentCount = 0 }: { onAddTreatment?: () => void; treatments?: ReactNode; treatmentCount?: number; downloadFor?: string; patientId?: string; appointmentId?: string; scope?: { only?: string; except?: string }; emptyText?: { title: string; body: string }; compact?: boolean; refreshKey?: number; highlightId?: string; highlightLabel?: string; onAddNote?: () => void; onEditEntry?: (entry: MedicalEntry) => void }) {
   const [direction,setDirection]=useState<'asc'|'desc'>('desc');
   const [entries, setEntries] = useState<MedicalEntry[]>([]);
   const [counts, setCounts] = useState<HistoryResponse['counts']>({});
   const [hasMore, setHasMore] = useState(false); const [loading, setLoading] = useState(true);
   const [error, setError] = useState(''); const [success, setSuccess] = useState(false);
-  const [filter, setFilter] = useState<MedicalCategory | 'all'>('all'); const [adding, setAdding] = useState(false);
+  // 'treatments' shows only the visit's treatments (they are not medical notes, so they are not fetched by category).
+  const [filter, setFilter] = useState<MedicalCategory | 'all' | 'treatments'>('all'); const [adding, setAdding] = useState(false);
   const [retry, setRetry] = useState(0);
   const [newId, setNewId] = useState<string>(); const [savedCount, setSavedCount] = useState(0);
   const [search, setSearch] = useState(''); const [query, setQuery] = useState('');
@@ -210,7 +211,7 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
   const showFinder = !scope?.only;
   const since = period === 'all' ? '' : new Date(Date.now() - Number(period) * 86_400_000).toISOString().slice(0, 10);
   const narrowed = Boolean(query || specialty || since);
-  const path = `/medical-history?${patientId ? `patientId=${encodeURIComponent(patientId)}&` : ''}direction=${direction}&${filter !== 'all' ? `category=${filter}&` : ''}${scope?.only ? `appointmentId=${encodeURIComponent(scope.only)}&` : ''}${scope?.except ? `excludeAppointmentId=${encodeURIComponent(scope.except)}&` : ''}${query ? `q=${encodeURIComponent(query)}&` : ''}${specialty ? `specialty=${encodeURIComponent(specialty)}&` : ''}${since ? `from=${since}&` : ''}`;
+  const path = `/medical-history?${patientId ? `patientId=${encodeURIComponent(patientId)}&` : ''}direction=${direction}&${filter !== 'all' && filter !== 'treatments' ? `category=${filter}&` : ''}${scope?.only ? `appointmentId=${encodeURIComponent(scope.only)}&` : ''}${scope?.except ? `excludeAppointmentId=${encodeURIComponent(scope.except)}&` : ''}${query ? `q=${encodeURIComponent(query)}&` : ''}${specialty ? `specialty=${encodeURIComponent(specialty)}&` : ''}${since ? `from=${since}&` : ''}`;
   useEffect(() => {
     let active = true; setLoading(true); setError('');
     api<HistoryResponse>(path).then(result => { if (active) { setEntries(result.entries); setCounts(result.counts); setHasMore(result.hasMore); if (result.specialties) setSpecialties(result.specialties); } }).catch(() => { if (active) setError('Unable to load medical history.'); }).finally(() => { if (active) setLoading(false); });
@@ -259,11 +260,13 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
           </div>
           {downloadFor !== undefined && <button className="button button-outline small mh-download" type="button" disabled={downloading || !(counts.test ?? 0)} title={counts.test ? undefined : 'No test results yet'} onClick={() => void downloadResults()}><Icon name="file" size={15} /> {downloading ? 'Preparing PDF…' : 'Download test results (PDF)'}</button>}
           {appointmentId && !adding && <button className="button small" type="button" onClick={() => { setAdding(true); setSuccess(false); }}>Add note</button>}
+          {onAddTreatment && <button className="button button-outline small" type="button" onClick={onAddTreatment}>Add treatment</button>}
           {onAddNote && <button className="button small" type="button" onClick={onAddNote}>Add note</button>}
         </div>
       </header>
       {compact && <div className="mh-chips" role="group" aria-label="Filter medical entries">
         {filters.map(item => <button type="button" className={`mh-chip is-${item.key}`} aria-pressed={filter === item.key} aria-label={`${item.label} (${item.count})`} key={item.key} onClick={() => setFilter(item.key)}><Icon name={item.icon} size={14} /> {item.key === 'all' ? 'All' : item.label} <strong>{item.count}</strong></button>)}
+        {treatments !== undefined && <button type="button" className="mh-chip is-treatments" aria-pressed={filter === 'treatments'} aria-label={`Treatments (${treatmentCount})`} onClick={() => setFilter('treatments')}><Icon name="spark" size={14} /> Treatments <strong>{treatmentCount}</strong></button>}
       </div>}
       {showFinder && <div className="mh-finder" role="search" aria-label="Find records">
         <label className="mh-search"><Icon name="search" size={16} /><span className="sr-only">Search records</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search notes, e.g. blood test" /></label>
@@ -275,13 +278,15 @@ export default function MedicalHistory({ patientId, appointmentId, scope, emptyT
       {success && !adding && <p className="mh-alert is-success" role="status"><Icon name="check" size={16} /> Medical note saved.</p>}
       {error && <div className="mh-alert is-error" role="alert"><span>{error}</span> <button className="button button-outline small" type="button" onClick={() => { if (entries.length) void loadMore(); else setRetry(value => value + 1); }}>Retry</button></div>}
       {loading && entries.length === 0 && <div role="status" className="mh-loading"><span className="sr-only">Loading medical history…</span><div className="skeleton mh-skeleton" /><div className="skeleton mh-skeleton" /></div>}
-      {!loading && !error && entries.length === 0 && <div className="mh-empty">
+      {(filter === 'all' || filter === 'treatments') && treatments}
+      {filter === 'treatments' && !treatmentCount && <div className="mh-empty"><span className="mh-empty-icon"><Icon name="spark" size={26} /></span><h3>No treatments yet</h3><p>{onAddTreatment ? 'Use Add treatment to record what was done during this visit.' : 'No treatments were recorded for this visit.'}</p></div>}
+      {filter !== 'treatments' && !loading && !error && entries.length === 0 && !(filter === 'all' && treatmentCount > 0) && <div className="mh-empty">
         <span className="mh-empty-icon"><Icon name="file" size={26} /></span>
         <h3>{narrowed ? 'No matching records' : filter === 'all' ? emptyText?.title ?? 'No records yet' : `No ${categoryLabels[filter].toLowerCase()} yet`}</h3>
         <p>{narrowed ? 'Try another word, specialty or period.' : filter === 'all' ? emptyText?.body ?? 'No medical records yet. Entries added by your doctor after a visit will appear here.' : 'No entries in this category.'}</p>
       </div>}
-      <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} newId={highlighted} newLabel={highlightId ? highlightLabel : undefined} onEdit={onEditEntry} />
-      {hasMore && <button className="button button-outline mh-load-more" type="button" disabled={loading} onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load more'}</button>}
+      {filter !== 'treatments' && <MedicalEntryList key={path} entries={entries} openAll={Boolean(query) || Boolean(scope?.only)} newId={highlighted} newLabel={highlightId ? highlightLabel : undefined} onEdit={onEditEntry} />}
+      {filter !== 'treatments' && hasMore && <button className="button button-outline mh-load-more" type="button" disabled={loading} onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load more'}</button>}
       {loading && entries.length > 0 && <p role="status" className="sr-only">Loading medical history…</p>}
     </div>
   </section>;

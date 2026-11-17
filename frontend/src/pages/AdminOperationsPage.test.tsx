@@ -115,15 +115,19 @@ describe("admin data quality", () => {
     const checks = [
       { id: "ok", name: "Passing check", description: "", count: 0, severity: "critical", sampleIds: [] },
       { id: "warn", name: "Warning check", description: "", count: 2, severity: "warning", sampleIds: [] },
-      { id: "crit", name: "Critical check", description: "", count: 1, severity: "critical", sampleIds: ["x"] },
+      { id: "duplicate-patient-phone", name: "Critical check", description: "", count: 1, severity: "critical", sampleIds: ["x"], samples: [{ id: "x", title: "Ali Khan", detail: "ali@example.test · +7 701 555 12 34" }] },
     ];
     vi.mocked(api).mockImplementation(async (path: string) => path === "/admin/integrity/runs" ? { runs: [{ id: "r", startedAt: "2026-11-05T06:00:00Z", finishedAt: "2026-11-05T06:00:01Z", status: "complete", results: checks }] } : { attempts: [], lastWeek: 0 });
     render(<AdminOperationsPage view="integrity" />);
     const latest = (await screen.findByRole("heading", { name: "Latest run" })).closest("section")!;
-    const rows = within(latest).getAllByRole("row").slice(1).map((row) => row.textContent ?? "");
+    const rows = within(latest).getAllByRole("row").slice(1).filter((row) => !row.classList.contains("ad-check-detail")).map((row) => row.textContent ?? "");
     expect(rows[0]).toContain("Critical check");
     expect(rows[1]).toContain("Warning check");
     expect(within(latest).getByText("1 passed check").closest("details")).not.toHaveAttribute("open");
+    // A flagged record is described in words, with what to do about it.
+    expect(within(latest).getByText("Ali Khan")).toBeInTheDocument();
+    expect(within(latest).getByText("ali@example.test · +7 701 555 12 34")).toBeInTheDocument();
+    expect(within(latest).getByText(/share a phone number written differently/)).toBeInTheDocument();
   });
 });
 

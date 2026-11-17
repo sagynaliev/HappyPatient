@@ -169,14 +169,14 @@ export default function ProfilePage() {
                   {field("pp-specialty", "Specialty", doctorProfile.category.name)}
                   {field("pp-consultation-fee", "Consultation fee", doctorProfile.consultationFee === undefined ? "Not provided" : `${doctorProfile.consultationFee.toLocaleString("en-US")} KZT`)}
                   {field("pp-city", "City", chosenOffice ? chosenOffice.city : locationDraft.city, "text", Boolean(chosenOffice), (value) => setLocationDraft((current) => ({ ...current, city: value })))}
-                  {field("pp-clinic-name", "Clinic name", locationDraft.clinicName, "text", false, (value) => setLocationDraft((current) => ({ ...current, clinicName: value })))}
+                  {field("pp-clinic-name", "Clinic name", chosenOffice ? chosenOffice.clinic : locationDraft.clinicName, "text", Boolean(chosenOffice), (value) => setLocationDraft((current) => ({ ...current, clinicName: value })))}
                   {field("pp-street-address", "Street address", locationDraft.streetAddress, "text", false, (value) => setLocationDraft((current) => ({ ...current, streetAddress: value })))}
                   {offices.length ? (
                     <label className="pp-field" htmlFor="pp-office">
                       <span>Office</span>
                       <select id="pp-office" value={locationDraft.locationId} onChange={(event) => setLocationDraft((current) => ({ ...current, locationId: event.target.value }))}>
                         <option value="">Choose from the clinic list</option>
-                        {offices.map((office) => <option key={office.id} value={office.id}>{office.name} · {office.floor} · {office.city}</option>)}
+                        {offices.map((office) => <option key={office.id} value={office.id}>{office.city} › {office.clinic} › {office.floor} › {office.name}</option>)}
                       </select>
                     </label>
                   ) : field("pp-office-number", "Cabinet / office number", locationDraft.officeNumber, "text", false, (value) => setLocationDraft((current) => ({ ...current, officeNumber: value })))}

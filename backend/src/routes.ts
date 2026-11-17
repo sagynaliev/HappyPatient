@@ -1,7 +1,7 @@
 import { getWalkInSlotStatus, NO_CHECKIN_GRACE_MS } from './visitTime';
 import { medicalHistoryRouter, NOTE_WINDOW_MS } from './medicalHistory';
 import { resolvePricingRule, calculateParkingCost, calculateVisitCost, PricingRule, consultationKey, ConsultationChannel, VisitKind, RULE_CONSULTATION_TYPES } from './pricing';
-import { getAdminStatistics, runAndStoreIntegrity } from './adminOperations';
+import { describeSamples, getAdminStatistics, IntegrityCheck, runAndStoreIntegrity } from './adminOperations';
 import { clockOffsetMs, realNow, setClockOffset, timeControlEnabled } from './clock';
 import { releaseUnattendedSlots, sendUpcomingReminders } from './appointmentLifecycle';
 import { brandedEmail } from './email/layout';
@@ -19,6 +19,7 @@ import { Resend } from 'resend';
 import { clinicDateBounds, generateScheduleSlots, localDateAt, localTimeToUtc } from './schedule';
 import { sendRegistrationConfirmation } from './registrationNotification';
 import { formatAlmaty, notifyUser, recordAppointmentNotification } from './appointmentNotifications';
+import { activeOffice, activeOfficeList, doctorPlaceFields, inactiveOfficeIds, loadLocations, LOCATION_LEVELS, officePath, officesUnder, pathActive, PARENT_KIND, LocationKind } from './locations';
 
 class WalkInConflict extends Error {}
 const router = Router();
@@ -206,16 +207,7 @@ router.get('/categories', async (req, res) => {
     res.status(500).json({ error: 'The category directory is temporarily unavailable. Please try again shortly.' });
   }
 });
-export async function inactiveOfficeIds() {
-  const locations=await prisma.location.findMany({select:{id:true,kind:true,parentId:true,active:true}});
-  const byId=new Map(locations.map(item=>[item.id,item]));
-  return locations.filter(item=>{
-    if(item.kind!=='office')return false;
-    const floor=item.parentId?byId.get(item.parentId):undefined;
-    const city=floor?.parentId?byId.get(floor.parentId):undefined;
-    return !item.active||!floor?.active||!city?.active;
-  }).map(item=>item.id);
-}
+export { inactiveOfficeIds };
 router.get('/doctors/locations', async (_req, res) => {
   const inactive=await inactiveOfficeIds();
   const [doctors,referenceCities]=await Promise.all([
@@ -308,10 +300,9 @@ router.get('/doctors', async (req, res) => {
   if (timeOfDay && !timeRange) return res.status(400).json({ error: 'Choose a valid time filter.' });
   let cityOfficeIds: string[] = [];
   if (city) {
-    const cities = await prisma.location.findMany({ where: { kind: 'city', active: true, name: { equals: city, mode: 'insensitive' } }, select: { id: true } });
-    const floors = await prisma.location.findMany({ where: { kind: 'floor', active: true, parentId: { in: cities.map(item => item.id) } }, select: { id: true } });
-    const offices = await prisma.location.findMany({ where: { kind: 'office', active: true, parentId: { in: floors.map(item => item.id) } }, select: { id: true } });
-    cityOfficeIds = offices.map(item => item.id);
+    const byId = await loadLocations();
+    cityOfficeIds = [...byId.values()].filter((item) => item.kind === 'office').map((item) => officePath(byId, item.id))
+      .filter((path) => pathActive(path) && path!.city.name.toLocaleLowerCase() === city.toLocaleLowerCase()).map((path) => path!.office.id);
   }
   const inactiveOffices=await inactiveOfficeIds();
   const locationConditions: Prisma.DoctorWhereInput[] = [];
@@ -389,7 +380,7 @@ router.put('/doctors/me/location', requireAuth, requireRole(Role.DOCTOR), async 
   const updated = await prisma.$transaction(async (tx) => {
     const saved = await tx.doctor.update({
       where: { id: doctor.id },
-      data: { ...location, locationId: office?.id ?? null, ...(office ? { office: office.name, officeNumber: office.name, city: office.city } : {}) },
+      data: { ...location, ...(office ? doctorPlaceFields(office) : { locationId: null }) },
       include: { category: true },
     });
     if ((office?.id ?? null) !== doctor.locationId) await tx.referenceDataAudit.create({ data: { actorId: req.user!.id, entity: 'doctor-office', entityId: doctor.id, action: 'chosen-by-doctor', oldValue: { locationId: doctor.locationId }, newValue: { locationId: office?.id ?? null } } });
@@ -398,23 +389,9 @@ router.put('/doctors/me/location', requireAuth, requireRole(Role.DOCTOR), async 
   res.json({ doctor: updated });
 });
 
-/** An office that patients can be sent to: it, its floor and its city are all active. */
-async function activeOffice(locationId: string) {
-  const location = await prisma.location.findUnique({ where: { id: locationId }, include: { parent: { include: { parent: true } } } });
-  if (!location || location.kind !== 'office' || !location.active || !location.parent?.active || !location.parent.parent?.active) return null;
-  return { id: location.id, name: location.name, floor: location.parent.name, city: location.parent.parent.name };
-}
-
 /** The clinic's active offices, for the doctor's own office picker. */
 router.get('/doctors/me/offices', requireAuth, requireRole(Role.DOCTOR), async (_req, res) => {
-  const offices = (await prisma.location.findMany({
-    where: { kind: 'office', active: true, parent: { active: true, parent: { active: true } } },
-    select: { id: true, name: true, parent: { select: { name: true, parent: { select: { name: true } } } } },
-    orderBy: { name: 'asc' },
-  })) ?? [];
-  const list = offices.map((office) => ({ id: office.id, name: office.name, floor: office.parent?.name ?? '', city: office.parent?.parent?.name ?? '' }));
-  list.sort((a, b) => a.city.localeCompare(b.city) || a.floor.localeCompare(b.floor, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-  res.json({ offices: list });
+  res.json({ offices: await activeOfficeList() });
 });
 
 /** Visits released for no check-in, newest first, with the doctor's and patient's display names. */
@@ -1001,8 +978,8 @@ router.patch('/admin/doctors/:id/location',requireAuth,requireRole(Role.ADMIN),a
   const parsedLocation=z.object({locationId:z.string().nullable()}).safeParse(req.body);if(!parsedLocation.success)return res.status(400).json({error:'Choose a valid office location.'});
   const doctorId=String(req.params.id);const doctor=await prisma.doctor.findUnique({where:{id:doctorId},select:{id:true,locationId:true}});if(!doctor)return res.status(404).json({error:'Doctor not found.'});
   const location=parsedLocation.data.locationId?await activeOffice(parsedLocation.data.locationId):null;
-  if(parsedLocation.data.locationId&&!location)return res.status(400).json({error:'Choose an active office under an active floor and city.'});
-  const updated=await prisma.$transaction(async tx=>{const saved=await tx.doctor.update({where:{id:doctorId},data:{locationId:location?.id??null,office:location?.name??null,officeNumber:location?.name??null,city:location?.city??null},include:{location:true}});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'doctor-office',entityId:doctorId,action:'assigned',oldValue:{locationId:doctor.locationId},newValue:{locationId:location?.id??null}}});return saved;});
+  if(parsedLocation.data.locationId&&!location)return res.status(400).json({error:'Choose an active office under an active floor, clinic and city.'});
+  const updated=await prisma.$transaction(async tx=>{const saved=await tx.doctor.update({where:{id:doctorId},data:doctorPlaceFields(location),include:{location:true}});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'doctor-office',entityId:doctorId,action:'assigned',oldValue:{locationId:doctor.locationId},newValue:{locationId:location?.id??null}}});return saved;});
   res.json({doctor:updated});
 });
 
@@ -1190,9 +1167,11 @@ async function treatmentChoices(slot:{doctorId:string;doctor:{categoryId:string}
   const rules=((await prisma.pricingRule.findMany({where:{kind:'treatment',active:true,effectiveFrom:{lte:bookedAt},OR:[{effectiveTo:null},{effectiveTo:{gt:bookedAt}}]}}))??[]) as Array<PricingRule&{serviceName:string|null}>;
   const byService=new Map<string,typeof rules>();
   for(const rule of rules){const key=(rule.serviceCode||rule.serviceName||'').trim().toLowerCase();if(key)byService.set(key,[...(byService.get(key)??[]),rule]);}
-  const choices:Array<{key:string;code:string|null;name:string;amountKzt:number;ruleId:string}>=[];
-  for(const [key,group] of byService){const rule=resolvePricingRule(group,'treatment',bookedAt,slot.doctorId,slot.doctor.categoryId);if(rule)choices.push({key,code:rule.serviceCode??null,name:(rule as {serviceName?:string|null}).serviceName||rule.serviceCode||key,amountKzt:rule.amountKzt,ruleId:rule.id});}
-  return choices.sort((a,b)=>a.name.localeCompare(b.name));
+  // scope tells the doctor whether a treatment is priced for their specialty (or them) or for every doctor; theirs come first.
+  const choices:Array<{key:string;code:string|null;name:string;amountKzt:number;ruleId:string;scope:'doctor'|'specialty'|'general'}>=[];
+  for(const [key,group] of byService){const rule=resolvePricingRule(group,'treatment',bookedAt,slot.doctorId,slot.doctor.categoryId);if(rule)choices.push({key,code:rule.serviceCode??null,name:(rule as {serviceName?:string|null}).serviceName||rule.serviceCode||key,amountKzt:rule.amountKzt,ruleId:rule.id,scope:rule.doctorId?'doctor':rule.categoryId?'specialty':'general'});}
+  const rank={doctor:0,specialty:0,general:1};
+  return choices.sort((a,b)=>rank[a.scope]-rank[b.scope]||a.name.localeCompare(b.name));
 }
 const treatmentView=(item:{id:string;serviceCode:string|null;serviceName:string;amountKzt:number;createdAt:Date})=>({id:item.id,code:item.serviceCode,name:item.serviceName,amountKzt:item.amountKzt,createdAt:item.createdAt});
 router.get('/doctors/me/visits/:slotId/treatments',requireAuth,requireRole(Role.DOCTOR),async(req,res)=>{
@@ -1266,70 +1245,71 @@ router.get('/admin/security/access-attempts',requireAuth,requireRole(Role.ADMIN)
   const patientName=new Map(patients.map(patient=>[patient.id,`${patient.firstName} ${patient.lastName}`]));
   res.json({lastWeek:lastWeek??0,attempts:(rows??[]).map(row=>({id:row.id,createdAt:row.createdAt,actor:row.actor?`${row.actor.firstName} ${row.actor.lastName}`:null,actorRole:row.actorRole,action:row.endpoint,patient:patientName.get(row.targetPatientId)??null}))});
 });
-router.get('/admin/integrity/runs',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>res.json({runs:await prisma.integrityRun.findMany({orderBy:{startedAt:'desc'},take:30})}));
+router.get('/admin/integrity/runs',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>{
+  const runs=(await prisma.integrityRun.findMany({orderBy:{startedAt:'desc'},take:30}))??[];
+  // The latest run's flagged records are described as they are now, so the admin sees who and what to fix.
+  const latest=runs.find(run=>run.status==='complete'&&Array.isArray(run.results));
+  if(latest){
+    const results=latest.results as unknown as IntegrityCheck[];
+    (latest as unknown as {results:unknown}).results=await Promise.all(results.map(async check=>check.count>0?{...check,samples:await describeSamples(check.id,check.sampleIds).catch(()=>[])}:check));
+  }
+  res.json({runs});
+});
 router.get('/admin/reference/categories',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>res.json({categories:await prisma.category.findMany({include:{_count:{select:{doctors:true}}},orderBy:{name:'asc'}})}));
 router.get('/admin/reference/locations',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>{
-  const locations=await prisma.location.findMany({include:{_count:{select:{doctors:true}},children:true,parent:true},orderBy:[{kind:'asc'},{name:'asc'}]});
-  const usage=await prisma.$queryRawUnsafe<Array<{id:string;doctors:number;slots:number}>>(`SELECT l."id",COUNT(DISTINCT d."id")::int AS doctors,COUNT(DISTINCT s."id")::int AS slots
-    FROM "Location" l
-    LEFT JOIN "Location" f ON (l."kind"='city' AND f."kind"='floor' AND f."parentId"=l."id") OR (l."kind"='floor' AND f."id"=l."id") OR (l."kind"='office' AND f."id"=l."parentId")
-    LEFT JOIN "Location" o ON (l."kind"='office' AND o."id"=l."id") OR (l."kind" IN ('city','floor') AND o."kind"='office' AND o."parentId"=f."id")
-    LEFT JOIN "Doctor" d ON d."locationId"=o."id" LEFT JOIN "ScheduleSlot" s ON s."doctorId"=d."id"
-    GROUP BY l."id"`);
-  const byId=new Map(usage.map(row=>[row.id,{doctors:Number(row.doctors),slots:Number(row.slots)}]));
-  res.json({locations:locations.map(location=>({...location,usage:byId.get(location.id)??{doctors:0,slots:0}}))});
+  const [locations,doctors]=await Promise.all([
+    prisma.location.findMany({orderBy:[{name:'asc'}]}),
+    prisma.doctor.findMany({where:{locationId:{not:null}},select:{locationId:true,_count:{select:{scheduleSlots:true}}}}),
+  ]);
+  // Doctors and their slots are counted at the office and added up for every level above it.
+  const byId=new Map(locations.map(item=>[item.id,item]));
+  const usage=new Map<string,{doctors:number;slots:number}>();
+  for(const doctor of doctors){
+    for(let node=byId.get(doctor.locationId!);node;node=node.parentId?byId.get(node.parentId):undefined){
+      const current=usage.get(node.id)??{doctors:0,slots:0};
+      usage.set(node.id,{doctors:current.doctors+1,slots:current.slots+doctor._count.scheduleSlots});
+    }
+  }
+  res.json({locations:locations.map(location=>({...location,usage:usage.get(location.id)??{doctors:0,slots:0}}))});
 });
 router.get('/admin/reference/audit',requireAuth,requireRole(Role.ADMIN),async(_req,res)=>{
   const audits=await prisma.referenceDataAudit.findMany({orderBy:{createdAt:'desc'},take:50,include:{actor:{select:{firstName:true,lastName:true}}}});
   res.json({audits});
 });
 router.post('/admin/reference/locations',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
-  const parsedInput=z.object({name:z.string().trim().min(1).max(120),kind:z.enum(['city','floor','office']),parentId:z.string().nullable().optional()}).safeParse(req.body);
+  const parsedInput=z.object({name:z.string().trim().min(1).max(120),kind:z.enum(LOCATION_LEVELS as [LocationKind,...LocationKind[]]),parentId:z.string().nullable().optional()}).safeParse(req.body);
   if(!parsedInput.success)return res.status(400).json({error:'Location values are invalid.'});
   const input=parsedInput.data;
-  if((input.kind==='city'&&input.parentId)||(input.kind!=='city'&&!input.parentId))return res.status(400).json({error:'A city has no parent; floors and offices require their parent.'});
-  if(input.parentId){const parent=await prisma.location.findUnique({where:{id:input.parentId}});const expected=input.kind==='floor'?'city':'floor';if(!parent||parent.kind!==expected||!parent.active)return res.status(400).json({error:'Choose an active parent of the correct type.'});}
+  const expected=PARENT_KIND[input.kind];
+  if((!expected&&input.parentId)||(expected&&!input.parentId))return res.status(400).json({error:'A city has no parent; a clinic sits in a city, a floor in a clinic and an office on a floor.'});
+  if(input.parentId){const parent=await prisma.location.findUnique({where:{id:input.parentId}});if(!parent||parent.kind!==expected||!parent.active)return res.status(400).json({error:'Choose an active parent of the correct type.'});}
   const duplicate=await prisma.location.findFirst({where:{parentId:input.parentId??null,name:{equals:input.name,mode:'insensitive'}}});
   if(duplicate)return res.status(409).json({error:'A location with this name already exists under that parent.'});
   const location=await prisma.$transaction(async tx=>{const created=await tx.location.create({data:{...input,parentId:input.parentId??null}});await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'location',entityId:created.id,action:'created',newValue:{name:created.name,kind:created.kind,parentId:created.parentId}}});return created;});
   res.status(201).json({location});
 });
 router.patch('/admin/reference/locations/:id',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
-  const parsedInput=z.object({name:z.string().trim().min(1).max(120).optional(),active:z.boolean().optional(),parentId:z.string().nullable().optional(),confirmMove:z.boolean().optional()}).safeParse(req.body);
+  // Locations are renamed or (de)activated in place; moving one to another parent is not offered.
+  const parsedInput=z.object({name:z.string().trim().min(1).max(120).optional(),active:z.boolean().optional()}).strict().safeParse(req.body);
   if(!parsedInput.success)return res.status(400).json({error:'Location values are invalid.'});
   const input=parsedInput.data;const id=String(req.params.id);
   const old=await prisma.location.findUnique({where:{id}});
   if(!old)return res.status(404).json({error:'Location not found.'});
-  const moving=input.parentId!==undefined&&input.parentId!==old.parentId;
-  if(moving&&!input.confirmMove)return res.status(400).json({error:'Confirm the location move explicitly.'});
-  if(input.name!==undefined){const duplicate=await prisma.location.findFirst({where:{id:{not:id},parentId:input.parentId??old.parentId,name:{equals:input.name,mode:'insensitive'}}});if(duplicate)return res.status(409).json({error:'A location with this name already exists under that parent.'});}
+  if(input.name!==undefined){const duplicate=await prisma.location.findFirst({where:{id:{not:id},parentId:old.parentId,name:{equals:input.name,mode:'insensitive'}}});if(duplicate)return res.status(409).json({error:'A location with this name already exists under that parent.'});}
   if(input.active===false){const children=await prisma.location.count({where:{parentId:id,active:true}});if(children>0)return res.status(409).json({error:'Deactivate active child locations first.'});}
   if(input.active===true&&old.parentId){const parent=await prisma.location.findUnique({where:{id:old.parentId},select:{active:true}});if(!parent?.active)return res.status(409).json({error:'Reactivate the parent location first.'});}
-  if(moving){
-    if(input.parentId===id)return res.status(400).json({error:'A location cannot be its own parent.'});
-    const parent=input.parentId?await prisma.location.findUnique({where:{id:input.parentId}}):null;
-    const expected=old.kind==='floor'?'city':old.kind==='office'?'floor':null;
-    if((expected&&!parent)||(expected&&parent?.kind!==expected)||(input.parentId&&!parent?.active)||(!expected&&input.parentId))return res.status(400).json({error:'Choose an active parent of the correct type.'});
-  }
   const location=await prisma.$transaction(async tx=>{
-    const updated=await tx.location.update({where:{id},data:{...(input.name!==undefined?{name:input.name}:{}),...(input.active!==undefined?{active:input.active}:{}),...(moving?{parentId:input.parentId}: {})}});
-    let officeIds:string[]=[];let cityId:string|null=null;
-    if(old.kind==='city'&&input.name!==undefined){
-      cityId=id;const floors=await tx.location.findMany({where:{kind:'floor',parentId:id},select:{id:true}});
-      const offices=await tx.location.findMany({where:{kind:'office',parentId:{in:floors.map(item=>item.id)}},select:{id:true}});officeIds=offices.map(item=>item.id);
-    }else if(old.kind==='floor'&&(moving||input.name!==undefined)){
-      cityId=moving?(input.parentId??null):old.parentId;
-      const offices=await tx.location.findMany({where:{kind:'office',parentId:id},select:{id:true}});officeIds=offices.map(item=>item.id);
-    }else if(old.kind==='office'&&(moving||input.name!==undefined)){
-      officeIds=[id];const floor=await tx.location.findUnique({where:{id:moving?(input.parentId??''):old.parentId??''},select:{parentId:true}});cityId=floor?.parentId??null;
+    const updated=await tx.location.update({where:{id},data:{...(input.name!==undefined?{name:input.name}:{}),...(input.active!==undefined?{active:input.active}:{})}});
+    // A renamed city, clinic or office changes the place doctors show to patients: copy the new names onto them.
+    if(input.name!==undefined&&input.name!==old.name){
+      const byId=await loadLocations(tx);
+      for(const officeId of officesUnder(byId,id)){
+        const path=officePath(byId,officeId);
+        if(path)await tx.doctor.updateMany({where:{locationId:officeId},data:{office:path.office.name,officeNumber:path.office.name,clinicName:path.clinic.name,city:path.city.name}});
+      }
     }
-    const city=cityId?await tx.location.findUnique({where:{id:cityId},select:{name:true}}):null;
-    if(officeIds.length){
-      const office=old.kind==='office'&&input.name!==undefined?input.name:undefined;
-      const cityName=old.kind==='city'&&input.name!==undefined?input.name:city?.name;
-      await tx.doctor.updateMany({where:{locationId:{in:officeIds}},data:{...(office!==undefined?{office}:{}),...(cityName?{city:cityName}:{})}});
-    }
-    await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'location',entityId:id,action:moving?'moved':input.active!==undefined&&input.active!==old.active?(input.active?'reactivated':'deactivated'):input.name!==undefined?'renamed':'updated',oldValue:{name:old.name,active:old.active,parentId:old.parentId},newValue:{name:updated.name,active:updated.active,parentId:updated.parentId}}});
+    const action=input.active!==undefined&&input.active!==old.active?(input.active?'reactivated':'deactivated'):input.name!==undefined?'renamed':'updated';
+    await tx.referenceDataAudit.create({data:{actorId:req.user!.id,entity:'location',entityId:id,action,oldValue:{name:old.name,active:old.active},newValue:{name:updated.name,active:updated.active}}});
     return updated;
   });
   res.json({location});

@@ -1,5 +1,6 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
+import { Fragment, FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { DoctorOffices, isSelectableOffice, LocationColumns, locationPath, RefLocation } from '../components/ReferenceLocations';
 import { AdminStat } from '../components/AdminStat';
 import { toast } from '../lib/toast';
 import { Icon } from '../components/Icons';
@@ -7,12 +8,11 @@ import '../styles/adminOperations.css';
 
 type Kind = 'visit'|'treatment'|'parking';
 type Category = {id:string;name:string;active:boolean;_count:{doctors:number}};
-type DoctorChoice = {id:string;name:string;locationId:string|null;office:string|null};
-type Location = {id:string;name:string;kind:'city'|'floor'|'office';parentId:string|null;parent:{name:string}|null;active:boolean;_count:{doctors:number};usage?:{doctors:number;slots:number};children:Location[]};
+type DoctorChoice = {id:string;name:string;specialty?:string;locationId:string|null;office:string|null};
 type Audit = {id:string;action:string;createdAt:string;actor:{firstName:string;lastName:string}|null;oldValue:unknown;newValue:unknown};
 type ReferenceAudit = {id:string;entity:string;entityId:string;action:string;createdAt:string;actor:{firstName:string;lastName:string}|null;oldValue:unknown;newValue:unknown};
 type Rule = {id:string;kind:Kind;amountKzt:number;ratePerHourKzt:number|null;freeMinutes:number;rounding:string;dailyCapKzt:number|null;effectiveFrom:string;effectiveTo:string|null;active:boolean;doctorId:string|null;categoryId:string|null;consultationType:string|null;serviceCode:string|null;serviceName:string|null;category:{name:string}|null;office:{name:string}|null;createdBy:{firstName:string;lastName:string}|null;audits:Audit[]};
-type Check = {id:string;name:string;description:string;count:number;severity:'info'|'warning'|'critical';sampleIds:string[]};
+type Check = {id:string;name:string;description:string;count:number;severity:'info'|'warning'|'critical';sampleIds:string[];samples?:Array<{id:string;title:string;detail:string}>};
 type AccessAttempt = {id:string;createdAt:string;actor:string|null;actorRole:string|null;action:string;patient:string|null};
 type Run = {id:string;startedAt:string;finishedAt:string|null;status:string;results:Check[]|null};
 type Stats = {period?:string;totalVisits:number;utilization:number;noShowRate:number;newPatients:number;returningPatients:number;timeSeries:{period:string;visits:number}[];bySpecialty:{name:string;visits:number}[];byOffice:{name:string;visits:number}[];doctorWorkload:{doctorId:string;doctorName:string;specialty:string;bookedCount:number;completedCount:number;bookedMinutes:number;availableMinutes:number;utilization:number;averageAppointmentsPerWorkingDay:number;cancelled?:number;expired?:number}[]};
@@ -35,14 +35,14 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   const [categories,setCategories]=useState<Category[]>([]);
   const [doctors,setDoctors]=useState<DoctorChoice[]>([]);
   const [referenceDoctors,setReferenceDoctors]=useState<DoctorChoice[]>([]);
-  const [locations,setLocations]=useState<Location[]>([]);
+  const [locations,setLocations]=useState<RefLocation[]>([]);
   const [referenceAudits,setReferenceAudits]=useState<ReferenceAudit[]>([]);
   const [runs,setRuns]=useState<Run[]>([]);
   const [attempts,setAttempts]=useState<{lastWeek:number;attempts:AccessAttempt[]}|null>(null);
   const [stats,setStats]=useState<Stats|null>(null);
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
-  const [tab,setTab]=useState<'categories'|'locations'>('categories');
+  const [tab,setTab]=useState<'categories'|'locations'|'doctors'>('categories');
   const [kindFilter,setKindFilter]=useState<'all'|Kind>('all');
   const [activeFilter,setActiveFilter]=useState<'all'|'active'|'inactive'>('all');
   const [from,setFrom]=useState(priorDay(today(),6));
@@ -57,12 +57,12 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   const [dailyCap,setDailyCap]=useState('');
   const [rounding,setRounding]=useState<'per_started_hour'|'per_minute'>('per_started_hour');
   const [effectiveFrom,setEffectiveFrom]=useState(localDateTime(new Date()));
+  // Most prices run until replaced; an end date is set only when the admin switches it on.
+  const [hasEnd,setHasEnd]=useState(false);
+  const [effectiveTo,setEffectiveTo]=useState('');
   const [editing,setEditing]=useState<Rule|null>(null);
   const [formError,setFormError]=useState('');
   const [confirmingRule,setConfirmingRule]=useState<string|null>(null);
-  const [locationKind,setLocationKind]=useState<'city'|'floor'|'office'>('city');
-  const [locationName,setLocationName]=useState('');
-  const [parentId,setParentId]=useState('');
   const [doctorId,setDoctorId]=useState('');
   const [categoryId,setCategoryId]=useState('');
   const [consultationType,setConsultationType]=useState('');
@@ -71,12 +71,11 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   const [officeId,setOfficeId]=useState('');
   const [categoryName,setCategoryName]=useState('');
   const [editingCategory,setEditingCategory]=useState<Category|null>(null);
-  const [editingLocation,setEditingLocation]=useState<Location|null>(null);
 
   const load=useCallback(async()=>{
     setBusy(true);setError('');
     try {
-      if(view==='pricing') { const [r,c,d,l]=await Promise.all([api<{rules:Rule[]}>('/admin/pricing'),api<{categories:Category[]}>('/admin/reference/categories'),api<{doctors:DoctorChoice[]}>('/admin/doctors'),api<{locations:Location[]}>('/admin/reference/locations')]);setRules(r.rules);setCategories(c.categories);setDoctors(d.doctors);setLocations(l.locations); }
+      if(view==='pricing') { const [r,c,d,l]=await Promise.all([api<{rules:Rule[]}>('/admin/pricing'),api<{categories:Category[]}>('/admin/reference/categories'),api<{doctors:DoctorChoice[]}>('/admin/doctors'),api<{locations:RefLocation[]}>('/admin/reference/locations')]);setRules(r.rules);setCategories(c.categories);setDoctors(d.doctors);setLocations(l.locations); }
       if(view==='statistics') {
         if(!from||!to) throw new Error('Choose both dates.');
         const end=new Date(to+'T12:00:00+05:00');end.setUTCDate(end.getUTCDate()+1);
@@ -87,7 +86,7 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
         setRuns(r.runs);setAttempts(a&&Array.isArray(a.attempts)?a:null);
       }
       if(view==='reference') {
-        const [c,l,d,a]=await Promise.all([api<{categories:Category[]}>('/admin/reference/categories'),api<{locations:Location[]}>('/admin/reference/locations'),api<{doctors:DoctorChoice[]}>('/admin/doctors'),api<{audits:ReferenceAudit[]}>('/admin/reference/audit')]);
+        const [c,l,d,a]=await Promise.all([api<{categories:Category[]}>('/admin/reference/categories'),api<{locations:RefLocation[]}>('/admin/reference/locations'),api<{doctors:DoctorChoice[]}>('/admin/doctors'),api<{audits:ReferenceAudit[]}>('/admin/reference/audit')]);
         setCategories(c.categories);setLocations(l.locations);setReferenceDoctors(d.doctors);setReferenceAudits(a.audits);
       }
     } catch {setError('Could not load this information. Retry.');}
@@ -96,7 +95,7 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   useEffect(()=>{void load()},[load]);
 
   function startEdit(rule:Rule) {
-    setEditing(rule);setKind(rule.kind);setDoctorId(rule.doctorId??'');setCategoryId(rule.categoryId??'');setConsultationType(rule.consultationType??'');setServiceCode(rule.serviceCode??'');setServiceName(rule.serviceName??'');setFormError('');setOfficeId(rule.office?.name?locations.find(item=>item.name===rule.office?.name)?.id??'':'');setAmount(String(rule.amountKzt));setRate(String(rule.ratePerHourKzt??''));setFreeMinutes(String(rule.freeMinutes));setDailyCap(rule.dailyCapKzt===null||rule.dailyCapKzt===undefined?'':String(rule.dailyCapKzt));setRounding(rule.rounding as 'per_started_hour'|'per_minute');setEffectiveFrom(localDateTime(new Date()));
+    setEditing(rule);setKind(rule.kind);setDoctorId(rule.doctorId??'');setCategoryId(rule.categoryId??'');setConsultationType(rule.consultationType??'');setServiceCode(rule.serviceCode??'');setServiceName(rule.serviceName??'');setFormError('');setOfficeId(rule.office?.name?locations.find(item=>item.name===rule.office?.name)?.id??'':'');setAmount(String(rule.amountKzt));setRate(String(rule.ratePerHourKzt??''));setFreeMinutes(String(rule.freeMinutes));setDailyCap(rule.dailyCapKzt===null||rule.dailyCapKzt===undefined?'':String(rule.dailyCapKzt));setRounding(rule.rounding as 'per_started_hour'|'per_minute');setEffectiveFrom(localDateTime(new Date()));setHasEnd(Boolean(rule.effectiveTo));setEffectiveTo(rule.effectiveTo?localDateTime(new Date(rule.effectiveTo)):'');
   }
   async function saveRule(event:FormEvent) {
     event.preventDefault();setError('');setFormError('');
@@ -105,9 +104,10 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
     if(kind!=='parking'&&(amount.trim()===''||!Number.isInteger(flatAmount)||flatAmount<0)){setFormError('Enter the amount as a whole number of KZT (0 or more).');return;}
     if(kind==='parking'&&(rate.trim()===''||!Number.isInteger(Number(rate))||Number(rate)<0)){setFormError('Enter the hourly parking rate as a whole number of KZT (0 or more).');return;}
     if(kind==='parking'&&dailyCap.trim()!==''&&(!Number.isInteger(Number(dailyCap))||Number(dailyCap)<0)){setFormError('Enter the daily cap as a whole number of KZT, or leave it empty for no cap.');return;}
+    if(hasEnd&&(!effectiveTo||Date.parse(effectiveTo)<=Date.parse(effectiveFrom))){setFormError('Choose an end date after the start date, or switch the end date off.');return;}
     if(editing&&(editing.doctorId||editing.categoryId)&&!window.confirm('This change affects existing doctors. Save it as a new price version?'))return;
-    const body={kind,amountKzt:flatAmount,ratePerHourKzt:kind==='parking'?Number(rate):null,freeMinutes:Number(freeMinutes),rounding,dailyCapKzt:kind==='parking'&&dailyCap.trim()!==''?Number(dailyCap):null,effectiveFrom:new Date(effectiveFrom).toISOString(),effectiveTo:null,doctorId:kind==='visit'?(doctorId||null):null,categoryId:kind==='visit'?(categoryId||null):null,consultationType:kind==='visit'?(consultationType||null):null,serviceCode:kind==='treatment'?(serviceCode||null):null,serviceName:kind==='treatment'?(serviceName||null):null,officeId:kind==='parking'?(officeId||null):null};
-    try{await api(editing?'/admin/pricing/'+encodeURIComponent(editing.id):'/admin/pricing',{method:editing?'PATCH':'POST',body:JSON.stringify(body)});setEditing(null);setDoctorId('');setCategoryId('');setConsultationType('');setServiceCode('');setServiceName('');setOfficeId('');setAmount('');setRate('');setDailyCap('');toast.success(editing?'New price version saved':'Pricing rule added');await load();}
+    const body={kind,amountKzt:flatAmount,ratePerHourKzt:kind==='parking'?Number(rate):null,freeMinutes:Number(freeMinutes),rounding,dailyCapKzt:kind==='parking'&&dailyCap.trim()!==''?Number(dailyCap):null,effectiveFrom:new Date(effectiveFrom).toISOString(),effectiveTo:hasEnd&&effectiveTo?new Date(effectiveTo).toISOString():null,doctorId:kind==='visit'?(doctorId||null):null,categoryId:kind==='visit'||kind==='treatment'?(categoryId||null):null,consultationType:kind==='visit'?(consultationType||null):null,serviceCode:kind==='treatment'?(serviceCode||null):null,serviceName:kind==='treatment'?(serviceName||null):null,officeId:kind==='parking'?(officeId||null):null};
+    try{await api(editing?'/admin/pricing/'+encodeURIComponent(editing.id):'/admin/pricing',{method:editing?'PATCH':'POST',body:JSON.stringify(body)});setEditing(null);setDoctorId('');setCategoryId('');setConsultationType('');setServiceCode('');setServiceName('');setOfficeId('');setAmount('');setRate('');setDailyCap('');setHasEnd(false);setEffectiveTo('');toast.success(editing?'New price version saved':'Pricing rule added');await load();}
     catch(caught){const message=caught instanceof Error&&caught.message?caught.message:'The pricing rule could not be saved.';setFormError(message);toast.error('Pricing rule not saved',message);}
   }
   async function deactivate(rule:Rule) {
@@ -118,11 +118,6 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   async function saveCategory(event:FormEvent){event.preventDefault();try{await api(editingCategory?'/admin/reference/categories/'+encodeURIComponent(editingCategory.id):'/admin/reference/categories',{method:editingCategory?'PATCH':'POST',body:JSON.stringify({name:categoryName})});setCategoryName('');setEditingCategory(null);await load();}catch{setError('Category could not be saved. It may already exist.');}}
   async function toggleCategory(item:Category){if(!window.confirm((item.active?'Deactivate':'Reactivate')+' '+item.name+'? '+item._count.doctors+' doctor profiles are linked.'))return;try{await api('/admin/reference/categories/'+encodeURIComponent(item.id),{method:'PATCH',body:JSON.stringify({active:!item.active})});await load();}catch{setError('Category could not be updated.');}}
   function editCategory(item:Category){setEditingCategory(item);setCategoryName(item.name);}
-  function resetLocationForm(){setEditingLocation(null);setLocationKind('city');setLocationName('');setParentId('');}
-  function editLocation(item:Location){setEditingLocation(item);setLocationKind(item.kind);setLocationName(item.name);setParentId(item.parentId??'');}
-  async function saveLocation(event:FormEvent){event.preventDefault();const moving=Boolean(editingLocation&&parentId!==(editingLocation.parentId??''));if(moving&&!window.confirm('Move this location and update linked doctor profiles?'))return;try{const body=editingLocation?{name:locationName,parentId:parentId||null,confirmMove:moving}:{name:locationName,kind:locationKind,parentId:parentId||null};await api(editingLocation?'/admin/reference/locations/'+encodeURIComponent(editingLocation.id):'/admin/reference/locations',{method:editingLocation?'PATCH':'POST',body:JSON.stringify(body)});resetLocationForm();await load();}catch{setError('Location could not be saved. Check the parent and duplicate name.');}}
-  async function assignDoctor(doctor:DoctorChoice,locationId:string){try{await api('/admin/doctors/'+encodeURIComponent(doctor.id)+'/location',{method:'PATCH',body:JSON.stringify({locationId:locationId||null})});await load();}catch{setError('Office assignment could not be saved.');}}
-  async function toggleLocation(item:Location){const action=item.active?'Deactivate':'Reactivate';if(!window.confirm(action+' '+item.kind+' '+item.name+'? '+(item.usage?.doctors??item._count.doctors)+' linked doctors and '+(item.usage?.slots??0)+' schedule slots are affected.'))return;try{await api('/admin/reference/locations/'+encodeURIComponent(item.id),{method:'PATCH',body:JSON.stringify({active:!item.active})});await load();}catch{setError('Deactivate active child locations first.');}}
 
   async function runIntegrity() {
     setBusy(true);setError('');
@@ -131,7 +126,6 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
     finally { setBusy(false); }
   }
   const title={pricing:'Pricing rules',statistics:'Visit statistics',integrity:'Data quality and integrity',reference:'Reference data'}[view];
-  const parents=locations.filter(item=>item.active&&(locationKind==='floor'?item.kind==='city':locationKind==='office'?item.kind==='floor'&&Boolean(locations.find(parent=>parent.id===item.parentId)?.active):false));
   const visibleRules=rules.filter(item=>(kindFilter==='all'||item.kind===kindFilter)&&(activeFilter==='all'||ruleIsActive(item)===(activeFilter==='active')));
   const maxVisits=Math.max(1,...(stats?.timeSeries??[]).map(item=>item.visits));
   const sortedWorkload=stats?.doctorWorkload.slice().sort((a,b)=>workloadSort==='doctorName'?a.doctorName.localeCompare(b.doctorName):Number(b[workloadSort])-Number(a[workloadSort]))??[];
@@ -141,12 +135,19 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   const passedChecks=latestChecks.filter(check=>check.count===0).length;
   const warningChecks=latestChecks.filter(check=>check.count>0&&check.severity==='warning').length;
   const criticalChecks=latestChecks.filter(check=>check.count>0&&check.severity==='critical').length;
-  const subtitle={pricing:'Visit, treatment and parking prices. Each change is versioned and audited.',statistics:'Doctor workload and patient visits for the selected period (Asia/Almaty).',integrity:'Automatic checks for missing, broken or misordered records. Samples show record IDs only.',reference:'Specialties and the city → floor → office structure used across the platform.'}[view];
+  const subtitle={pricing:'Visit, treatment and parking prices. Each change is versioned and audited.',statistics:'Doctor workload and patient visits for the selected period (Asia/Almaty).',integrity:'Automatic checks for missing, broken or misordered records. Each problem lists the records involved and what to do.',reference:'Specialties and the city → clinic → floor → office structure used across the platform.'}[view];
   const severityRank=(check:Check)=>check.severity==='critical'?0:check.severity==='warning'?1:2;
   const problemChecks=latestChecks.filter(check=>check.count>0).sort((a,b)=>severityRank(a)-severityRank(b)||b.count-a.count);
   const passedList=latestChecks.filter(check=>check.count===0);
   const severityPill=(check:Check)=>check.count===0?<span className="admin-status admin-status-active">Passed</span>:check.severity==='critical'?<span className="admin-status admin-status-danger">Critical</span>:check.severity==='warning'?<span className="admin-status admin-status-amber">Warning</span>:<span className="admin-status admin-status-muted">Info</span>;
-  const checkTable=(checks:Check[])=><div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>Check</th><th>Records</th><th>Trend</th><th>Result</th><th>Sample IDs</th></tr></thead><tbody>{checks.map(check=>{const prior=previousRun?.results?.find(item=>item.id===check.id);const delta=prior?check.count-prior.count:null;return <tr key={check.id} className={check.count>0?`is-${check.severity}`:undefined}><td><strong>{check.name??checkName(check.id)}</strong><small>{check.description??''}</small></td><td>{check.count}</td><td>{delta===null?'—':delta===0?'No change':delta>0?'+'+delta:String(delta)}</td><td>{severityPill(check)}</td><td>{check.sampleIds?.length?<details><summary>{plural(check.sampleIds.length,'ID')}</summary><ul className="ad-id-list">{check.sampleIds.map(id=><li key={id}><code>{id}</code></li>)}</ul></details>:'—'}</td></tr>})}</tbody></table></div>;
+  const sampleList=(items:NonNullable<Check['samples']>,check:Check)=><ul className="ad-sample-list" aria-label={'Records flagged by '+(check.name??check.id)}>{items.map(sample=><li key={sample.id}><strong>{sample.title}</strong><span>{sample.detail}</span><code>{sample.id}</code></li>)}</ul>;
+  const checkTable=(checks:Check[])=><div className="table-wrap"><table className="admin-table is-wide ad-check-table"><thead><tr><th>Check</th><th>Records</th><th>Trend</th><th>Result</th></tr></thead><tbody>{checks.map(check=>{const prior=previousRun?.results?.find(item=>item.id===check.id);const delta=prior?check.count-prior.count:null;const samples=check.samples??[];return <Fragment key={check.id}><tr className={check.count>0?`is-${check.severity}`:undefined}><td><strong>{check.name??checkName(check.id)}</strong><small>{check.description??''}</small></td><td>{check.count}</td><td>{delta===null?'—':delta===0?'No change':delta>0?'+'+delta:String(delta)}</td><td>{severityPill(check)}</td></tr>
+    {check.count>0&&<tr className={`ad-check-detail is-${check.severity}`}><td colSpan={4}>
+      {CHECK_FIX[check.id]&&<p className="ad-check-fix"><strong>What to do:</strong> {CHECK_FIX[check.id]}</p>}
+      {samples.length>0?<>{sampleList(samples.slice(0,3),check)}{samples.length>3&&<details className="ad-details ad-sample-more"><summary>Show {samples.length-3} more</summary>{sampleList(samples.slice(3),check)}</details>}</>
+        :check.sampleIds?.length?<ul className="ad-sample-list">{check.sampleIds.map(id=><li key={id}><span>Record no longer found</span><code>{id}</code></li>)}</ul>:null}
+      {check.count>(samples.length||check.sampleIds?.length||0)&&<p className="ad-muted">Showing the first {samples.length||check.sampleIds?.length} of {check.count}.</p>}
+    </td></tr>}</Fragment>})}</tbody></table></div>;
   return <div className="admin-page ad-page ad-ops">
     <header className="ad-head">
       <div><h1>{title}</h1><p>{subtitle}</p></div>
@@ -172,15 +173,20 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
             <fieldset className="ad-rule-step"><legend><span>1</span> What is priced</legend><div className="ad-form-grid">
               <label>Type<select value={kind} onChange={e=>setKind(e.target.value as Kind)}><option value="visit">Visit</option><option value="treatment">Treatment</option><option value="parking">Parking</option></select></label>
               {kind==='visit'&&<><label>Doctor scope<select value={doctorId} onChange={e=>setDoctorId(e.target.value)}><option value="">Any doctor</option>{doctors.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Specialty scope<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Any specialty</option>{categories.filter(item=>item.active).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Consultation type<select value={consultationType} onChange={e=>setConsultationType(e.target.value)}><option value="">Any consultation</option>{CONSULTATION_TYPE_OPTIONS.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label></>}
-              {kind==='treatment'&&<><label>Service code<input value={serviceCode} onChange={e=>setServiceCode(e.target.value)} maxLength={80}/></label><label>Service name<input value={serviceName} onChange={e=>setServiceName(e.target.value)} maxLength={120}/></label></>}
+              {kind==='treatment'&&<><label>Service name<input value={serviceName} onChange={e=>setServiceName(e.target.value)} maxLength={120}/></label><label>Service code<input value={serviceCode} onChange={e=>setServiceCode(e.target.value)} maxLength={80} placeholder="Optional"/></label><label>Specialty<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Every specialty</option>{categories.filter(item=>item.active).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label></>}
               {kind==='parking'&&<label>Office scope<select value={officeId} onChange={e=>setOfficeId(e.target.value)}><option value="">All offices</option>{locations.filter(item=>isSelectableOffice(item,locations)).map(item=><option key={item.id} value={item.id}>{locationPath(item,locations)}</option>)}</select></label>}
             </div></fieldset>
             <fieldset className="ad-rule-step"><legend><span>2</span> Price</legend><div className="ad-form-grid">
               {kind!=='parking'&&<label>Amount (KZT)<input type="number" min="0" step="1" value={amount} onChange={e=>setAmount(e.target.value)} required/></label>}
               {kind==='parking'&&<><label>Hourly rate (KZT)<input type="number" min="0" step="1" value={rate} onChange={e=>setRate(e.target.value)} required/></label><label>Free minutes<input type="number" min="0" step="1" value={freeMinutes} onChange={e=>setFreeMinutes(e.target.value)}/></label><label>Daily cap (KZT)<input type="number" min="0" step="1" value={dailyCap} placeholder="No cap" onChange={e=>setDailyCap(e.target.value)}/></label><label>Rounding<select value={rounding} onChange={e=>setRounding(e.target.value as typeof rounding)}><option value="per_started_hour">Each started hour</option><option value="per_minute">Per minute</option></select></label></>}
             </div></fieldset>
-            <fieldset className="ad-rule-step"><legend><span>3</span> Starts</legend><div className="ad-form-grid">
+            <fieldset className="ad-rule-step"><legend><span>3</span> When</legend><div className="ad-form-grid">
               <label>Effective from<input type="datetime-local" value={effectiveFrom} onChange={e=>setEffectiveFrom(e.target.value)} required/></label>
+              <div className="ad-end-field">
+                <label className="ad-switch"><input type="checkbox" role="switch" checked={hasEnd} onChange={e=>{setHasEnd(e.target.checked);if(e.target.checked&&!effectiveTo){const next=new Date(effectiveFrom||Date.now());next.setMonth(next.getMonth()+1);setEffectiveTo(localDateTime(next));}}}/><span aria-hidden="true"/>Ends on a date</label>
+                {hasEnd?<label className="sr-only" htmlFor="ad-effective-to">Effective until</label>:null}
+                {hasEnd?<input id="ad-effective-to" type="datetime-local" value={effectiveTo} min={effectiveFrom} onChange={e=>setEffectiveTo(e.target.value)} required/>:<p className="ad-muted">Runs until you replace or deactivate it.</p>}
+              </div>
             </div></fieldset>
           </div>
           <aside className="ad-rule-preview" aria-label="What this rule means" aria-live="polite">
@@ -188,10 +194,10 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
             {kind==='parking'
               ? <><h3>Parking estimate</h3><p className="ad-rule-preview-big">{rate.trim()?money(Number(rate)):'—'}<small> / {rounding==='per_minute'?'hour, by the minute':'started hour'}</small></p>
                 <ul className="ad-rule-examples">{[30,90,240].map(minutes=><li key={minutes}><span>{minutes<60?minutes+' min':(minutes/60)+' h'} stay</span><strong>{rate.trim()?money(parkingExample(minutes,Number(rate)||0,Number(freeMinutes)||0,rounding,dailyCap.trim()?Number(dailyCap):null)):'—'}</strong></li>)}</ul>
-                <p className="ad-muted">{Number(freeMinutes)>0?`First ${Number(freeMinutes)} min free · `:''}{dailyCap.trim()?`max ${money(Number(dailyCap))} a day · `:''}{officeId?locationPath(locations.find(item=>item.id===officeId)??{id:'',name:'',kind:'office',parentId:null,parent:null,active:true,_count:{doctors:0},children:[]},locations):'All offices'}</p></>
+                <p className="ad-muted">{Number(freeMinutes)>0?`First ${Number(freeMinutes)} min free · `:''}{dailyCap.trim()?`max ${money(Number(dailyCap))} a day · `:''}{officeId?locationPath(locations.find(item=>item.id===officeId)??{name:'',parentId:null},locations):'All offices'}</p></>
               : <><h3>{kind==='visit'?'Patients will pay':'Doctors can add'}</h3><p className="ad-rule-preview-big">{amount.trim()?money(Number(amount)):'—'}</p>
-                <p className="ad-muted">{kind==='visit'?[doctors.find(item=>item.id===doctorId)?.name??categories.find(item=>item.id===categoryId)?.name??'Every doctor',consultationType?consultationTypeName(consultationType):'any consultation'].join(' · '):(serviceName||serviceCode||'A treatment')}</p></>}
-            <p className="ad-rule-preview-foot">From {effectiveFrom?dateTimeLabel(new Date(effectiveFrom).toISOString()):'—'} · bookings made earlier keep their price.</p>
+                <p className="ad-muted">{kind==='visit'?[doctors.find(item=>item.id===doctorId)?.name??categories.find(item=>item.id===categoryId)?.name??'Every doctor',consultationType?consultationTypeName(consultationType):'any consultation'].join(' · '):[serviceName||serviceCode||'A treatment',categories.find(item=>item.id===categoryId)?.name??'every specialty'].join(' · ')}</p></>}
+            <p className="ad-rule-preview-foot">From {effectiveFrom?dateTimeLabel(new Date(effectiveFrom).toISOString()):'—'}{hasEnd&&effectiveTo?' until '+dateTimeLabel(new Date(effectiveTo).toISOString()):''} · bookings made earlier keep their price.</p>
           </aside>
         </div>
         {formError&&<p className="ad-form-error" role="alert">{formError}</p>}
@@ -274,7 +280,8 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
     {view==='reference'&&<>
       <div className="ad-segment" role="tablist" aria-label="Reference data">
         <button type="button" role="tab" aria-selected={tab==='categories'} aria-pressed={tab==='categories'} onClick={()=>setTab('categories')}>Doctor categories</button>
-        <button type="button" role="tab" aria-selected={tab==='locations'} aria-pressed={tab==='locations'} onClick={()=>setTab('locations')}>Office locations</button>
+        <button type="button" role="tab" aria-selected={tab==='locations'} aria-pressed={tab==='locations'} onClick={()=>setTab('locations')}>Clinic places</button>
+        <button type="button" role="tab" aria-selected={tab==='doctors'} aria-pressed={tab==='doctors'} onClick={()=>setTab('doctors')}>Doctor offices</button>
       </div>
       {tab==='categories'&&<section className="admin-panel ad-panel">
         <div className="admin-panel-header"><div><h2>Doctor categories</h2><p className="ad-muted">{categories.filter(item=>item.active).length} active · inactive ones are hidden from doctor search</p></div>
@@ -282,17 +289,8 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
         </div>
         <div className="table-wrap"><table className="admin-table"><thead><tr><th>Category</th><th>Doctors</th><th>Status</th><th aria-label="Actions"/></tr></thead><tbody>{categories.map(item=><tr key={item.id} className={item.active?undefined:'is-ended'}><td><span className="ad-cell-with-badge"><Badge text={item.name[0]?.toUpperCase()??'?'} tone={item.active?'violet':'grey'}/><strong>{item.name}</strong></span></td><td>{plural(item._count.doctors,'doctor')}</td><td>{item.active?<span className="admin-status admin-status-active ad-dot">Active</span>:<span className="admin-status admin-status-muted ad-dot">Inactive</span>}</td><td className="ad-row-actions"><button className="ad-mini" type="button" onClick={()=>editCategory(item)}>Edit</button><button className={`ad-mini${item.active?' is-danger':''}`} type="button" onClick={()=>void toggleCategory(item)}>{item.active?'Deactivate':'Reactivate'}</button></td></tr>)}</tbody></table></div>
       </section>}
-      {tab==='locations'&&<>
-        <form className="admin-panel ad-panel ad-form" onSubmit={saveLocation}>
-          <div className="admin-panel-header"><div><h2>{editingLocation?'Edit location':'Add a location'}</h2><p className="ad-muted">A floor belongs to a city, an office belongs to a floor.</p></div></div>
-          <div className="ad-form-grid"><label>Level<select disabled={Boolean(editingLocation)} value={locationKind} onChange={e=>{setLocationKind(e.target.value as typeof locationKind);setParentId('')}}><option value="city">City</option><option value="floor">Floor</option><option value="office">Office</option></select></label><label>Name<input value={locationName} onChange={e=>setLocationName(e.target.value)} maxLength={120} required/></label>{locationKind!=='city'&&<label>Parent<select value={parentId} onChange={e=>setParentId(e.target.value)} required><option value="">Choose parent</option>{parents.filter(item=>item.id!==editingLocation?.id).map(item=><option key={item.id} value={item.id}>{item.kind}: {item.name}</option>)}</select></label>}</div>
-          <div className="ad-form-actions"><button className="ad-button" type="submit">{editingLocation?'Save location':'Add location'}</button>{editingLocation&&<button className="ad-button ad-button-outline" type="button" onClick={resetLocationForm}>Cancel</button>}</div>
-        </form>
-        <section className="ad-grid ad-grid-even">
-          <LocationTree locations={locations} onEdit={editLocation} onToggle={item=>void toggleLocation(item)}/>
-          <section className="admin-panel ad-panel"><div className="admin-panel-header"><div><h2>Doctor office assignments</h2><p className="ad-muted">{referenceDoctors.filter(doctor=>doctor.locationId).length} of {referenceDoctors.length} assigned</p></div></div><div className="table-wrap ad-scroll"><table className="admin-table"><thead><tr><th>Doctor</th><th>Office</th></tr></thead><tbody>{referenceDoctors.map(doctor=><tr key={doctor.id}><td>{doctor.name}</td><td><select className="ad-select" aria-label={'Office for '+doctor.name} value={doctor.locationId??''} onChange={event=>void assignDoctor(doctor,event.target.value)}><option value="">Unassigned</option>{locations.filter(item=>isSelectableOffice(item,locations)).map(item=><option key={item.id} value={item.id}>{locationPath(item,locations)}</option>)}</select></td></tr>)}</tbody></table></div></section>
-        </section>
-      </>}
+      {tab==='locations'&&<LocationColumns locations={locations} onSaved={load}/>}
+      {tab==='doctors'&&<DoctorOffices doctors={referenceDoctors} locations={locations} onSaved={load}/>}
       <section className="admin-panel ad-panel"><div className="admin-panel-header"><div><h2>Recent reference changes</h2><p className="ad-muted">Audit trail for categories and locations</p></div></div>{referenceAudits.length===0?<p className="ad-empty-state">No changes recorded yet.</p>:<ShowMore limit={6} noun="change" items={referenceAudits} render={items=><Timeline items={items.map(audit=>({id:audit.id,at:audit.createdAt,tone:audit.action==='deactivated'?'red':audit.action==='created'?'green':'blue',chip:audit.entity==='category'?'S':audit.entity==='location'?'L':'D',title:<><strong>{audit.actor?audit.actor.firstName+' '+audit.actor.lastName:'Admin'}</strong> {referenceAction(audit.action,audit.entity)}</>,meta:dateTimeLabel(audit.createdAt),change:referenceChange(audit.oldValue,audit.newValue)?<ChangeText text={referenceChange(audit.oldValue,audit.newValue)}/>:undefined}))}/>}/>}</section>
     </>}
   </div>;
@@ -304,11 +302,30 @@ function referenceChange(oldValue:unknown,newValue:unknown) {
   return before?before+' → '+after:after;
 }
 
+/** One line per check telling the admin how to clear it. */
+const CHECK_FIX:Record<string,string>={
+  'appointment-invalid-reference':'Open the visit in Appointments and cancel or reassign it; its patient or doctor no longer exists.',
+  'medical-entry-invalid-owner':'The note points to a missing patient or doctor. Restore the account; notes cannot be deleted.',
+  'doctor-missing-reference':'Give the doctor a specialty and an office under Reference data → Doctor offices.',
+  'user-empty-email':'Open the account in Users and add an email address.',
+  'duplicate-patient-email':'These accounts share an email. Keep one and change the email on the others in Users.',
+  'duplicate-patient-phone':'These accounts share a phone number written differently. Ask the patients and correct the number on the wrong account.',
+  'overlapping-doctor-slots':'The doctor has two times that overlap. Remove or move one in the doctor\'s schedule.',
+  'slot-status-inconsistent':'The visit status does not match its patient or check-in. Re-open it in the schedule and set the right status.',
+  'overdue-unchecked-booking':'The visit started without check-in and was not released. Check in the patient or release the time.',
+  'medical-entry-future':'The note has a future time. Report it to the developers; notes are dated by the server.',
+  'medical-entry-before-account':'The note is older than the patient account. Report it to the developers.',
+  'medical-entry-before-visit':'The note is dated before its visit started. Report it to the developers.',
+  'medical-entry-invalid-timestamps':'The note was edited before it was written. Report it to the developers.',
+  'medical-entry-sequence-gap':'The patient\'s note numbers have a gap or repeat. Report it to the developers.',
+  'duplicate-medical-entry':'The same note was saved twice within five minutes. Ask the doctor which one is correct and edit the other.',
+  'invalid-office-hierarchy':'A place sits under the wrong level. Fix it under Reference data → Office locations.',
+};
 const plural=(count:number,noun:string)=>`${count} ${noun}${count===1?'':'s'}`;
 /** Consultation types a visit price can target; the most specific matching one wins. */
 const CONSULTATION_TYPE_OPTIONS:Array<[string,string]>=[['first','First visit'],['follow-up','Follow-up visit'],['in-person','In-person'],['online','Online'],['in-person:first','In-person · First visit'],['in-person:follow-up','In-person · Follow-up visit'],['online:first','Online · First visit'],['online:follow-up','Online · Follow-up visit']];
 const consultationTypeName=(value:string|null)=>value?CONSULTATION_TYPE_OPTIONS.find(([key])=>key===value)?.[1]??value:'';
-const ruleScope=(rule:Rule,doctors:DoctorChoice[])=>{const base=rule.serviceName??rule.category?.name??doctors.find(item=>item.id===rule.doctorId)?.name??rule.office?.name??(rule.kind==='parking'?'All offices':'All doctors');return rule.kind==='visit'&&rule.consultationType?`${base} · ${consultationTypeName(rule.consultationType)}`:base;};
+const ruleScope=(rule:Rule,doctors:DoctorChoice[])=>{const base=rule.serviceName??rule.category?.name??doctors.find(item=>item.id===rule.doctorId)?.name??rule.office?.name??(rule.kind==='parking'?'All offices':'All doctors');if(rule.kind==='treatment')return [base,rule.category?.name??'every specialty'].join(' · ');return rule.kind==='visit'&&rule.consultationType?`${base} · ${consultationTypeName(rule.consultationType)}`:base;};
 function parkingTerms(rule:{ratePerHourKzt:number|null;freeMinutes:number;rounding:string;dailyCapKzt:number|null}) {
   if(rule.ratePerHourKzt===null)return '—';
   return [money(rule.ratePerHourKzt)+(rule.rounding==='per_minute'?' / hour, by the minute':' / started hour'),rule.freeMinutes?rule.freeMinutes+' min free':'',rule.dailyCapKzt!==null?'max '+money(rule.dailyCapKzt)+' a day':''].filter(Boolean).join(' · ');
@@ -348,24 +365,6 @@ function MiniBars({label,values}:{label:string;values:{name:string;visits:number
 
 function DataTable({headings,rows,renderRows,wide}:{headings:string[];rows:string[][];renderRows?:ReactNode;wide?:boolean}) {
   return <div className={`table-wrap${wide?' ad-scroll':''}`}><table className={`admin-table${wide?' is-wide':''}`}><thead><tr>{headings.map(item=><th key={item}>{item}</th>)}</tr></thead><tbody>{renderRows??rows.map((row,index)=><tr key={index}>{row.map((value,cell)=><td key={cell}>{value}</td>)}</tr>)}</tbody></table>{rows.length===0&&<p className="ad-empty-state">No records available.</p>}</div>;
-}
-
-function isSelectableOffice(item:Location,locations:Location[]) {
-  if(item.kind!=='office'||!item.active)return false;
-  const floor=locations.find(location=>location.id===item.parentId);
-  const city=floor?.parentId?locations.find(location=>location.id===floor.parentId):undefined;
-  return Boolean(floor?.active&&city?.active);
-}
-function locationPath(item:Location,locations:Location[]) {
-  const parts=[item.name];let parentId=item.parentId;
-  while(parentId){const parent=locations.find(location=>location.id===parentId);if(!parent)break;parts.unshift(parent.name);parentId=parent.parentId;}
-  return parts.join(' · ');
-}
-function LocationTree({locations,onEdit,onToggle}:{locations:Location[];onEdit:(item:Location)=>void;onToggle:(item:Location)=>void}) {
-  const children=(parentId:string|null)=>locations.filter(item=>item.parentId===parentId);
-  const countUsage=(item:Location)=>children(item.id).reduce((sum,child)=>({doctors:sum.doctors+(child.usage?.doctors??child._count.doctors),slots:sum.slots+(child.usage?.slots??0)}),{doctors:item.usage?.doctors??item._count.doctors,slots:item.usage?.slots??0});
-  const node=(item:Location):ReactNode=><li key={item.id}><details open={item.kind==='city'}><summary><span className="ad-loc-kind">{item.kind}</span><strong>{item.name}</strong><small>{countUsage(item).doctors} doctors · {countUsage(item).slots} slots</small>{item.active?<span className="admin-status admin-status-active">Active</span>:<span className="admin-status admin-status-muted">Inactive</span>}</summary><div className="ad-location-actions"><button className="ad-mini" type="button" onClick={()=>onEdit(item)}>Edit</button><button className={`ad-mini${item.active?' is-danger':''}`} type="button" onClick={()=>onToggle(item)}>{item.active?'Deactivate':'Reactivate'}</button></div>{children(item.id).length>0&&<ul>{children(item.id).map(node)}</ul>}</details></li>;
-  return <section className="admin-panel ad-panel ad-location-tree" aria-label="Office locations"><div className="admin-panel-header"><div><h2>City → floor → office</h2><p className="ad-muted">Open a level to edit it</p></div></div><ul>{children(null).filter(item=>item.kind==='city').map(node)}</ul>{children(null).filter(item=>item.kind!=='city').map(node)}</section>;
 }
 
 const initials=(name:string)=>name.replace(/^Dr\.\s*/,'').split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()??'').join('')||'?';
