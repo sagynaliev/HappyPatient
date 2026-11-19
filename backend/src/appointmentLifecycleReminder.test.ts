@@ -57,3 +57,14 @@ describe('upcoming appointment reminders',()=>{
     expect(db.notification.create).not.toHaveBeenCalled();
   });
 });
+
+describe('visit place in reminders',()=>{
+  it('reads from the city down to the room, with the street after the clinic',async()=>{
+    const { visitPlace } = await import('./appointmentLifecycle');
+    const office={name:'Room 204',parent:{name:'Floor 2',parent:{name:'Central Clinic',parent:{name:'Almaty',parent:null}}}};
+    expect(visitPlace({officeNumber:'Room 204',office:'Room 204'},office)).toBe('Almaty, Central Clinic, Floor 2, Room 204');
+    expect(visitPlace({streetAddress:'Abay 10'},office)).toBe('Almaty, Central Clinic, Abay 10, Floor 2, Room 204');
+    expect(visitPlace({city:'Astana',clinicName:'Own Clinic',officeNumber:'12'},null)).toBe('Astana, Own Clinic, Office 12');
+    expect(visitPlace({},null)).toBe('clinic');
+  });
+});
