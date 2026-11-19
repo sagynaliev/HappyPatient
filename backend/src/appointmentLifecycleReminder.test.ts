@@ -60,7 +60,7 @@ describe('upcoming appointment reminders',()=>{
 
 describe('visit place in reminders',()=>{
   it('reads from the city down to the room, with the street after the clinic',async()=>{
-    const { visitPlace } = await import('./appointmentLifecycle');
+    const { visitPlace } = await import('./appointmentLifecycle.js');
     const office={name:'Room 204',parent:{name:'Floor 2',parent:{name:'Central Clinic',parent:{name:'Almaty',parent:null}}}};
     expect(visitPlace({officeNumber:'Room 204',office:'Room 204'},office)).toBe('Almaty, Central Clinic, Floor 2, Room 204');
     expect(visitPlace({streetAddress:'Abay 10'},office)).toBe('Almaty, Central Clinic, Abay 10, Floor 2, Room 204');
