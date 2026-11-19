@@ -6,7 +6,7 @@ const prismaMock = vi.hoisted(() => ({
   doctor: { findMany: vi.fn(), findUnique: vi.fn() },
   category: { findMany: vi.fn() },
   location: { findMany: vi.fn() },
-  scheduleSlot: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+  scheduleSlot: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() },
   pricingRule: { findMany: vi.fn() },
   user: { findUnique: vi.fn() },
 }));
@@ -80,6 +80,35 @@ describe('POST /api/assistant/chat', () => {
     expect(JSON.parse(second.messages.at(-1).content)).toEqual(expect.objectContaining({ shown: true }));
     expect(second.messages[0].content).toContain('Aigerim');
     expect(fetchMock.mock.calls[0][1].headers.authorization).toBe('Bearer test-key');
+  });
+
+  it('finds only doctors with free times on the asked day, and offers the nearest days when that day is full', async () => {
+    prismaMock.location.findMany.mockResolvedValue([]);
+    prismaMock.scheduleSlot.groupBy
+      .mockResolvedValueOnce([]) // tomorrow: nobody free
+      .mockResolvedValueOnce([{ doctorId: 'doctor-2', _min: { startAt: new Date('2099-03-03T05:00:00Z') } }, { doctorId: 'doctor-1', _min: { startAt: new Date('2099-03-02T04:00:00Z') } }]);
+    prismaMock.doctor.findMany.mockResolvedValue([
+      { id: 'doctor-1', categoryId: 'cat-1', consultationFee: 12000, city: 'Almaty', office: 'Room 204', officeNumber: 'Room 204', category: { name: 'Pediatrics' }, user: { firstName: 'Arman', lastName: 'Bekov' } },
+      { id: 'doctor-2', categoryId: 'cat-1', consultationFee: 10000, city: 'Almaty', office: null, officeNumber: null, category: { name: 'Pediatrics' }, user: { firstName: 'Dana', lastName: 'Sapar' } },
+    ]);
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([{ id: 'slot-9', startAt: new Date('2099-03-02T04:00:00Z') }]);
+    fetchMock
+      .mockResolvedValueOnce(groqReply({ content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'search_doctors', arguments: JSON.stringify({ date: '2099-03-01' }) } }] }))
+      .mockResolvedValueOnce(groqReply({ content: 'Tomorrow is full; the nearest is Dr. Arman Bekov on 2 Mar.' }));
+
+    const response = await request(app).post('/api/assistant/chat').set('Authorization', token(Role.PATIENT, 'patient-search')).send({ messages: [{ role: 'user', content: 'Find a doctor for tomorrow' }] });
+
+    expect(response.status).toBe(200);
+    const result = JSON.parse(JSON.parse(fetchMock.mock.calls[1][1].body).messages.at(-1).content);
+    expect(result.note).toMatch(/No free times on 2099-03-01/);
+    expect(result.doctors.map((doctor: { name: string }) => doctor.name)).toEqual(['Dr. Arman Bekov', 'Dr. Dana Sapar']);
+    expect(result.doctors[0].freeTimes[0]).toEqual(expect.objectContaining({ slotId: 'slot-9' }));
+    // The first search looked only at that day; only doctors with a free slot are asked for.
+    const firstWhere = prismaMock.scheduleSlot.groupBy.mock.calls[0][0].where;
+    expect(firstWhere.status).toBe('FREE');
+    expect(firstWhere.startAt.lt.toISOString()).toBe('2099-03-01T19:00:00.000Z');
+    const prompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(prompt).toMatch(/tomorrow is \d{4}-\d{2}-\d{2}/);
   });
 
   it('sends only the last 10 messages and the system prompt', async () => {

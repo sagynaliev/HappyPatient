@@ -23,6 +23,15 @@ const HISTORY_MESSAGES = 10;
 const TZ = 'Asia/Almaty';
 const when = (date: Date) => new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: TZ }).format(date);
 const today = () => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ }).format(new Date());
+/** YYYY-MM-DD of a moment in Almaty. */
+const almatyDate = (date: Date) => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: TZ }).format(date);
+const SEARCH_DAYS = 30;
+/** The time window a doctor search looks in: one Almaty day, or the next 30 days. Past hours are never included. */
+function searchWindow(date: string, now: Date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { from: now, to: new Date(now.getTime() + SEARCH_DAYS * 86_400_000) };
+  const start = Date.parse(`${date}T00:00:00+05:00`);
+  return { from: new Date(Math.max(start, now.getTime())), to: new Date(start + 86_400_000) };
+}
 
 type ChatMessage =
   | { role: 'system' | 'user'; content: string }
@@ -62,7 +71,8 @@ async function toolDefinitions() {
   const specialties = (await prisma.category.findMany({ where: { active: true }, select: { name: true }, orderBy: { name: 'asc' } })).map((item) => item.name);
   const fn = (name: string, description: string, properties: Record<string, unknown>, required: string[] = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
   return [
-    fn('search_doctors', 'Find doctors by specialty, name or city. Returns up to 5 with price and next free time.', {
+    fn('search_doctors', 'Find doctors who have free times, soonest first: up to 5 with price and their first free times (slotIds). Use date for a specific day such as tomorrow.', {
+      date: { type: 'string', description: 'YYYY-MM-DD in Almaty time. Leave out to search the next 30 days.' },
       specialty: { type: 'string', enum: specialties, description: 'Specialty in English, from the list.' },
       name: { type: 'string', description: 'Part of the doctor\'s name.' },
       city: { type: 'string' },
@@ -86,24 +96,37 @@ async function runTool(name: string, args: Record<string, unknown>, patientId: s
   const now = new Date();
   const text = (value: unknown, max = 100) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
   if (name === 'search_doctors') {
-    const specialty = text(args.specialty); const doctorName = text(args.name); const city = text(args.city);
+    const specialty = text(args.specialty); const doctorName = text(args.name); const city = text(args.city); const date = text(args.date, 10);
     const inactive = await inactiveOfficeIds();
-    const doctors = await prisma.doctor.findMany({
-      where: {
-        category: { active: true, ...(specialty ? { name: { equals: specialty, mode: 'insensitive' } } : {}) },
-        ...(doctorName ? { user: { OR: doctorName.split(/\s+/).flatMap((part) => [{ firstName: { contains: part, mode: 'insensitive' as const } }, { lastName: { contains: part, mode: 'insensitive' as const } }]) } } : {}),
-        ...(city ? { city: { contains: city, mode: 'insensitive' } } : {}),
-        OR: [{ locationId: null }, { locationId: { notIn: inactive } }],
-      },
-      select: { id: true, categoryId: true, consultationFee: true, city: true, office: true, officeNumber: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } },
-      take: 5,
-      orderBy: { user: { lastName: 'asc' } },
-    });
+    const doctorWhere = {
+      category: { active: true, ...(specialty ? { name: { equals: specialty, mode: 'insensitive' as const } } : {}) },
+      ...(doctorName ? { user: { OR: doctorName.split(/\s+/).flatMap((part) => [{ firstName: { contains: part, mode: 'insensitive' as const } }, { lastName: { contains: part, mode: 'insensitive' as const } }]) } } : {}),
+      ...(city ? { city: { contains: city, mode: 'insensitive' as const } } : {}),
+      OR: [{ locationId: null }, { locationId: { notIn: inactive } }],
+    };
+    // Only doctors with a free time in the window, soonest first (most doctors have no open schedule).
+    const findAvailable = async (window: { from: Date; to: Date }) => {
+      const firsts = await prisma.scheduleSlot.groupBy({ by: ['doctorId'], where: { status: SlotStatus.FREE, startAt: { gt: window.from, lt: window.to }, doctor: doctorWhere }, _min: { startAt: true } });
+      return firsts.sort((a, b) => (a._min.startAt?.getTime() ?? 0) - (b._min.startAt?.getTime() ?? 0)).slice(0, 5).map((row) => row.doctorId);
+    };
+    const window = searchWindow(date, now);
+    let ids = await findAvailable(window);
+    const onDate = Boolean(date) && /^\d{4}-\d{2}-\d{2}$/.test(date);
+    let note: string | undefined;
+    if (ids.length === 0 && onDate) {
+      ids = await findAvailable(searchWindow('', now));
+      note = ids.length ? `No free times on ${date}. These are the nearest free times instead.` : undefined;
+    }
+    if (ids.length === 0) return { doctors: [], message: 'No doctor matching this search has free times in the next 30 days.' };
+    const used = note ? searchWindow('', now) : window;
+    const doctors = await prisma.doctor.findMany({ where: { id: { in: ids } }, select: { id: true, categoryId: true, consultationFee: true, city: true, office: true, officeNumber: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } });
     const fees = await currentVisitFees(doctors, now);
-    return Promise.all(doctors.map(async (doctor) => {
-      const next = await prisma.scheduleSlot.findFirst({ where: { doctorId: doctor.id, status: SlotStatus.FREE, startAt: { gt: now } }, orderBy: { startAt: 'asc' }, select: { id: true, startAt: true } });
-      return { doctorId: doctor.id, name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`, specialty: doctor.category.name, place: [doctor.city, doctor.officeNumber ?? doctor.office].filter(Boolean).join(', ') || null, firstVisitPriceKzt: fees.get(doctor.id) ?? doctor.consultationFee, nextFree: next ? { slotId: next.id, time: when(next.startAt) } : null };
+    const rows = await Promise.all(ids.map(async (id) => {
+      const doctor = doctors.find((item) => item.id === id)!;
+      const slots = await prisma.scheduleSlot.findMany({ where: { doctorId: id, status: SlotStatus.FREE, startAt: { gt: used.from, lt: used.to } }, orderBy: { startAt: 'asc' }, take: 3, select: { id: true, startAt: true } });
+      return { doctorId: id, name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`, specialty: doctor.category.name, place: [doctor.city, doctor.officeNumber ?? doctor.office].filter(Boolean).join(', ') || null, firstVisitPriceKzt: fees.get(id) ?? doctor.consultationFee, freeTimes: slots.map((slot) => ({ slotId: slot.id, time: when(slot.startAt) })) };
     }));
+    return { ...(note ? { note } : {}), doctors: rows };
   }
   if (name === 'get_free_slots') {
     const doctorId = text(args.doctorId); const date = text(args.date, 10);
@@ -148,7 +171,7 @@ assistantRouter.post('/assistant/chat', requireAuth, requireRole(Role.PATIENT), 
   if (history[history.length - 1].role !== 'user') return res.status(400).json({ error: 'The last message must be yours.' });
   const patient = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { firstName: true } });
   const messages: ChatMessage[] = [
-    { role: 'system', content: `${ASSISTANT_RULES}\n\n${PLATFORM_GUIDE}\n\nToday is ${today()} (Asia/Almaty). The patient's first name is ${patient?.firstName ?? 'unknown'}.` },
+    { role: 'system', content: `${ASSISTANT_RULES}\n\n${PLATFORM_GUIDE}\n\nToday is ${today()} (${almatyDate(new Date())}, Asia/Almaty); tomorrow is ${almatyDate(new Date(Date.now() + 86_400_000))}. The patient's first name is ${patient?.firstName ?? 'unknown'}.` },
     ...history.map((message) => ({ role: message.role, content: message.content }) as ChatMessage),
   ];
   const cards: BookingCard[] = [];
