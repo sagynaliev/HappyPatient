@@ -56,24 +56,43 @@ const requestSchema = z.object({
 });
 
 /** One chat completion. Exported for tests; the API key never leaves this process. */
-export async function callGroq(messages: ChatMessage[], tools: unknown[]) {
-  const response = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${config.GROQ_API_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model: config.GROQ_MODEL,
-      messages,
-      tools,
-      tool_choice: 'auto',
-      temperature: 0.3,
-      max_completion_tokens: 800,
-      // gpt-oss models think before answering; low effort keeps replies quick and inside the free token limit.
-      ...(config.GROQ_MODEL.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {}),
-    }),
-  });
-  if (response.status === 429) throw new AssistantBusyError();
-  if (!response.ok) throw new Error(`Groq request failed with ${response.status}`);
-  return (await response.json()) as { choices: Array<{ message: { content: string | null; tool_calls?: ToolCall[] } }>; usage?: { total_tokens?: number } };
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+type GroqReply = { choices: Array<{ message: { content: string | null; tool_calls?: ToolCall[] } }>; usage?: { total_tokens?: number } };
+/** Seconds Groq asks to wait before retrying ("7", "7.5" or "7s"); 0 when it does not say. */
+const retryAfter = (response: globalThis.Response) => Number.parseFloat(response.headers.get('retry-after') ?? '') || 0;
+
+/**
+ * One chat completion. The free tier allows 8,000 tokens a minute per model, so when the main model is busy
+ * the call moves to the fallback model, and if that is busy too it waits once (up to 8 s) for the limit to reset.
+ * Exported for tests; the API key never leaves this process.
+ */
+export async function callGroq(messages: ChatMessage[], tools: unknown[]): Promise<GroqReply> {
+  const models = [...new Set([config.GROQ_MODEL, config.GROQ_FALLBACK_MODEL].filter(Boolean))];
+  let wait = 0;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (const model of models) {
+      const response = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${config.GROQ_API_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages,
+          tools,
+          tool_choice: 'auto',
+          temperature: 0.3,
+          max_completion_tokens: 800,
+          // gpt-oss models think before answering; low effort keeps replies quick and inside the free token limit.
+          ...(model.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {}),
+        }),
+      });
+      if (response.status === 429) { wait = Math.max(wait, retryAfter(response)); continue; }
+      if (!response.ok) throw new Error(`Groq request failed with ${response.status}`);
+      return (await response.json()) as GroqReply;
+    }
+    if (attempt === 0 && wait > 0 && wait <= 8) { await sleep(wait * 1000); continue; }
+    break;
+  }
+  throw new AssistantBusyError();
 }
 
 async function toolDefinitions() {
@@ -82,6 +101,9 @@ async function toolDefinitions() {
   return [
     fn('search_doctors', 'Find doctors who have free times, soonest first: up to 5 with price and their first free times (slotIds). Use date for a specific day such as tomorrow.', {
       date: { type: 'string', description: 'YYYY-MM-DD in Almaty time. Leave out to search the next 30 days.' },
+      offer: { type: 'boolean', description: 'true when the patient wants to book: the first 3 doctors are shown at once as booking cards (2 times each), so no propose_booking call is needed.' },
+      channel: { type: 'string', enum: ['in-person', 'online'], description: 'With offer: the visit format (default in-person).' },
+      visitPurpose: { type: 'string', description: 'With offer: short reason for the visit.' },
       specialty: { type: 'string', enum: specialties, description: 'Specialty in English, from the list.' },
       name: { type: 'string', description: 'Part of the doctor\'s name.' },
       city: { type: 'string' },
@@ -135,6 +157,11 @@ async function runTool(name: string, args: Record<string, unknown>, patientId: s
       const slots = await prisma.scheduleSlot.findMany({ where: { doctorId: id, status: SlotStatus.FREE, startAt: { gt: used.from, lt: used.to } }, orderBy: { startAt: 'asc' }, take: 3, select: { id: true, startAt: true } });
       return { doctorId: id, name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`, specialty: doctor.category.name, place: [doctor.city, doctor.officeNumber ?? doctor.office].filter(Boolean).join(', ') || null, firstVisitPriceKzt: fees.get(id) ?? doctor.consultationFee, freeTimes: slots.map((slot) => ({ slotId: slot.id, time: when(slot.startAt) })) };
     }));
+    // offer: show the first three doctors' first two times as cards now, saving a model round (and tokens).
+    if (args.offer === true) {
+      const offered = await runTool('propose_booking', { slotIds: rows.slice(0, 3).flatMap((row) => row.freeTimes.slice(0, 2).map((time) => time.slotId)), channel: args.channel, visitPurpose: args.visitPurpose }, patientId, cards);
+      return { ...(note ? { note } : {}), cardsShown: (offered as { shown?: number }).shown ?? 0, doctors: rows.map(({ doctorId, name, specialty, firstVisitPriceKzt }) => ({ doctorId, name, specialty, firstVisitPriceKzt })), instruction: 'The patient now sees these doctors as booking cards. Reply in one short sentence; do not list them.' };
+    }
     return { ...(note ? { note } : {}), doctors: rows };
   }
   if (name === 'get_free_slots') {

@@ -23,6 +23,8 @@ const envSchema = z.object({
   // AI assistant (Groq, OpenAI-compatible API). Without a key the assistant answers 503 and the rest of the app is unaffected.
   GROQ_API_KEY: z.preprocess((value) => value || undefined, z.string().min(1).optional()),
   GROQ_MODEL: z.string().default('openai/gpt-oss-120b'),
+  // Used when the main model's free per-minute token limit is used up (each Groq model has its own limit).
+  GROQ_FALLBACK_MODEL: z.string().default('openai/gpt-oss-20b'),
   ASSISTANT_DAILY_LIMIT: z.coerce.number().int().positive().default(40)
 });
 export const config = envSchema.parse(process.env);

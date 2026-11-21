@@ -64,4 +64,18 @@ describe("patient assistant", () => {
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Message" }), { key: "Enter" });
     expect(await screen.findByText(/today's assistant limit/)).toBeInTheDocument();
   });
+
+  it("resends the same conversation from Try again after a busy error", async () => {
+    const { ApiError } = await import("../lib/api");
+    vi.mocked(assistantApi.chat).mockRejectedValueOnce(new ApiError(429, "The assistant is busy right now. Try again in a minute.")).mockResolvedValueOnce({ reply: "Here you go.", cards: [] });
+    render(<AssistantWidget firstName="Aigerim" />);
+    fireEvent.click(screen.getByRole("button", { name: "Open assistant" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "dermatology" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Here you go.")).toBeInTheDocument();
+    expect(assistantApi.chat).toHaveBeenLastCalledWith([{ role: "user", content: "dermatology" }]);
+    expect(screen.queryByText(/is busy right now/)).toBeNull();
+    expect(screen.getAllByText("dermatology")).toHaveLength(1);
+  });
 });
