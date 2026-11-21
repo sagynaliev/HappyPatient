@@ -27,7 +27,7 @@ beforeAll(async () => {
 });
 
 const token = (role: Role = Role.PATIENT, id = 'patient-1') => `Bearer ${signToken({ id, email: `${id}@example.test`, role })}`;
-const groqReply = (message: Record<string, unknown>, status = 200) => ({ ok: status < 400, status, json: async () => ({ choices: [{ message }], usage: { total_tokens: 120 } }) });
+const groqReply = (message: Record<string, unknown>, status = 200, retryAfter?: string) => ({ ok: status < 400, status, headers: { get: (name: string) => (name === 'retry-after' ? retryAfter ?? null : null) }, json: async () => ({ choices: [{ message }], usage: { total_tokens: 120 } }) });
 const slot = {
   id: 'slot-1', startAt: new Date('2099-03-02T04:00:00Z'), endAt: new Date('2099-03-02T04:30:00Z'),
   doctor: { id: 'doctor-1', categoryId: 'cat-1', consultationFee: 12000, office: 'Room 4', officeNumber: null, category: { name: 'Pediatrics' }, user: { firstName: 'Arman', lastName: 'Bekov' } },
@@ -123,8 +123,47 @@ describe('POST /api/assistant/chat', () => {
     expect(body.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(['search_doctors', 'get_free_slots', 'get_my_prices', 'get_my_appointments', 'propose_booking']);
   });
 
+  it('shows booking cards straight from a search with offer, in one model round fewer', async () => {
+    prismaMock.location.findMany.mockResolvedValue([]);
+    prismaMock.scheduleSlot.groupBy.mockResolvedValueOnce([{ doctorId: 'doctor-1', _min: { startAt: slot.startAt } }]);
+    prismaMock.doctor.findMany.mockResolvedValue([{ ...slot.doctor, city: 'Almaty' }]);
+    prismaMock.scheduleSlot.findMany
+      .mockResolvedValueOnce([{ id: 'slot-1', startAt: slot.startAt }]) // the doctor's first free times
+      .mockResolvedValueOnce([slot]); // the times turned into cards
+    prismaMock.scheduleSlot.count.mockResolvedValue(0);
+    fetchMock
+      .mockResolvedValueOnce(groqReply({ content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'search_doctors', arguments: JSON.stringify({ specialty: 'Pediatrics', offer: true }) } }] }))
+      .mockResolvedValueOnce(groqReply({ content: 'Pick a time below.' }));
+    const response = await request(app).post('/api/assistant/chat').set('Authorization', token(Role.PATIENT, 'patient-offer')).send({ messages: [{ role: 'user', content: 'Book a pediatrician' }] });
+    expect(response.status).toBe(200);
+    expect(response.body.cards).toEqual([expect.objectContaining({ slotId: 'slot-1', doctorName: 'Dr. Arman Bekov' })]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(JSON.parse(fetchMock.mock.calls[1][1].body).messages.at(-1).content)).toEqual(expect.objectContaining({ cardsShown: 1 }));
+  });
+
+  it('moves to the fallback model when the main one hits its per-minute limit', async () => {
+    fetchMock.mockResolvedValueOnce(groqReply({}, 429)).mockResolvedValueOnce(groqReply({ content: 'Hello from the fallback.' }));
+    const response = await request(app).post('/api/assistant/chat').set('Authorization', token(Role.PATIENT, 'patient-fallback')).send({ messages: [{ role: 'user', content: 'Hi' }] });
+    expect(response.status).toBe(200);
+    expect(response.body.reply).toBe('Hello from the fallback.');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('openai/gpt-oss-120b');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe('openai/gpt-oss-20b');
+  });
+
+  it('waits once for the limit to reset when both models are busy', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    fetchMock.mockResolvedValueOnce(groqReply({}, 429, '2')).mockResolvedValueOnce(groqReply({}, 429, '2')).mockResolvedValueOnce(groqReply({ content: 'Back again.' }));
+    const pending = request(app).post('/api/assistant/chat').set('Authorization', token(Role.PATIENT, 'patient-wait')).send({ messages: [{ role: 'user', content: 'Hi' }] }).then((value) => value);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await vi.advanceTimersByTimeAsync(2000);
+    const response = await pending;
+    vi.useRealTimers();
+    expect(response.status).toBe(200);
+    expect(response.body.reply).toBe('Back again.');
+  });
+
   it('maps a busy Groq to 429 and other failures to 502', async () => {
-    fetchMock.mockResolvedValueOnce(groqReply({}, 429));
+    fetchMock.mockResolvedValueOnce(groqReply({}, 429)).mockResolvedValueOnce(groqReply({}, 429));
     const busy = await request(app).post('/api/assistant/chat').set('Authorization', token(Role.PATIENT, 'patient-busy')).send({ messages: [{ role: 'user', content: 'Hi' }] });
     expect(busy.status).toBe(429);
     fetchMock.mockResolvedValueOnce(groqReply({}, 500));

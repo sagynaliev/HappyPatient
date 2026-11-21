@@ -93,8 +93,13 @@ export function AssistantWidget({ firstName }: { firstName: string }) {
     const content = text.trim();
     if (!content || sending) return;
     const next: ChatEntry[] = [...chat, { role: "user", content }];
-    setChat(next);
     setDraft("");
+    await ask(next);
+  }
+
+  /** Sends the conversation; on failure adds an error bubble that can resend it (Try again) without retyping. */
+  async function ask(next: ChatEntry[]) {
+    setChat(next);
     setSending(true);
     try {
       const history = next.filter((entry) => !entry.error).map(({ role, content: body }) => ({ role, content: body }));
@@ -151,6 +156,7 @@ export function AssistantWidget({ firstName }: { firstName: string }) {
               chat.map((entry, index) => (
                 <div key={index} className={`hp-assistant-row hp-assistant-row--${entry.role}`}>
                   <p className={`hp-assistant-bubble${entry.error ? " hp-assistant-bubble--error" : ""}`}>{entry.content}</p>
+                  {entry.error && index === chat.length - 1 && !sending && <button type="button" className="hp-assistant-retry" onClick={() => void ask(chat.slice(0, -1))}><Icon name="refresh" size={14} /> Try again</button>}
                   {entry.cards && groupCards(entry.cards).map((options) => {
                     const key = `${index}:${options[0].doctorId}:${options[0].channel}`;
                     const state = cardStates[key] ?? { selected: options[0].slotId, status: "idle" as const };
