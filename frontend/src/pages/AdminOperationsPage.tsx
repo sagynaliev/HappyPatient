@@ -1,6 +1,7 @@
 import { Fragment, FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { DoctorOffices, isSelectableOffice, LocationColumns, locationPath, RefLocation } from '../components/ReferenceLocations';
+import { VisitPriceReceipt } from '../components/VisitPriceReceipt';
+import { AdminDialog, DoctorOffices, isSelectableOffice, LocationColumns, locationPath, RefLocation } from '../components/ReferenceLocations';
 import { AdminStat } from '../components/AdminStat';
 import { toast } from '../lib/toast';
 import { Icon } from '../components/Icons';
@@ -11,7 +12,7 @@ type Category = {id:string;name:string;active:boolean;_count:{doctors:number}};
 type DoctorChoice = {id:string;name:string;specialty?:string;locationId:string|null;office:string|null};
 type Audit = {id:string;action:string;createdAt:string;actor:{firstName:string;lastName:string}|null;oldValue:unknown;newValue:unknown};
 type ReferenceAudit = {id:string;entity:string;entityId:string;action:string;createdAt:string;actor:{firstName:string;lastName:string}|null;oldValue:unknown;newValue:unknown};
-type Rule = {id:string;kind:Kind;amountKzt:number;ratePerHourKzt:number|null;freeMinutes:number;rounding:string;dailyCapKzt:number|null;effectiveFrom:string;effectiveTo:string|null;active:boolean;doctorId:string|null;categoryId:string|null;consultationType:string|null;serviceCode:string|null;serviceName:string|null;category:{name:string}|null;office:{name:string}|null;createdBy:{firstName:string;lastName:string}|null;audits:Audit[]};
+type Rule = {id:string;kind:Kind;amountKzt:number;ratePerHourKzt:number|null;freeMinutes:number;rounding:string;dailyCapKzt:number|null;effectiveFrom:string;effectiveTo:string|null;active:boolean;doctorId:string|null;categoryId:string|null;consultationType:string|null;serviceCode:string|null;serviceName:string|null;category:{name:string}|null;office:{name:string}|null;createdBy:{firstName:string;lastName:string}|null;createdAt?:string;versionOfId?:string|null;officeId?:string|null;audits:Audit[]};
 type Check = {id:string;name:string;description:string;count:number;severity:'info'|'warning'|'critical';sampleIds:string[];samples?:Array<{id:string;title:string;detail:string}>};
 type AccessAttempt = {id:string;createdAt:string;actor:string|null;actorRole:string|null;action:string;patient:string|null};
 type Run = {id:string;startedAt:string;finishedAt:string|null;status:string;results:Check[]|null};
@@ -59,6 +60,10 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
   const [effectiveFrom,setEffectiveFrom]=useState(localDateTime(new Date()));
   // Most prices run until replaced; an end date is set only when the admin switches it on.
   const [hasEnd,setHasEnd]=useState(false);
+  // The rule just saved is marked in the list (with what it replaced); History opens one rule's versions.
+  const [justSaved,setJustSaved]=useState<string|null>(null);
+  const [historyFor,setHistoryFor]=useState<Rule|null>(null);
+  const [previewFor,setPreviewFor]=useState<Rule|null>(null);
   const [effectiveTo,setEffectiveTo]=useState('');
   const [editing,setEditing]=useState<Rule|null>(null);
   const [formError,setFormError]=useState('');
@@ -107,7 +112,7 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
     if(hasEnd&&(!effectiveTo||Date.parse(effectiveTo)<=Date.parse(effectiveFrom))){setFormError('Choose an end date after the start date, or switch the end date off.');return;}
     if(editing&&(editing.doctorId||editing.categoryId)&&!window.confirm('This change affects existing doctors. Save it as a new price version?'))return;
     const body={kind,amountKzt:flatAmount,ratePerHourKzt:kind==='parking'?Number(rate):null,freeMinutes:Number(freeMinutes),rounding,dailyCapKzt:kind==='parking'&&dailyCap.trim()!==''?Number(dailyCap):null,effectiveFrom:new Date(effectiveFrom).toISOString(),effectiveTo:hasEnd&&effectiveTo?new Date(effectiveTo).toISOString():null,doctorId:kind==='visit'?(doctorId||null):null,categoryId:kind==='visit'||kind==='treatment'?(categoryId||null):null,consultationType:kind==='visit'?(consultationType||null):null,serviceCode:kind==='treatment'?(serviceCode||null):null,serviceName:kind==='treatment'?(serviceName||null):null,officeId:kind==='parking'?(officeId||null):null};
-    try{await api(editing?'/admin/pricing/'+encodeURIComponent(editing.id):'/admin/pricing',{method:editing?'PATCH':'POST',body:JSON.stringify(body)});setEditing(null);setDoctorId('');setCategoryId('');setConsultationType('');setServiceCode('');setServiceName('');setOfficeId('');setAmount('');setRate('');setDailyCap('');setHasEnd(false);setEffectiveTo('');toast.success(editing?'New price version saved':'Pricing rule added');await load();}
+    try{const saved=await api<{rule:Rule}>(editing?'/admin/pricing/'+encodeURIComponent(editing.id):'/admin/pricing',{method:editing?'PATCH':'POST',body:JSON.stringify(body)});setJustSaved(saved.rule.id);setKindFilter('all');setActiveFilter('all');setEditing(null);setDoctorId('');setCategoryId('');setConsultationType('');setServiceCode('');setServiceName('');setOfficeId('');setAmount('');setRate('');setDailyCap('');setHasEnd(false);setEffectiveTo('');toast.success(editing?'New price version saved':'Pricing rule added',editing?'It is marked in the list below with the price it replaces.':'It is marked in the list below.');await load();window.setTimeout(()=>document.getElementById('rule-'+saved.rule.id)?.scrollIntoView({behavior:'smooth',block:'center'}),80);}
     catch(caught){const message=caught instanceof Error&&caught.message?caught.message:'The pricing rule could not be saved.';setFormError(message);toast.error('Pricing rule not saved',message);}
   }
   async function deactivate(rule:Rule) {
@@ -207,9 +212,11 @@ export default function AdminOperationsPage({view}:{view:'pricing'|'statistics'|
         <div className="admin-panel-header"><div><h2>Rules</h2><p className="ad-muted">{visibleRules.length} shown</p></div>
           <div className="ad-filters"><label>Type<select value={kindFilter} onChange={e=>setKindFilter(e.target.value as typeof kindFilter)}><option value="all">All types</option><option value="visit">Visits</option><option value="treatment">Treatments</option><option value="parking">Parking</option></select></label><label>Status<select value={activeFilter} onChange={e=>setActiveFilter(e.target.value as typeof activeFilter)}><option value="all">All rules</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div>
         </div>
-        <div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>Rule</th><th>Price</th><th>Effective</th><th>Status</th><th>Created by</th><th aria-label="Actions"/></tr></thead><tbody>{visibleRules.map(rule=><tr key={rule.id} className={ruleIsActive(rule)?undefined:'is-ended'}><td><span className="ad-cell-with-badge"><Badge text={kindNames[rule.kind][0]} tone={ruleIsActive(rule)?kindTone[rule.kind]:'grey'}/><span><strong>{ruleScope(rule,doctors)}</strong><small>{kindNames[rule.kind]} price</small></span></span></td><td className="ad-price-cell">{rule.kind!=='parking'?money(rule.amountKzt):rule.ratePerHourKzt!==null?<>{money(rule.ratePerHourKzt)} / {rule.rounding==='per_minute'?'hour, by the minute':'started hour'}<small>{[rule.freeMinutes?rule.freeMinutes+' min free':'No free minutes',rule.dailyCapKzt!==null?'max '+money(rule.dailyCapKzt)+' a day':'No daily cap'].join(' · ')}</small></>:'—'}</td><td>{dateLabel(rule.effectiveFrom)}{rule.effectiveTo&&<small>until {dateLabel(rule.effectiveTo)}</small>}</td><td>{ruleIsActive(rule)?<span className="admin-status admin-status-active ad-dot">Active</span>:rule.active?<span className="admin-status admin-status-muted ad-dot">Ended</span>:<span className="admin-status admin-status-danger ad-dot">Inactive</span>}</td><td>{rule.createdBy?rule.createdBy.firstName+' '+rule.createdBy.lastName:'Admin'}<small>{plural(rule.audits?.length??0,'change')} recorded</small></td><td className="ad-row-actions">{confirmingRule===rule.id?<span className="ad-confirm" role="group" aria-label="Confirm deactivation"><span>Deactivate this rule?</span><button className="ad-mini is-danger" type="button" onClick={()=>void deactivate(rule)}>Yes, deactivate</button><button className="ad-mini" type="button" onClick={()=>setConfirmingRule(null)}>Keep</button></span>:<><button className="ad-mini" type="button" onClick={()=>startEdit(rule)}>New version</button>{ruleIsActive(rule)&&<button className="ad-mini is-danger" type="button" onClick={()=>setConfirmingRule(rule.id)}>Deactivate</button>}</>}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table className="admin-table is-wide"><thead><tr><th>Rule</th><th>Price</th><th>Effective</th><th>Status</th><th>Created by</th><th aria-label="Actions"/></tr></thead><tbody>{visibleRules.map(rule=>{const previous=rules.find(item=>item.id===rule.versionOfId);const versions=versionChain(rule,rules);return <tr key={rule.id} id={'rule-'+rule.id} className={[ruleIsActive(rule)?'':'is-ended',justSaved===rule.id?'is-just-saved':''].filter(Boolean).join(' ')||undefined}><td><span className="ad-cell-with-badge"><Badge text={kindNames[rule.kind][0]} tone={ruleIsActive(rule)?kindTone[rule.kind]:'grey'}/><span><strong>{ruleScope(rule,doctors)}</strong><small>{kindNames[rule.kind]} price{versions.length>1?` · version ${versions.indexOf(rule)+1} of ${versions.length}`:''}</small>{justSaved===rule.id&&<span className="ad-just-saved">Just changed</span>}</span></span></td><td className="ad-price-cell">{rule.kind!=='parking'?money(rule.amountKzt):rule.ratePerHourKzt!==null?<>{money(rule.ratePerHourKzt)} / {rule.rounding==='per_minute'?'hour, by the minute':'started hour'}<small>{[rule.freeMinutes?rule.freeMinutes+' min free':'No free minutes',rule.dailyCapKzt!==null?'max '+money(rule.dailyCapKzt)+' a day':'No daily cap'].join(' · ')}</small></>:'—'}{previous&&<small className="ad-was">was <s>{rulePrice(previous)}</s></small>}{rule.kind==='visit'&&ruleIsActive(rule)&&patientView(rule,doctors).href&&<a className="ad-site-link" href={patientView(rule,doctors).href} target="_blank" rel="noopener">See on site ↗</a>}{rule.kind!=='visit'&&<button type="button" className="ad-site-link" onClick={()=>setPreviewFor(rule)}>Patient view</button>}</td><td>{dateLabel(rule.effectiveFrom)}{rule.effectiveTo&&<small>until {dateLabel(rule.effectiveTo)}</small>}</td><td>{ruleIsActive(rule)?<span className="admin-status admin-status-active ad-dot">Active</span>:rule.active?<span className="admin-status admin-status-muted ad-dot">Ended</span>:<span className="admin-status admin-status-danger ad-dot">Inactive</span>}</td><td>{rule.createdBy?rule.createdBy.firstName+' '+rule.createdBy.lastName:'Admin'}<small>{plural(rule.audits?.length??0,'change')} recorded</small></td><td className="ad-row-actions">{confirmingRule===rule.id?<span className="ad-confirm" role="group" aria-label="Confirm deactivation"><span>Deactivate this rule?</span><button className="ad-mini is-danger" type="button" onClick={()=>void deactivate(rule)}>Yes, deactivate</button><button className="ad-mini" type="button" onClick={()=>setConfirmingRule(null)}>Keep</button></span>:<>{(versions.length>1||rule.audits?.length>0)&&<button className="ad-mini" type="button" onClick={()=>setHistoryFor(rule)}>History</button>}<button className="ad-mini" type="button" onClick={()=>startEdit(rule)}>New version</button>{ruleIsActive(rule)&&<button className="ad-mini is-danger" type="button" onClick={()=>setConfirmingRule(rule.id)}>Deactivate</button>}</>}</td></tr>})}</tbody></table></div>
         {visibleRules.length===0&&<p className="ad-empty-state">No pricing rules match these filters.</p>}
       </section>
+      {historyFor&&<RuleHistory rule={historyFor} rules={rules} doctors={doctors} onClose={()=>setHistoryFor(null)} onPreview={()=>{setPreviewFor(historyFor);setHistoryFor(null);}}/>}
+      {previewFor&&<PatientPreview rule={previewFor} rules={rules} doctors={doctors} onClose={()=>setPreviewFor(null)}/>}
       {visibleRules.some(rule=>rule.audits?.length>0)&&<section className="admin-panel ad-panel"><div className="admin-panel-header"><div><h2>Price change history</h2><p className="ad-muted">Who changed which price and when, newest first</p></div></div><ShowMore limit={5} noun="change" items={visibleRules.flatMap(rule=>(rule.audits??[]).map(audit=>({rule,audit}))).sort((a,b)=>Date.parse(b.audit.createdAt)-Date.parse(a.audit.createdAt))} render={items=><Timeline items={items.map(({rule,audit})=>({id:audit.id,at:audit.createdAt,tone:audit.action==='deactivated'?'red':audit.action==='versioned'?'blue':'green',chip:kindNames[rule.kind][0],title:<><strong>{audit.actor?.firstName??'Admin'} {audit.actor?.lastName??''}</strong> {auditVerb(audit.action)} {kindNames[rule.kind].toLowerCase()} price · {ruleScope(rule,doctors)}</>,meta:dateTimeLabel(audit.createdAt),change:auditChange(rule.kind,audit.oldValue,audit.newValue)?<ChangeText text={auditChange(rule.kind,audit.oldValue,audit.newValue)}/>:undefined}))}/>}/></section>}
     </>}
 
@@ -321,6 +328,63 @@ const CHECK_FIX:Record<string,string>={
   'duplicate-medical-entry':'The same note was saved twice within five minutes. Ask the doctor which one is correct and edit the other.',
   'invalid-office-hierarchy':'A place sits under the wrong level. Fix it under Reference data → Office locations.',
 };
+/** Where patients see a price on the site, and what to expect there. Search and doctor pages show the in-person first-visit price. */
+function patientView(rule:Rule,doctors:DoctorChoice[]):{href?:string;label?:string;note:string}{
+  const starts=Date.parse(rule.effectiveFrom)>Date.now()?` It starts on ${dateLabel(rule.effectiveFrom)}; until then patients see the current price.`:'';
+  if(rule.kind==='treatment')return {note:'Patients see it in a visit\'s price breakdown after the doctor adds this treatment.'+starts};
+  if(rule.kind==='parking')return {note:'Patients see it as the parking estimate in an in-person visit\'s details.'+starts};
+  const shown=!rule.consultationType||rule.consultationType==='in-person:first'||rule.consultationType==='first'||rule.consultationType==='in-person';
+  const note=(shown?'Shown on doctor cards and profiles as the consultation price.':`Doctor cards show the in-person first-visit price; patients see this one when they book a ${consultationTypeName(rule.consultationType).toLowerCase()}.`)+starts;
+  if(rule.doctorId)return {href:'/doctors/'+encodeURIComponent(rule.doctorId),label:'Open '+(doctors.find(item=>item.id===rule.doctorId)?.name??'the doctor')+'\'s page',note};
+  if(rule.category?.name)return {href:'/search?category='+encodeURIComponent(rule.category.name),label:'Open '+rule.category.name+' in Find a doctor',note};
+  return {href:'/search',label:'Open Find a doctor',note};
+}
+/** A sample visit with this treatment or parking price, drawn with the patient's own price receipt from My appointments. */
+function PatientPreview({rule,rules,doctors,onClose}:{rule:Rule;rules:Rule[];doctors:DoctorChoice[];onClose:()=>void}){
+  const [minutes,setMinutes]=useState(30);
+  const doctor=(rule.kind==='parking'&&rule.officeId?doctors.find(item=>item.locationId===rule.officeId):undefined)
+    ??(rule.category?.name?doctors.find(item=>item.specialty===rule.category?.name):undefined)??doctors[0];
+  // The consultation line uses the visit price in force for that doctor's specialty (else the general one), as a patient would pay.
+  const visitRule=rules.filter(item=>item.kind==='visit'&&ruleIsActive(item)&&!item.consultationType&&!item.doctorId).sort((a,b)=>Number(Boolean(b.category))-Number(Boolean(a.category))).find(item=>!item.category||item.category.name===(doctor?.specialty??rule.category?.name));
+  const consultation=visitRule?.amountKzt??12000;
+  const treatment=rule.kind==='treatment'?[{kind:'treatment' as const,label:rule.serviceName||rule.serviceCode||'Treatment',amountKzt:rule.amountKzt}]:[];
+  const parking=rule.kind==='parking'&&rule.ratePerHourKzt!==null?{durationMinutes:minutes,amountKzt:parkingExample(minutes,rule.ratePerHourKzt,rule.freeMinutes,rule.rounding,rule.dailyCapKzt),ratePerHourKzt:rule.ratePerHourKzt,freeMinutes:rule.freeMinutes,rounding:rule.rounding,dailyCapKzt:rule.dailyCapKzt}:null;
+  const cost={consultationKzt:consultation,totalKzt:consultation+treatment.reduce((sum,line)=>sum+line.amountKzt,0),bookedAt:new Date().toISOString(),lines:[{kind:'consultation' as const,label:'Consultation fee',amountKzt:consultation},...treatment],parking};
+  return <AdminDialog title="Patient view · sample" description={rule.kind==='treatment'?'How a patient sees this treatment under View details in My appointments, after the doctor adds it to their visit.':'How a patient sees this parking estimate under View details for an in-person visit.'} onClose={onClose}>
+    <div className="ad-preview-card">
+      <div className="ad-preview-visit"><strong>{doctor?.name??'Dr. Sample Doctor'}</strong><span>{doctor?.specialty??rule.category?.name??'Specialty'} · In person{rule.office?.name?' · '+rule.office.name:''}</span></div>
+      {rule.kind==='parking'&&<div className="ad-preview-length" role="group" aria-label="Visit length">{[30,90,240].map(value=><button key={value} type="button" aria-pressed={minutes===value} onClick={()=>setMinutes(value)}>{value<60?value+' min':value/60+' h'}</button>)}</div>}
+      <section className="pa-cost-breakdown" aria-label="Price breakdown"><VisitPriceReceipt cost={cost}/></section>
+    </div>
+    <p className="ad-muted ad-version-note">Sample data: the doctor, consultation price and visit are examples. {rule.kind==='treatment'?'The treatment line and its price are this rule.':'The parking lines are calculated with this rule.'}</p>
+  </AdminDialog>;
+}
+/** A rule's price in words: "14,000 KZT" or the parking terms. */
+const rulePrice=(rule:Rule)=>rule.kind==='parking'?parkingTerms(rule):money(rule.amountKzt);
+/** Every version of a price, oldest first: follow versionOfId back to the first, then forward through the versions made from it. */
+function versionChain(rule:Rule,rules:Rule[]){
+  let first=rule;const seen=new Set([rule.id]);
+  for(let previous=rules.find(item=>item.id===first.versionOfId);previous&&!seen.has(previous.id);previous=rules.find(item=>item.id===first.versionOfId)){seen.add(previous.id);first=previous;}
+  const chain=[first];
+  for(let next=rules.find(item=>item.versionOfId===first.id);next&&!chain.includes(next);next=rules.find(item=>item.versionOfId===chain[chain.length-1].id))chain.push(next);
+  return chain;
+}
+/** One price's versions as a timeline, newest first: what it cost, from when to when, who set it, and what changed. */
+function RuleHistory({rule,rules,doctors,onClose,onPreview}:{rule:Rule;rules:Rule[];doctors:DoctorChoice[];onClose:()=>void;onPreview:()=>void}){
+  const chain=versionChain(rule,rules);
+  const audits=chain.flatMap(item=>item.audits??[]).filter(audit=>audit.action==='deactivated');
+  return <AdminDialog title={`Price history · ${ruleScope(rule,doctors)}`} description={`${kindNames[rule.kind]} price · ${plural(chain.length,'version')}`} onClose={onClose}>
+    <ol className="ad-version-list">{chain.slice().reverse().map((item,index,list)=>{const older=list[index+1];const live=ruleIsActive(item)&&Date.parse(item.effectiveFrom)<=Date.now();const upcoming=item.active&&Date.parse(item.effectiveFrom)>Date.now();return <li key={item.id} className={item.id===rule.id?'is-current':undefined}>
+      <div className="ad-version-head"><strong>{rulePrice(item)}</strong>{live?<span className="admin-status admin-status-active ad-dot">In force</span>:upcoming?<span className="admin-status admin-status-booked ad-dot">Starts later</span>:item.active?<span className="admin-status admin-status-muted ad-dot">Ended</span>:<span className="admin-status admin-status-danger ad-dot">Deactivated</span>}</div>
+      {older&&<p className="ad-version-change">{rulePrice(older)} → {rulePrice(item)}</p>}
+      <p className="ad-muted">From {dateTimeLabel(item.effectiveFrom)}{item.effectiveTo?' until '+dateTimeLabel(item.effectiveTo):' · no end date'}</p>
+      <p className="ad-muted">Set by {item.createdBy?item.createdBy.firstName+' '+item.createdBy.lastName:'Admin'}{item.createdAt?' on '+dateTimeLabel(item.createdAt):''}{index===list.length-1?' · first version':''}</p>
+    </li>;})}</ol>
+    {audits.length>0&&<p className="ad-muted">Deactivated {audits.map(audit=>dateTimeLabel(audit.createdAt)+(audit.actor?' by '+audit.actor.firstName+' '+audit.actor.lastName:'')).join('; ')}.</p>}
+    {(()=>{const view=patientView(rule,doctors);return <div className="ad-patient-view"><strong>How patients see it</strong><p>{view.note}</p>{view.href&&<a className="ad-button ad-button-outline ad-button-small" href={view.href} target="_blank" rel="noopener">{view.label} ↗</a>}{rule.kind!=='visit'&&<button type="button" className="ad-button ad-button-outline ad-button-small" onClick={onPreview}>Show patient view (sample)</button>}</div>;})()}
+    <p className="ad-muted ad-version-note">Visits booked while a version was in force keep that version's price.</p>
+  </AdminDialog>;
+}
 const plural=(count:number,noun:string)=>`${count} ${noun}${count===1?'':'s'}`;
 /** Consultation types a visit price can target; the most specific matching one wins. */
 const CONSULTATION_TYPE_OPTIONS:Array<[string,string]>=[['first','First visit'],['follow-up','Follow-up visit'],['in-person','In-person'],['online','Online'],['in-person:first','In-person · First visit'],['in-person:follow-up','In-person · Follow-up visit'],['online:first','Online · First visit'],['online:follow-up','Online · Follow-up visit']];

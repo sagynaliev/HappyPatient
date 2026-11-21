@@ -39,7 +39,7 @@ export function isSelectableOffice(item: RefLocation, locations: RefLocation[]) 
   return false;
 }
 
-function AdminDialog({ title, description, onClose, children }: { title: string; description?: ReactNode; onClose: () => void; children: ReactNode }) {
+export function AdminDialog({ title, description, onClose, children }: { title: string; description?: ReactNode; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
