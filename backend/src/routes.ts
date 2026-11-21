@@ -1051,7 +1051,7 @@ const pricingInput = z.object({
 router.get('/admin/pricing',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{
   const kind=typeof req.query.kind==='string'?req.query.kind:undefined;
   const active=typeof req.query.active==='string'?req.query.active:undefined;
-  const rules=await prisma.pricingRule.findMany({where:{...(kind&&['visit','treatment','parking'].includes(kind)?{kind:kind as 'visit'|'treatment'|'parking'}:{}),...(active==='true'?{active:true}:active==='false'?{active:false}:{})},include:{category:{select:{name:true}},office:{select:{name:true}},createdBy:{select:{firstName:true,lastName:true}},audits:{orderBy:{createdAt:'desc'},take:10}},orderBy:[{kind:'asc'},{effectiveFrom:'desc'}]});
+  const rules=await prisma.pricingRule.findMany({where:{...(kind&&['visit','treatment','parking'].includes(kind)?{kind:kind as 'visit'|'treatment'|'parking'}:{}),...(active==='true'?{active:true}:active==='false'?{active:false}:{})},include:{category:{select:{name:true}},office:{select:{name:true}},createdBy:{select:{firstName:true,lastName:true}},audits:{orderBy:{createdAt:'desc'},take:10,include:{actor:{select:{firstName:true,lastName:true}}}}},orderBy:[{kind:'asc'},{effectiveFrom:'desc'}]});
   res.json({rules});
 });
 router.post('/admin/pricing',requireAuth,requireRole(Role.ADMIN),async(req,res)=>{

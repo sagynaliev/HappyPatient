@@ -347,3 +347,37 @@
 .ad-rule-step .ad-end-field .ad-switch span::after { width: 14px; height: 14px; }
 .ad-rule-step .ad-end-field .ad-switch input:checked + span::after { transform: translateX(14px); }
 .ad-rule-step .ad-end-field .ad-muted { display: flex; align-items: center; height: 44px; padding: 0; line-height: 1.35; }
+
+/* Pricing: what a new version replaced, the rule just saved, and one price's version history. */
+.ad-price-cell .ad-was, td .ad-was { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 12px; }
+.ad-was s { color: #94a3b8; }
+.ad-just-saved { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; font-size: 11.5px; font-weight: 700; }
+.admin-table tr.is-just-saved td { background: #f0fdf4; }
+.admin-table tr.is-just-saved td:first-child { box-shadow: inset 3px 0 0 #22c55e; }
+.ad-version-list { display: grid; gap: 0; margin: 12px 0 0; padding: 0 0 0 18px; border-left: 2px solid var(--border); list-style: none; }
+.ad-version-list li { position: relative; display: grid; gap: 2px; padding: 0 0 16px 4px; }
+.ad-version-list li::before { content: ""; position: absolute; top: 5px; left: -25px; width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%; background: #cbd5e1; box-shadow: 0 0 0 1px var(--border); }
+.ad-version-list li.is-current::before { background: var(--primary); }
+.ad-version-list li:last-child { padding-bottom: 4px; }
+.ad-version-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ad-version-head strong { color: var(--text-primary); font-size: 15px; font-variant-numeric: tabular-nums; }
+.ad-version-change { margin: 0; color: var(--primary-deep); font-size: 13px; font-weight: 600; }
+.ad-version-list .ad-muted { margin: 0; font-size: 12.5px; }
+.ad-version-note { margin: 8px 0 0; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12.5px; }
+/* Links from a price to the page where patients see it. */
+.ad-site-link { display: inline-block; margin-top: 4px; color: var(--primary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.ad-site-link:hover { text-decoration: underline; }
+.ad-patient-view { display: grid; gap: 6px; justify-items: start; margin-top: 4px; padding: 12px 14px; border-radius: 12px; background: #f1f5ff; }
+.ad-patient-view strong { color: var(--text-primary); font-size: 13.5px; }
+.ad-patient-view p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.ad-patient-view a { text-decoration: none; }
+button.ad-site-link { padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+/* Sample patient view: a visit header, an optional visit-length switch, then the patient's own receipt. */
+.ad-preview-card { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: #fbfcff; }
+.ad-preview-visit { display: grid; gap: 2px; }
+.ad-preview-visit strong { color: var(--text-primary); font-size: 15px; }
+.ad-preview-visit span { color: var(--text-secondary); font-size: 13px; }
+.ad-preview-length { display: inline-flex; gap: 6px; }
+.ad-preview-length button { min-height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text-secondary); font: inherit; font-size: 13px; cursor: pointer; }
+.ad-preview-length button[aria-pressed="true"] { border-color: var(--primary); background: var(--accent); color: var(--primary-deep); font-weight: 600; }
+.ad-preview-card .pa-cost-breakdown { margin-top: 0; }

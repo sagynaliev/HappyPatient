@@ -21,6 +21,55 @@ function mockPricing(rules: unknown[]) {
   });
 }
 
+describe("price versions", () => {
+  it("shows what a new version replaced and opens the price history", async () => {
+    mockPricing([
+      rule({ id: "v2", amountKzt: 15000, versionOfId: "v1", effectiveFrom: "2026-11-10T00:00:00Z", createdBy: { firstName: "System", lastName: "Administrator" } }),
+      rule({ id: "v1", amountKzt: 14000, effectiveFrom: "2026-01-01T00:00:00Z", effectiveTo: "2026-11-10T00:00:00Z" }),
+    ]);
+    render(<AdminOperationsPage view="pricing" />);
+    const current = (await screen.findAllByText(/version 2 of 2/))[0].closest("tr")!;
+    expect(within(current).getByText(/was/)).toHaveTextContent("was 14,000 KZT");
+    fireEvent.click(within(current).getByRole("button", { name: "History" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("14,000 KZT → 15,000 KZT")).toBeInTheDocument();
+    expect(within(dialog).getByText("In force")).toBeInTheDocument();
+    expect(within(dialog).getByText("Ended")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Set by System Administrator/)).toBeInTheDocument();
+    // The admin can open the page where patients see this price.
+    expect(within(current).getByRole("link", { name: /See on site/ })).toHaveAttribute("href", "/search?category=Pediatrics");
+    expect(within(dialog).getByRole("link", { name: /Open Pediatrics in Find a doctor/ })).toHaveAttribute("target", "_blank");
+    expect(within(dialog).getByText(/Shown on doctor cards and profiles/)).toBeInTheDocument();
+  });
+});
+
+describe("patient view of treatment and parking prices", () => {
+  it("shows a sample visit receipt with the treatment, and parking lines for the chosen visit length", async () => {
+    mockPricing([
+      rule({ id: "t1", kind: "treatment", amountKzt: 3500, serviceName: "Nebulizer inhalation" }),
+      rule({ id: "p1", kind: "parking", amountKzt: 0, ratePerHourKzt: 600, freeMinutes: 15, dailyCapKzt: 1500, categoryId: null, category: null }),
+      rule({ id: "v1", amountKzt: 15000 }),
+    ]);
+    render(<AdminOperationsPage view="pricing" />);
+    const treatmentRow = (await screen.findAllByText(/Nebulizer inhalation/))[0].closest("tr")!;
+    fireEvent.click(within(treatmentRow).getByRole("button", { name: "Patient view" }));
+    let dialog = screen.getByRole("dialog", { name: "Patient view · sample" });
+    expect(within(dialog).getByText("Consultation fee")).toBeInTheDocument();
+    expect(within(dialog).getByText("15,000 KZT")).toBeInTheDocument();
+    expect(within(dialog).getByText("3,500 KZT")).toBeInTheDocument();
+    expect(within(dialog).getByText("18,500 KZT")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    const parkingRow = screen.getAllByText(/started hour/)[0].closest("tr")!;
+    fireEvent.click(within(parkingRow).getByRole("button", { name: "Patient view" }));
+    dialog = screen.getByRole("dialog", { name: "Patient view · sample" });
+    expect(within(dialog).getByText("Parking estimate")).toBeInTheDocument();
+    expect(within(dialog).getByText("600 KZT", { selector: ".pa-price-total dd" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "4 h" }));
+    expect(within(dialog).getByText("Daily cap applied")).toBeInTheDocument();
+  });
+});
+
 describe("admin pricing", () => {
   beforeEach(() => vi.mocked(api).mockReset());
 
