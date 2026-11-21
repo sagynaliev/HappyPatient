@@ -64,10 +64,10 @@ describe('POST /api/assistant/chat', () => {
   });
 
   it('runs a tool, proposes a booking card and never books', async () => {
-    prismaMock.scheduleSlot.findFirst.mockResolvedValue(slot);
+    prismaMock.scheduleSlot.findMany.mockResolvedValue([slot]);
     prismaMock.scheduleSlot.count.mockResolvedValue(0); // no earlier visits: first visit
     fetchMock
-      .mockResolvedValueOnce(groqReply({ content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'propose_booking', arguments: JSON.stringify({ slotId: 'slot-1', channel: 'online', visitPurpose: 'Cough' }) } }] }))
+      .mockResolvedValueOnce(groqReply({ content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'propose_booking', arguments: JSON.stringify({ slotIds: ['slot-1'], channel: 'online', visitPurpose: 'Cough' }) } }] }))
       .mockResolvedValueOnce(groqReply({ content: 'Here is the time. Press Confirm to book.' }));
 
     const response = await request(app).post('/api/assistant/chat').set('Authorization', token(Role.PATIENT, 'patient-book')).send({ messages: [{ role: 'user', content: 'Book Dr. Bekov online' }] });
@@ -77,7 +77,7 @@ describe('POST /api/assistant/chat', () => {
     expect(response.body.cards).toEqual([expect.objectContaining({ slotId: 'slot-1', doctorId: 'doctor-1', doctorName: 'Dr. Arman Bekov', channel: 'online', visitKind: 'first', priceKzt: 12000, visitPurpose: 'Cough' })]);
     const second = JSON.parse(fetchMock.mock.calls[1][1].body);
     expect(second.messages.at(-1)).toEqual(expect.objectContaining({ role: 'tool', tool_call_id: 'call-1' }));
-    expect(JSON.parse(second.messages.at(-1).content)).toEqual(expect.objectContaining({ shown: true }));
+    expect(JSON.parse(second.messages.at(-1).content)).toEqual(expect.objectContaining({ shown: 1 }));
     expect(second.messages[0].content).toContain('Aigerim');
     expect(fetchMock.mock.calls[0][1].headers.authorization).toBe('Bearer test-key');
   });
@@ -100,7 +100,7 @@ describe('POST /api/assistant/chat', () => {
 
     expect(response.status).toBe(200);
     const result = JSON.parse(JSON.parse(fetchMock.mock.calls[1][1].body).messages.at(-1).content);
-    expect(result.note).toMatch(/No free times on 2099-03-01/);
+    expect(result.note).toMatch(/No free times on Sunday 1 Mar/);
     expect(result.doctors.map((doctor: { name: string }) => doctor.name)).toEqual(['Dr. Arman Bekov', 'Dr. Dana Sapar']);
     expect(result.doctors[0].freeTimes[0]).toEqual(expect.objectContaining({ slotId: 'slot-9' }));
     // The first search looked only at that day; only doctors with a free slot are asked for.
@@ -117,7 +117,8 @@ describe('POST /api/assistant/chat', () => {
     const response = await request(app).post('/api/assistant/chat').set('Authorization', token(Role.PATIENT, 'patient-history')).send({ messages });
     expect(response.status).toBe(200);
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(body.messages).toHaveLength(11);
+    expect(body.messages).toHaveLength(12); // rules, 10 messages, reply language
+    expect(body.messages.at(-1)).toEqual({ role: 'system', content: expect.stringMatching(/latest message is in English/) });
     expect(body.messages[1].content).toBe('m3');
     expect(body.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(['search_doctors', 'get_free_slots', 'get_my_prices', 'get_my_appointments', 'propose_booking']);
   });
@@ -138,5 +139,14 @@ describe('POST /api/assistant/chat', () => {
     const blocked = await send();
     expect(blocked.status).toBe(429);
     expect(blocked.body.error).toMatch(/today's assistant limit/);
+  });
+});
+
+describe('reply language', () => {
+  it('follows the latest message: Kazakh letters, Russian Cyrillic, otherwise English', async () => {
+    const { replyLanguage } = await import('./assistant.js');
+    expect(replyLanguage('Ертең педиатрға жазылғым келеді')).toBe('Kazakh');
+    expect(replyLanguage('Хочу записаться к врачу')).toBe('Russian');
+    expect(replyLanguage('I have a headache')).toBe('English');
   });
 });

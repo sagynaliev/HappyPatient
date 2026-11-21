@@ -26,6 +26,15 @@ const today = () => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'nu
 /** YYYY-MM-DD of a moment in Almaty. */
 const almatyDate = (date: Date) => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: TZ }).format(date);
 const SEARCH_DAYS = 30;
+/** The language to answer in, from the patient's latest message: Kazakh letters, other Cyrillic (Russian) or Latin (English). */
+export function replyLanguage(text: string) {
+  if (/[әғқңөұүһіӘҒҚҢӨҰҮҺІ]/.test(text)) return 'Kazakh';
+  const cyrillic = (text.match(/[а-яё]/gi) ?? []).length;
+  const latin = (text.match(/[a-z]/gi) ?? []).length;
+  return cyrillic > latin ? 'Russian' : 'English';
+}
+/** "Monday, 23 Nov" for a YYYY-MM-DD day, so the model repeats a readable date. */
+const dayName = (date: string) => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'short', timeZone: TZ }).format(new Date(`${date}T12:00:00+05:00`));
 /** The time window a doctor search looks in: one Almaty day, or the next 30 days. Past hours are never included. */
 function searchWindow(date: string, now: Date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { from: now, to: new Date(now.getTime() + SEARCH_DAYS * 86_400_000) };
@@ -83,11 +92,11 @@ async function toolDefinitions() {
     }, ['doctorId']),
     fn('get_my_prices', 'What this patient pays with a doctor now, in person and online (first or follow-up visit).', { doctorId: { type: 'string' } }, ['doctorId']),
     fn('get_my_appointments', 'The patient\'s upcoming visits and the last few past ones.', {}),
-    fn('propose_booking', 'Show the patient a booking card with a Confirm button. Does not book.', {
-      slotId: { type: 'string' },
+    fn('propose_booking', 'Show booking cards with a Confirm button (does not book). Pass every time to offer in ONE call: up to 3 doctors, up to 2 times each. Only for a doctor or specialty the patient asked for.', {
+      slotIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 6, description: 'slotIds from search_doctors or get_free_slots.' },
       channel: { type: 'string', enum: ['in-person', 'online'] },
       visitPurpose: { type: 'string', description: 'Short reason for the visit, in the patient\'s words.' },
-    }, ['slotId', 'channel', 'visitPurpose']),
+    }, ['slotIds', 'channel', 'visitPurpose']),
   ];
 }
 
@@ -115,7 +124,7 @@ async function runTool(name: string, args: Record<string, unknown>, patientId: s
     let note: string | undefined;
     if (ids.length === 0 && onDate) {
       ids = await findAvailable(searchWindow('', now));
-      note = ids.length ? `No free times on ${date}. These are the nearest free times instead.` : undefined;
+      note = ids.length ? `No free times on ${dayName(date)}. These are the nearest free times instead.` : undefined;
     }
     if (ids.length === 0) return { doctors: [], message: 'No doctor matching this search has free times in the next 30 days.' };
     const used = note ? searchWindow('', now) : window;
@@ -151,13 +160,18 @@ async function runTool(name: string, args: Record<string, unknown>, patientId: s
   }
   if (name === 'propose_booking') {
     const channel = args.channel === 'online' ? 'online' : 'in-person';
-    const slot = await prisma.scheduleSlot.findFirst({ where: { id: text(args.slotId), status: SlotStatus.FREE, startAt: { gt: now } }, select: { id: true, startAt: true, endAt: true, doctor: { select: { id: true, categoryId: true, consultationFee: true, office: true, officeNumber: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } } } });
-    if (!slot) return { error: 'That time is not free any more. Look up free times again.' };
-    const prices = await patientConsultationPrices(patientId, slot.doctor);
-    const card: BookingCard = { slotId: slot.id, doctorId: slot.doctor.id, doctorName: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, specialty: slot.doctor.category.name, office: slot.doctor.officeNumber ?? slot.doctor.office, startAt: slot.startAt.toISOString(), endAt: slot.endAt.toISOString(), channel, visitKind: prices.visitKind, priceKzt: prices.prices[channel], visitPurpose: text(args.visitPurpose, 300) || 'Consultation' };
-    cards.push(card);
-    return { shown: true, note: 'The patient sees a card with a Confirm button. It is NOT booked until they press Confirm.' };
+    // One call can offer several times (older calls send a single slotId); at most 6 cards per reply.
+    const ids = [...new Set((Array.isArray(args.slotIds) ? args.slotIds : [args.slotId]).map((id) => text(id)).filter(Boolean))].slice(0, 6 - cards.length);
+    const slots = await prisma.scheduleSlot.findMany({ where: { id: { in: ids }, status: SlotStatus.FREE, startAt: { gt: now } }, orderBy: { startAt: 'asc' }, select: { id: true, startAt: true, endAt: true, doctor: { select: { id: true, categoryId: true, consultationFee: true, office: true, officeNumber: true, category: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } } } } });
+    if (slots.length === 0) return { error: 'Those times are not free any more. Look up free times again.' };
+    for (const slot of slots) {
+      if (cards.some((card) => card.slotId === slot.id)) continue;
+      const prices = await patientConsultationPrices(patientId, slot.doctor);
+      cards.push({ slotId: slot.id, doctorId: slot.doctor.id, doctorName: `Dr. ${slot.doctor.user.firstName} ${slot.doctor.user.lastName}`, specialty: slot.doctor.category.name, office: slot.doctor.officeNumber ?? slot.doctor.office, startAt: slot.startAt.toISOString(), endAt: slot.endAt.toISOString(), channel, visitKind: prices.visitKind, priceKzt: prices.prices[channel], visitPurpose: text(args.visitPurpose, 300) || 'Consultation' });
+    }
+    return { shown: slots.length, ...(slots.length < ids.length ? { skipped: ids.length - slots.length } : {}), note: 'The patient sees these as cards with a Confirm button. Nothing is booked until they press Confirm. Do not list the doctors or times again in your reply.' };
   }
+
   return { error: 'Unknown tool.' };
 }
 
@@ -173,6 +187,8 @@ assistantRouter.post('/assistant/chat', requireAuth, requireRole(Role.PATIENT), 
   const messages: ChatMessage[] = [
     { role: 'system', content: `${ASSISTANT_RULES}\n\n${PLATFORM_GUIDE}\n\nToday is ${today()} (${almatyDate(new Date())}, Asia/Almaty); tomorrow is ${almatyDate(new Date(Date.now() + 86_400_000))}. The patient's first name is ${patient?.firstName ?? 'unknown'}.` },
     ...history.map((message) => ({ role: message.role, content: message.content }) as ChatMessage),
+    // Placed last so it outweighs the language of earlier turns.
+    { role: 'system', content: `The patient's latest message is in ${replyLanguage(history[history.length - 1].content)}. Write your whole reply in ${replyLanguage(history[history.length - 1].content)}.` },
   ];
   const cards: BookingCard[] = [];
   let tokens = 0;
