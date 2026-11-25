@@ -374,7 +374,8 @@
 .pa-receipt-eyebrow { margin: 0; padding: 14px 16px 0; color: var(--primary-deep); font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .pa-receipt .pa-price-list { padding: 6px 16px 12px; }
 .pa-receipt .pa-price-list > div { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; padding: 9px 0; border-bottom: 1px dashed var(--border); }
-.pa-receipt .pa-price-list > div:last-child { border-bottom: 0; }
+.pa-receipt .pa-price-list > div:last-child,
+.pa-receipt .pa-price-list > div:nth-last-child(2) { border-bottom: 0; }
 .pa-receipt .pa-price-list dt { color: var(--text-primary); font-size: 13.5px; }
 .pa-receipt .pa-price-list dd { text-align: right; font-size: 14px; }
 .pa-receipt .pa-price-list .pa-price-total { margin-top: 2px; padding-top: 12px; border-top: 1.5px solid var(--text-primary); border-bottom: 0; }
