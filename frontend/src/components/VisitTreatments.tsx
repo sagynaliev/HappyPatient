@@ -7,22 +7,25 @@ export const money = (value: number) => `${new Intl.NumberFormat("en-US").format
 const time = (iso: string) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
 
 /** Treatments of one checked-in visit: what was added, what can be added, and whether the doctor may still change them. */
-export function useVisitTreatments(slotId: string, enabled: boolean) {
+export function useVisitTreatments(slotId: string, enabled: boolean, refreshKey = 0) {
   const [added, setAdded] = useState<VisitTreatment[]>([]);
   const [available, setAvailable] = useState<TreatmentChoice[]>([]);
   const [editable, setEditable] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!enabled) return;
     let active = true;
+    setLoaded(false);
+    setError("");
     authApi.visitTreatments(slotId)
       .then((result) => { if (active) { setAdded(result.added); setAvailable(result.available); setEditable(result.editable); } })
-      .catch(() => { if (active) toast.error("Treatments could not be loaded"); })
+      .catch(() => { if (active) { setError("Treatments could not be loaded. Close this dialog and try again."); toast.error("Treatments could not be loaded"); } })
       .finally(() => { if (active) setLoaded(true); });
     return () => { active = false; };
-  }, [slotId, enabled]);
+  }, [slotId, enabled, refreshKey]);
 
   /** Adds each chosen treatment as many times as asked; stops at the first refusal and keeps what was saved. */
   const add = useCallback(async (picks: Array<{ key: string; count: number }>) => {
@@ -48,7 +51,7 @@ export function useVisitTreatments(slotId: string, enabled: boolean) {
     finally { setBusy(false); }
   }, [slotId]);
 
-  return { added, available, editable, loaded, busy, add, remove };
+  return { added, available, editable, loaded, error, busy, add, remove };
 }
 
 /** The visit's treatments as one timeline record: each line with its price, the total, and Remove while still editable. */
@@ -77,7 +80,7 @@ export function TreatmentTimelineBlock({ items, editable, busy, onRemove }: { it
 }
 
 /** Pick treatments the way services are added at a salon desk: search, +/- per item, then one Add. */
-export function AddTreatmentDialog({ available, specialty, busy, onAdd, onClose }: { available: TreatmentChoice[]; specialty?: string; busy: boolean; onAdd: (picks: Array<{ key: string; count: number }>) => Promise<boolean>; onClose: () => void }) {
+export function AddTreatmentDialog({ available, specialty, busy, loading = false, error = "", onAdd, onClose }: { available: TreatmentChoice[]; specialty?: string; busy: boolean; loading?: boolean; error?: string; onAdd: (picks: Array<{ key: string; count: number }>) => Promise<boolean>; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const searchRef = useRef<HTMLInputElement>(null);
@@ -115,7 +118,9 @@ export function AddTreatmentDialog({ available, specialty, busy, onAdd, onClose 
           <input ref={searchRef} type="search" value={query} placeholder="Search treatments…" onChange={(event) => setQuery(event.target.value)} />
         </label>
         <div className="tr-list">
-          {available.length === 0 ? <p className="tr-empty">The clinic has not priced any treatments for this visit yet. An administrator adds them under Pricing.</p>
+          {loading ? <p className="tr-empty" role="status">Loading treatments…</p>
+            : error ? <p className="tr-empty" role="alert">{error}</p>
+            : available.length === 0 ? <p className="tr-empty">No treatments have a price for this booking. An administrator can add them under Pricing. The specialty must match and the price must be effective on the date the appointment was booked.</p>
             : groups.length === 0 ? <p className="tr-empty">Nothing matches “{query.trim()}”.</p>
             : groups.map((group) => (
               <section key={group.title} aria-label={group.title}>
@@ -143,7 +148,7 @@ export function AddTreatmentDialog({ available, specialty, busy, onAdd, onClose 
         </div>
         <footer className="tr-foot">
           <span>{pickedCount ? `${pickedCount} selected · ${money(pickedTotal)}` : "Nothing selected"}</span>
-          <button type="button" className="dw-button" disabled={!pickedCount || busy} onClick={() => void submit()}>{busy ? "Adding…" : "Add"}</button>
+          <button type="button" className="dw-button" disabled={!pickedCount || busy || loading || Boolean(error)} onClick={() => void submit()}>{busy ? "Adding…" : "Add"}</button>
         </footer>
       </div>
     </div>
