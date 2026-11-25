@@ -37,9 +37,10 @@ export default function DoctorVisitPage() {
   const [editing, setEditing] = useState<MedicalEntry | null>(null);
   const [highlightLabel, setHighlightLabel] = useState("Just added");
   const [treatmentOpen, setTreatmentOpen] = useState(false);
+  const [treatmentRefresh, setTreatmentRefresh] = useState(0);
   // Treatments exist only for a checked-in visit that has started; they are shown inside the visit timeline.
   const treatmentsOn = Boolean(slot && slot.status === "OCCUPIED" && slot.patient && Date.parse(slot.startAt) <= Date.now());
-  const treatments = useVisitTreatments(slotId, treatmentsOn);
+  const treatments = useVisitTreatments(slotId, treatmentsOn, treatmentRefresh);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -172,7 +173,7 @@ export default function DoctorVisitPage() {
             {notesTab === "earlier" && <p className="dw-notice"><Icon name="info" size={18} /> Read-only. {earlierVisit === "all" ? "All records from earlier visits, including other doctors’ notes." : "Notes written during the selected visit."}</p>}
             <Suspense fallback={<p className="dw-muted" role="status">Loading medical history…</p>}>
               {notesTab === "visit"
-                ? <MedicalHistory key={`visit-${slot.id}`} compact onAddNote={canWriteNotes ? () => setComposerOpen(true) : undefined} onAddTreatment={treatmentsOn && treatments.editable ? () => setTreatmentOpen(true) : undefined} treatments={treatmentsOn && treatments.loaded ? <TreatmentTimelineBlock items={treatments.added} editable={treatments.editable} busy={treatments.busy} onRemove={(item) => void treatments.remove(item)} /> : undefined} treatmentCount={treatments.added.length} onEditEntry={canWriteNotes ? setEditing : undefined} highlightLabel={highlightLabel} patientId={slot.patient.id} scope={{ only: slot.id }} refreshKey={refresh} highlightId={highlightId} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Use Add note to record tests, anamnesis or a conclusion." : "Notes written during this visit will appear here." }} />
+                ? <MedicalHistory key={`visit-${slot.id}`} compact onAddNote={canWriteNotes ? () => setComposerOpen(true) : undefined} onAddTreatment={treatmentsOn && treatments.editable ? () => { setTreatmentRefresh(value => value + 1); setTreatmentOpen(true); } : undefined} treatments={treatmentsOn && treatments.loaded ? <TreatmentTimelineBlock items={treatments.added} editable={treatments.editable} busy={treatments.busy} onRemove={(item) => void treatments.remove(item)} /> : undefined} treatmentCount={treatments.added.length} onEditEntry={canWriteNotes ? setEditing : undefined} highlightLabel={highlightLabel} patientId={slot.patient.id} scope={{ only: slot.id }} refreshKey={refresh} highlightId={highlightId} emptyText={{ title: "No notes for this visit yet", body: canWriteNotes ? "Use Add note to record tests, anamnesis or a conclusion." : "Notes written during this visit will appear here." }} />
                 : <MedicalHistory key={`earlier-${earlierVisit}`} compact patientId={slot.patient.id} scope={earlierVisit === "all" ? { except: slot.id } : { only: earlierVisit }} emptyText={{ title: "No earlier records", body: earlierVisit === "all" ? "This patient has no notes from earlier visits." : "No notes were written during that visit." }} />}
             </Suspense>
           </> : (
@@ -209,7 +210,7 @@ export default function DoctorVisitPage() {
         </NoteDialog>
       )}
       {treatmentOpen && (
-        <AddTreatmentDialog available={treatments.available} specialty={doctor?.category.name} busy={treatments.busy} onAdd={treatments.add} onClose={() => setTreatmentOpen(false)} />
+        <AddTreatmentDialog available={treatments.available} loading={!treatments.loaded} error={treatments.error} specialty={doctor?.category.name} busy={treatments.busy} onAdd={treatments.add} onClose={() => setTreatmentOpen(false)} />
       )}
       {editing && slot.patient && (
         <NoteDialog

@@ -11,12 +11,13 @@ const knee = { id: "t0", code: null, name: "Knee ultrasound", amountKzt: 8500, c
 
 /** The visit page wiring in miniature: the hook, the timeline block and the Add treatment dialog. */
 function Harness({ slotId = "visit-1" }: { slotId?: string }) {
-  const treatments = useVisitTreatments(slotId, true);
+  const [refresh, setRefresh] = useState(0);
+  const treatments = useVisitTreatments(slotId, true, refresh);
   const [open, setOpen] = useState(false);
   return <>
-    {treatments.editable && <button type="button" onClick={() => setOpen(true)}>Add treatment</button>}
+    {treatments.editable && <button type="button" onClick={() => { setRefresh(value => value + 1); setOpen(true); }}>Add treatment</button>}
     <TreatmentTimelineBlock items={treatments.added} editable={treatments.editable} busy={treatments.busy} onRemove={(item) => void treatments.remove(item)} />
-    {open && <AddTreatmentDialog available={treatments.available} specialty="Cardiology" busy={treatments.busy} onAdd={treatments.add} onClose={() => setOpen(false)} />}
+    {open && <AddTreatmentDialog available={treatments.available} loading={!treatments.loaded} error={treatments.error} specialty="Cardiology" busy={treatments.busy} onAdd={treatments.add} onClose={() => setOpen(false)} />}
   </>;
 }
 
@@ -32,6 +33,7 @@ describe("treatments in the visit timeline", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add treatment" }));
     const dialog = screen.getByRole("dialog", { name: "Add treatment" });
+    await within(dialog).findByRole("heading", { name: "For Cardiology" });
     const groups = within(dialog).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
     expect(groups).toEqual(["For Cardiology", "For every doctor"]);
     fireEvent.change(within(dialog).getByRole("searchbox", { name: "Search treatments" }), { target: { value: "wound" } });
@@ -49,6 +51,29 @@ describe("treatments in the visit timeline", () => {
     fireEvent.click(within(block).getByRole("button", { name: "Remove Knee ultrasound" }));
     await waitFor(() => expect(authApi.removeVisitTreatment).toHaveBeenCalledWith("visit-1", "t0"));
     expect(await within(block).findByText("4,000 KZT", { selector: "strong" })).toBeTruthy();
+  });
+
+  it("refreshes the catalog when opening the dialog after an administrator adds a treatment", async () => {
+    vi.spyOn(authApi, "visitTreatments")
+      .mockResolvedValueOnce({ editable: true, available: [], added: [] })
+      .mockResolvedValueOnce({ editable: true, available: [ecg], added: [] });
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add treatment" }));
+    const dialog = screen.getByRole("dialog", { name: "Add treatment" });
+    expect(await within(dialog).findByText("Electrocardiogram")).toBeTruthy();
+    expect(authApi.visitTreatments).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a loading error instead of claiming no treatment prices exist", async () => {
+    vi.spyOn(authApi, "visitTreatments")
+      .mockResolvedValueOnce({ editable: true, available: [], added: [] })
+      .mockRejectedValueOnce(new Error("offline"));
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add treatment" }));
+    const dialog = screen.getByRole("dialog", { name: "Add treatment" });
+    expect(await within(dialog).findByRole("alert")).toBeTruthy();
+    expect(within(dialog).queryByText(/No treatments have a price/)).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Add" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("is read-only after the editing window and shows nothing when no treatment was recorded", async () => {
